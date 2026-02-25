@@ -41,8 +41,8 @@
 - [x] Implement recap or load history into terminal view
 - [ ] Add more complex triggers (time, weather, or custom jokes)
 - [ ] Implement background operation / system tray support
-- [~] Source or record custom voice for **Voice Cloning (XTTS v2)**
-- [ ] Finalize error handling for offline/online transitions
+- [x] Source or record custom voice for **Voice Cloning (XTTS v2)**
+- [x] Finalize error handling for offline/online transitions
 - [ ] Implement Speech-to-Text (STT) for full voice control
 - [ ] Integrate Chafa to display character portraits in a separate terminal window
 
