@@ -25,25 +25,32 @@ class XTTSWorker:
     def __init__(self):
         if not XTTS_AVAILABLE:
             return
-        
+
         if self._model is None:
             try:
+                from engines.config import get_setting
                 print(Fore.CYAN + "[XTTS] Loading model to GPU..." + Fore.RESET)
-                # Model name from VOICE_CLONING_PLAN.md
                 model_name = "tts_models/multilingual/multi-dataset/xtts_v2"
                 self._model = TTS(model_name).to("cuda")
                 print(Fore.GREEN + "[XTTS] Model loaded successfully." + Fore.RESET)
             except Exception as e:
-                print(Fore.RED + f"[XTTS ERROR] Failed to load model: {e}" + Fore.RESET)
+                from engines.config import get_setting
+                if not get_setting("suppress_errors", False):
+                    print(Fore.RED + f"[XTTS ERROR] Failed to load model: {e}" + Fore.RESET)
                 self._model = None
 
     def generate(self, text, output_path, speaker_wav, language="en"):
         """
         Generates audio using local XTTS v2.
+        speaker_wav can be a single path string or a list of paths for better cloning.
         """
         if self._model is None:
             return False
-        
+
+        # Normalize to list — XTTS v2 accepts both but a list gives better results
+        if isinstance(speaker_wav, str):
+            speaker_wav = [speaker_wav]
+
         try:
             self._model.tts_to_file(
                 text=text,
@@ -53,7 +60,9 @@ class XTTSWorker:
             )
             return True
         except Exception as e:
-            print(Fore.RED + f"[XTTS GEN ERROR] {e}" + Fore.RESET)
+            from engines.config import get_setting
+            if not get_setting("suppress_errors", False):
+                print(Fore.RED + f"[XTTS GEN ERROR] {e}" + Fore.RESET)
             return False
 
 def is_xtts_supported():

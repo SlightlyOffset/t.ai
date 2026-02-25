@@ -60,10 +60,10 @@ def clean_text_for_tts(text: str, speak_narration: bool = True) -> str:
 
     # Final cleanup of leftover stray symbols and normalization
     cleaned = cleaned.replace('*', '').replace('[', '').replace(']', '')
-    
+
     # Strip any stray file extensions that might have leaked in
     cleaned = re.sub(r'\.(wav|mp3|ogg|wav)\b', '', cleaned, flags=re.IGNORECASE)
-    
+
     cleaned = re.sub(r'\s+', ' ', cleaned).strip()
 
     # If the text is only punctuation/symbols, it's effectively empty for TTS
@@ -102,7 +102,7 @@ async def generate_edge_tts(text, filename, voice="en-GB-SoniaNeural"):
 def play_audio_windows(filename):
     """Plays audio via VBScript or fallback on Windows."""
     abspath = os.path.abspath(filename)
-    
+
     # Method 1: VBScript (Hidden playback)
     vbs_path = os.path.join(os.environ["TEMP"], f"play_sound_{int(time.time())}.vbs")
     vbs_content = f"""
@@ -114,20 +114,20 @@ def play_audio_windows(filename):
     Sound.settings.volume = 100
     Sound.URL = "{abspath.replace('\\', '\\\\')}"
     Sound.Controls.play
-    
+
     ' Wait for media to load (max 5 seconds)
     count = 0
     do while Sound.currentmedia.duration = 0 and count < 100
         wscript.sleep 50
         count = count + 1
     loop
-    
+
     ' Play until finished (with a safety timeout)
     if Sound.currentmedia.duration > 0 then
         wscript.sleep (Sound.currentmedia.duration * 1000)
     else
         ' Fallback wait if duration is somehow not reported but it's playing
-        wscript.sleep 2000 
+        wscript.sleep 2000
     end if
     """
     try:
@@ -148,6 +148,36 @@ def play_audio_windows(filename):
             try: os.remove(vbs_path)
             except: pass
 
+def resolve_voice_refs(clone_ref):
+    """
+    Resolves voice_clone_ref from a profile into a flat list of WAV file paths.
+
+    Accepts:
+      - None                          → None
+      - "voices/Astgenne"             → all .wav files inside that directory (sorted)
+      - "voices/Astgenne/sample.wav"  → ["voices/Astgenne/sample.wav"]
+      - ["voices/Astgenne", ...]      → expands any directories in the list
+
+    Non-directory paths are passed through as-is; missing file validation is
+    left to the downstream XTTS clients.
+    """
+    if not clone_ref:
+        return None
+
+    refs = clone_ref if isinstance(clone_ref, list) else [clone_ref]
+    resolved = []
+    for ref in refs:
+        if os.path.isdir(ref):
+            wavs = sorted(
+                os.path.join(ref, f) for f in os.listdir(ref)
+                if f.lower().endswith(".wav")
+            )
+            resolved.extend(wavs)
+        else:
+            resolved.append(ref)
+    return resolved if resolved else None
+
+
 def generate_audio(text, filename, voice=None, engine="edge-tts", clone_ref=None, language="en"):
     """
     Converts text to an MP3 or WAV file.
@@ -156,10 +186,13 @@ def generate_audio(text, filename, voice=None, engine="edge-tts", clone_ref=None
     if not get_setting("tts_enabled", True):
         return False
 
+    # Resolve voice_clone_ref: expand directories to sorted WAV file lists
+    clone_ref = resolve_voice_refs(clone_ref)
+
     cleaned_text = clean_text_for_tts(text, speak_narration=True)
     if not cleaned_text:
         return False
-    
+
     if get_setting("debug_mode", False):
         print(Fore.MAGENTA + f"[DEBUG] Final TTS Text: '{cleaned_text}'" + Fore.RESET)
 
@@ -168,11 +201,20 @@ def generate_audio(text, filename, voice=None, engine="edge-tts", clone_ref=None
     cache_voice = voice if voice else "default"
     cache_key_engine = engine
     if engine == "xtts" and clone_ref:
-        cache_key_engine = f"xtts_{os.path.basename(clone_ref)}_{language}"
-    
+        if isinstance(clone_ref, list):
+            # Use parent dir name if all files share one directory, else join basenames
+            dirs = set(os.path.dirname(p) for p in clone_ref)
+            if len(dirs) == 1:
+                ref_key = os.path.basename(list(dirs)[0])
+            else:
+                ref_key = "_".join(os.path.basename(p) for p in clone_ref)
+        else:
+            ref_key = os.path.basename(clone_ref)
+        cache_key_engine = f"xtts_{ref_key}_{language}"
+
     # Check if we have this cached
     cached_path = get_cache_path(cleaned_text, cache_voice, cache_key_engine)
-    
+
     if os.path.exists(cached_path):
         try:
             shutil.copy(cached_path, filename)
@@ -222,9 +264,10 @@ def generate_audio(text, filename, voice=None, engine="edge-tts", clone_ref=None
                     if os.path.exists(filename): os.remove(filename)
                     os.rename(xtts_filename, filename)
             return True
-        
+
         # Fallback to edge-tts if XTTS failed or not supported
-        print(Fore.YELLOW + "[XTTS FALLBACK] Switching to Edge-TTS." + Fore.RESET)
+        if not get_setting("suppress_errors", False):
+            print(Fore.YELLOW + "[XTTS FALLBACK] Switching to Edge-TTS." + Fore.RESET)
         engine = "edge-tts"
 
     # 2. Attempt Edge-TTS
@@ -234,14 +277,14 @@ def generate_audio(text, filename, voice=None, engine="edge-tts", clone_ref=None
         try:
             if voice is None:
                 voice = get_setting("default_tts_voice", "en-GB-SoniaNeural")
-            
+
             asyncio.run(generate_edge_tts(cleaned_text, filename, voice=voice))
-            
+
             # Save to cache
             if os.path.exists(filename):
                 with open(filename, "rb") as f:
                     save_to_cache(cleaned_text, cache_voice, cache_key_engine, f.read())
-            
+
             return True
         except Exception as e:
             if not get_setting("suppress_errors", False):
