@@ -149,7 +149,10 @@ def get_respond_stream(user_input: str, profile: dict, should_obey: bool | None 
 
     # Determine relationship label and instructions
     rel_score = profile.get("relationship_score", 0)
+    interaction_mode = get_setting("interaction_mode", "rp")
+
     if rel_score >= 80: rel_label = "Soulmate / Bestie"
+
     elif rel_score >= 40: rel_label = "Close Friend"
     elif rel_score >= 15: rel_label = "Friendly / Liked"
     elif rel_score >= -15: rel_label = "Neutral / Acquaintance"
@@ -170,7 +173,7 @@ def get_respond_stream(user_input: str, profile: dict, should_obey: bool | None 
         tone_mod = "Maintain a balanced tone."
 
     # Construct the master system instruction
-    system_content = build_system_prompt(profile, rel_score, rel_label, action_req, tone_mod, system_extra_info)
+    system_content = build_system_prompt(profile, rel_score, rel_label, action_req, tone_mod, interaction_mode, system_extra_info)
 
     # Compile message list for the LLM
     messages = [{'role': 'system', 'content': system_content}]

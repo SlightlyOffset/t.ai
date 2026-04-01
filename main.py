@@ -32,7 +32,7 @@ init(autoreset=False)
 
 # Clearing the console at startup
 if get_setting("clear_at_start", True):
-    os.system('cls' if os.name == 'nt' else 'clear')
+    print("\033[H\033[J", end="")
 
 # Global configuration path
 CONFIG_PATH = "settings.json"
@@ -317,7 +317,7 @@ def main():
         try:
             run_app()
         except RestartRequested:
-            os.system('cls' if os.name == 'nt' else 'clear')
+            print("\033[H\033[J", end="")
             continue
         except KeyboardInterrupt:
             print(Style.RESET_ALL + Fore.YELLOW + "\n[SYSTEM] Shutting down..." + Style.RESET_ALL)

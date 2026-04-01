@@ -135,7 +135,7 @@ def app_commands(ops: str):
 
     def _clear():
         """Clears the terminal screen."""
-        os.system('cls' if os.name == 'nt' else 'clear')
+        print("\033[H\033[J", end="")
         print(Fore.YELLOW + "[SYSTEM] Screen cleared.")
 
     def _change_character():
@@ -220,8 +220,15 @@ def app_commands(ops: str):
         else:
             print(Fore.YELLOW + "[SYSTEM] No TTS cache found to clear.")
 
+    def _toggle_mode():
+        current_mode = get_setting("interaction_mode", "rp")
+        new_mode = "casual" if current_mode == "rp" else "rp"
+        update_setting("interaction_mode", new_mode)
+        print(Fore.GREEN + f"[SYSTEM] Interaction mode set to {new_mode.upper()}.")
+
     # Mapping of command strings to their respective functions
     cmds = {
+        "//mode": _toggle_mode,
         "//exit": _exit,
         "//quit": _exit,
         "//help": _help,
