@@ -13,8 +13,9 @@
     "memory_limit": 10,
     "suppress_errors": true,
     "current_user_profile": "Manganese.json",
-    "current_character_profile": "Astgenne.json",
+    "current_character_profile": "Ria.json",
     "debug_mode": false,
     "clear_on_start": false,
-    "auto_recap_on_start": true
+    "auto_recap_on_start": true,
+    "interaction_mode": "rp"
 }
