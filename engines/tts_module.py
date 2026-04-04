@@ -23,13 +23,16 @@ try:
 except ImportError:
     EDGE_AVAILABLE = False
 
-# Fallback offline engine
+# Fallback offline engine (pyttsx3)
+try:
+    import pyttsx3
+    OFFLINE_AVAILABLE = True
+except ImportError:
+    OFFLINE_AVAILABLE = False
+
+# PyTorch/StyleTTS2 dependencies
 try:
     import torch
-    # PyTorch 2.6+ security change requires allowlisting getattr for some models
-    if hasattr(torch.serialization, 'add_safe_globals'):
-        import builtins
-        torch.serialization.add_safe_globals([builtins.getattr])
 except ImportError:
     pass
 
@@ -59,8 +62,21 @@ class StyleTTS2Worker:
     def load_model(self):
         if self.model is None and STYLETTS2_AVAILABLE:
             try:
-                # This will download the default LibriTTS checkpoint (~400MB) if not present
-                self.model = tts.StyleTTS2()
+                # Patch torch.load to bypass weights_only=True errors in PyTorch 2.6+
+                # StyleTTS2 uses internal structures that weights_only doesn't yet support (e.g. defaultdict)
+                import torch
+                original_load = torch.load
+                def patched_load(*args, **kwargs):
+                    # Force weights_only to False regardless of if it was passed
+                    kwargs['weights_only'] = False
+                    return original_load(*args, **kwargs)
+                
+                torch.load = patched_load
+                try:
+                    # This will download the default LibriTTS checkpoint (~400MB) if not present
+                    self.model = tts.StyleTTS2()
+                finally:
+                    torch.load = original_load
             except Exception as e:
                 print(Fore.RED + f"[STYLETTS2 LOAD ERROR] {e}" + Fore.RESET)
 
