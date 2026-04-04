@@ -1,11 +1,17 @@
 # Byte-compiled / optimized / DLL files
 __pycache__/
+.pytest_cache/
 *.py[cod]
 *$py.class
 
 # OS generated files
 .DS_Store
 Thumbs.db
+
+# IDE specific files
+.vscode/
+.idea/
+*.sublime-project
 
 # Environments
 .venv/
