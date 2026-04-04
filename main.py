@@ -290,12 +290,12 @@ def run_app():
             if get_setting("tts_enabled", False) and current_buffer.strip():
                 cleaned = clean_text_for_tts(current_buffer.strip(), speak_narration=True)
                 if cleaned:
-                    if not speak_enable and narration_enable and (voice == narrator_voice):
-                        tts_text_queue.put((cleaned, voice, engine, clone_ref, language))
-                    elif speak_enable and not narration_enable and (voice == char_voice):
-                        tts_text_queue.put((cleaned, voice, engine, clone_ref, language))
+                    if not speak_enable and narration_enable and (voice == narrator_voice):     #type: ignore
+                        tts_text_queue.put((cleaned, voice, engine, clone_ref, language))       #type: ignore
+                    elif speak_enable and not narration_enable and (voice == char_voice):       #type: ignore
+                        tts_text_queue.put((cleaned, voice, engine, clone_ref, language))       #type: ignore
                     elif speak_enable and narration_enable:
-                        tts_text_queue.put((cleaned, voice, engine, clone_ref, language))
+                        tts_text_queue.put((cleaned, voice, engine, clone_ref, language))       #type: ignore
 
 
             sys.stdout.write(Style.RESET_ALL + "\n")
