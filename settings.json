@@ -19,6 +19,6 @@
     "auto_recap_on_start": true,
     "interaction_mode": "rp",
     "tts_engine": "edge-tts",
-    "use_local_cloning": false,
+    "use_local_cloning": true,
     "cloning_reference_file": "voices/Astgenne/neutral01.wav"
 }
