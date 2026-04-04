@@ -34,3 +34,9 @@ cache/
 
 # Generated/temporary audio files
 *.mp3
+
+# gemini-cli settings
+.gemini/
+
+# GitHub App credentials
+gha-creds-*.json
