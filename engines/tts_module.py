@@ -25,12 +25,61 @@ except ImportError:
 
 # Fallback offline engine
 try:
-    import pyttsx3
-    OFFLINE_AVAILABLE = True
+    import torch
+    # PyTorch 2.6+ security change requires allowlisting getattr for some models
+    if hasattr(torch.serialization, 'add_safe_globals'):
+        import builtins
+        torch.serialization.add_safe_globals([builtins.getattr])
 except ImportError:
-    OFFLINE_AVAILABLE = False
+    pass
+
+try:
+    from styletts2 import tts
+    STYLETTS2_AVAILABLE = True
+except ImportError:
+    STYLETTS2_AVAILABLE = False
 
 _offline_engine = None
+_styletts2_worker = None
+
+class StyleTTS2Worker:
+    """
+    Singleton worker for StyleTTS 2.
+    Loads the model once and provides an interface for inference.
+    """
+    _instance = None
+
+    def __new__(cls):
+        if cls._instance is None:
+            cls._instance = super(StyleTTS2Worker, cls).__new__(cls)
+            cls._instance.model = None
+            cls._instance.load_model()
+        return cls._instance
+
+    def load_model(self):
+        if self.model is None and STYLETTS2_AVAILABLE:
+            try:
+                # This will download the default LibriTTS checkpoint (~400MB) if not present
+                self.model = tts.StyleTTS2()
+            except Exception as e:
+                print(Fore.RED + f"[STYLETTS2 LOAD ERROR] {e}" + Fore.RESET)
+
+    def generate(self, text, filename, target_voice_path=None):
+        if self.model is None:
+            return False
+        try:
+            # inference will save to filename. Note: StyleTTS2 typically outputs WAV.
+            # We use diffusion_steps=5 for high speed/low VRAM as per plan.
+            self.model.inference(
+                text=text,
+                target_voice_path=target_voice_path,
+                output_wav_file=filename,
+                diffusion_steps=5
+            )
+            return os.path.exists(filename)
+        except Exception as e:
+            print(Fore.RED + f"[STYLETTS2 GEN ERROR] {e}" + Fore.RESET)
+            return False
 
 def clean_text_for_tts(text: str, speak_narration: bool = True) -> str:
     """
@@ -102,6 +151,7 @@ async def generate_edge_tts(text, filename, voice="en-GB-SoniaNeural"):
 def play_audio_windows(filename):
     """Plays audio via VBScript or fallback on Windows."""
     abspath = os.path.abspath(filename)
+    escaped_path = abspath.replace('\\', '\\\\')
 
     # Method 1: VBScript (Hidden playback)
     vbs_path = os.path.join(os.environ["TEMP"], f"play_sound_{int(time.time())}.vbs")
@@ -112,7 +162,7 @@ def play_audio_windows(filename):
         WScript.Quit 1
     End If
     Sound.settings.volume = 100
-    Sound.URL = "{abspath.replace('\\', '\\\\')}"
+    Sound.URL = "{escaped_path}"
     Sound.Controls.play
 
     ' Wait for media to load (max 5 seconds)
@@ -211,6 +261,10 @@ def generate_audio(text, filename, voice=None, engine="edge-tts", clone_ref=None
         else:
             ref_key = os.path.basename(clone_ref)
         cache_key_engine = f"xtts_{ref_key}_{language}"
+    elif engine == "styletts2" and clone_ref:
+        # StyleTTS 2 usually takes a single WAV ref, but we handle lists too
+        ref_key = os.path.basename(clone_ref[0] if isinstance(clone_ref, list) else clone_ref)
+        cache_key_engine = f"styletts2_{ref_key}"
 
     # Check if we have this cached
     cached_path = get_cache_path(cleaned_text, cache_voice, cache_key_engine)
@@ -223,7 +277,35 @@ def generate_audio(text, filename, voice=None, engine="edge-tts", clone_ref=None
             print(Fore.YELLOW + f"[TTS CACHE] Failed to copy cache: {e}" + Fore.RESET)
     # -------------------
 
-    # 1. Attempt XTTS if requested
+    # 1. Attempt StyleTTS 2 if requested
+    if engine == "styletts2":
+        if STYLETTS2_AVAILABLE:
+            try:
+                # StyleTTS 2 outputs WAV
+                st2_filename = filename if filename.endswith(".wav") else filename.replace(".mp3", ".wav")
+                # Use the first reference if a list is provided
+                target_ref = clone_ref[0] if isinstance(clone_ref, list) else clone_ref
+                
+                worker = StyleTTS2Worker()
+                if worker.generate(cleaned_text, st2_filename, target_voice_path=target_ref):
+                    # Save to cache
+                    if os.path.exists(st2_filename):
+                        with open(st2_filename, "rb") as f:
+                            save_to_cache(cleaned_text, cache_voice, cache_key_engine, f.read())
+                        
+                        # Ensure filename is at the requested path
+                        if st2_filename != filename:
+                            if os.path.exists(filename): os.remove(filename)
+                            os.rename(st2_filename, filename)
+                        return True
+            except Exception as e:
+                if not get_setting("suppress_errors", False):
+                    print(Fore.YELLOW + f"[STYLETTS2 ERROR] {e}" + Fore.RESET)
+        
+        # Fallback to edge-tts
+        engine = "edge-tts"
+
+    # 2. Attempt XTTS if requested
     if engine == "xtts":
         xtts_success = False
         # Try Local first
