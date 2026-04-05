@@ -5,8 +5,17 @@ Provides selection menus for profiles and history files.
 
 import os
 import re
+import wave
 from colorama import Fore, Style
 from engines.actions import APPS
+
+def save_pcm_as_wav(pcm_data, filename, sample_rate=24000, channels=1, sample_width=2):
+    """Wraps raw PCM data in a WAV header and saves to disk."""
+    with wave.open(filename, 'wb') as wav_file:
+        wav_file.setnchannels(channels)
+        wav_file.setsampwidth(sample_width)
+        wav_file.setframerate(sample_rate)
+        wav_file.writeframes(pcm_data)
 
 def is_command(user_input: str) -> bool:
     """

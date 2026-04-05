@@ -31,3 +31,8 @@ This file tracks all major tracks for the project. Each track has its own detail
 
 - [ ] **Track: Profile Branching & Scenario Engine (Save Slots / Multiverse)**
 *Link: [./tracks/profile_branching_20260401/](./tracks/profile_branching_20260401/)*
+
+---
+
+- [x] **Track: Voice Cloning Optimization (Cached Speaker & Streaming)**
+*Link: [./tracks/voice_cloning_opt_20260404/](./tracks/voice_cloning_opt_20260404/)*

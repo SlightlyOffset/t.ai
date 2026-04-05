@@ -1,11 +1,17 @@
 # Byte-compiled / optimized / DLL files
 __pycache__/
+.pytest_cache/
 *.py[cod]
 *$py.class
 
 # OS generated files
 .DS_Store
 Thumbs.db
+
+# IDE specific files
+.vscode/
+.idea/
+*.sublime-project
 
 # Environments
 .venv/
@@ -32,8 +38,15 @@ gha-creds-*.json
 models/
 cache/
 
-# Generated/temporary audio files
+# Generated/temporary audio files / voice samples
+voices/
 *.mp3
+*.wav
+*.ogg
+*.flac
+
+# App settings
+settings.json
 
 # gemini-cli settings
 .gemini/
