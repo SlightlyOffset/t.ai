@@ -17,12 +17,12 @@ def _get_speaker_id(speaker_wavs):
     """Generates a stable speaker ID based on the file paths or content."""
     if isinstance(speaker_wavs, str):
         speaker_wavs = [speaker_wavs]
-    
+
     # Use parent directory name if consistent, otherwise hash the paths
     dirs = set(os.path.dirname(p) for p in speaker_wavs)
     if len(dirs) == 1:
         return os.path.basename(list(dirs)[0])
-    
+
     path_string = "|".join(sorted(speaker_wavs))
     return hashlib.md5(path_string.encode()).hexdigest()[:12]
 
@@ -31,26 +31,77 @@ def ensure_voice_on_bridge(bridge_url, speaker_id, speaker_wavs):
     if speaker_id in _UPLOADED_VOICES:
         return True
 
-    try:
-        # 1. Check if exists
-        check_url = f"{bridge_url.rstrip('/')}/check_speaker/{speaker_id}"
-        r = requests.get(check_url, timeout=5)
-        if r.status_code == 200 and r.json().get("exists"):
-            _UPLOADED_VOICES.add(speaker_id)
-            return True
+    # Common headers for ngrok-based bridges to bypass warning pages
+    # Connection: close can help with 10054 resets on some proxies
+    headers = {
+        "ngrok-skip-browser-warning": "true",
+        "Connection": "close"
+    }
 
-        # 2. Upload if missing
+    try:
+        # 1. Pre-flight Check: Ensure bridge is reachable at all
+        try:
+            r_ping = requests.get(bridge_url.rstrip('/'), headers=headers, timeout=5)
+            if r_ping.status_code >= 500:
+                print(Fore.YELLOW + f"[XTTS REMOTE] Warning: Bridge returned {r_ping.status_code}. It might still be starting up." + Fore.RESET)
+        except Exception as e:
+            print(Fore.RED + f"[XTTS BRIDGE CONN ERROR] Cannot reach bridge at {bridge_url}. Is it running? ({e})" + Fore.RESET)
+            return False
+
+        # 2. Check if speaker exists
+        check_url = f"{bridge_url.rstrip('/')}/check_speaker/{speaker_id}"
+        if get_setting("debug_mode", False):
+            print(Fore.MAGENTA + f"[DEBUG] Checking speaker existence: {check_url}" + Fore.RESET)
+            
+        r = requests.get(check_url, headers=headers, timeout=10)
+        
+        if r.status_code == 200:
+            try:
+                data = r.json()
+                if data.get("exists"):
+                    _UPLOADED_VOICES.add(speaker_id)
+                    return True
+            except ValueError:
+                pass 
+
+        # 3. Upload if missing
         print(Fore.CYAN + f"[XTTS REMOTE] Uploading voice profile '{speaker_id}' to bridge..." + Fore.RESET)
         upload_url = f"{bridge_url.rstrip('/')}/upload_speaker"
-        
-        file_handles = [open(p, "rb") for p in speaker_wavs]
+
+        if not speaker_wavs:
+            print(Fore.RED + f"[XTTS UPLOAD ERROR] No wav files found for speaker '{speaker_id}'" + Fore.RESET)
+            return False
+
+        # STRICT LIMIT: Only upload the SINGLE largest/most-representative sample.
+        # This minimizes the POST body size to ~1-2MB, which is the most stable range
+        # for Colab/Ngrok during peak hours.
+        if not upload_samples:
+            upload_samples = [speaker_wavs[0]]
+            
+        # We pick the largest file among the candidates, as it usually has the most voice data
+        best_sample = max(speaker_wavs[:3], key=os.path.getsize)
+        upload_samples = [best_sample]
+
+        if get_setting("debug_mode", False):
+            print(Fore.MAGENTA + f"[DEBUG] Using best single sample: {os.path.basename(best_sample)} ({os.path.getsize(best_sample)} bytes)" + Fore.RESET)
+
+        file_handles = [open(p, "rb") for p in upload_samples]
         try:
             files = [("files", (os.path.basename(p), fh, "audio/wav"))
-                     for p, fh in zip(speaker_wavs, file_handles)]
+                     for p, fh in zip(upload_samples, file_handles)]
             data = {"speaker_id": speaker_id}
-            resp = requests.post(upload_url, data=data, files=files, timeout=30)
             
+            # Additional headers to look more like a standard browser request
+            headers.update({
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+                "Accept": "*/*"
+            })
+            
+            # Use a conservative 60s timeout for the single-file POST
+            resp = requests.post(upload_url, data=data, files=files, headers=headers, timeout=60)
+
             if resp.status_code == 200:
+                print(Fore.GREEN + f"[XTTS REMOTE] Voice profile '{speaker_id}' registered successfully." + Fore.RESET)
                 _UPLOADED_VOICES.add(speaker_id)
                 return True
             else:
@@ -59,9 +110,14 @@ def ensure_voice_on_bridge(bridge_url, speaker_id, speaker_wavs):
         finally:
             for fh in file_handles:
                 fh.close()
-                
+
+    except requests.exceptions.ConnectionError as ce:
+        print(Fore.RED + f"[XTTS BRIDGE CONN ERROR] Connection failed: {ce}" + Fore.RESET)
+        if "10054" in str(ce):
+            print(Fore.YELLOW + "[TIP] Error 10054 detected. Trying again with fewer samples. If this persists, restart your Colab notebook." + Fore.RESET)
+        return False
     except Exception as e:
-        print(Fore.RED + f"[XTTS BRIDGE CONN ERROR] {e}" + Fore.RESET)
+        print(Fore.RED + f"[XTTS BRIDGE CONN ERROR] {type(e).__name__}: {e}" + Fore.RESET)
         return False
 
 def generate_remote_xtts(text, output_path, speaker_wav, language="en"):
@@ -94,21 +150,23 @@ def generate_remote_xtts(text, output_path, speaker_wav, language="en"):
         if get_setting("debug_mode", False):
             print(Fore.MAGENTA + f"[DEBUG] Requesting remote XTTS for speaker: {speaker_id}" + Fore.RESET)
 
+        headers = {"ngrok-skip-browser-warning": "true"}
+        
         # For now, we still download the full file, but without the 'files' payload.
         # Phase 2 will implement real-time streaming playback.
-        response = requests.post(endpoint, data=data, timeout=60, stream=True)
+        response = requests.post(endpoint, data=data, headers=headers, timeout=120, stream=True)
 
         if response.status_code == 200:
             all_pcm = b""
             for chunk in response.iter_content(chunk_size=4096):
                 all_pcm += chunk
-            
+
             # Wrap the collected PCM in a WAV header and save
             save_pcm_as_wav(all_pcm, output_path)
             return True
         else:
             if not get_setting("suppress_errors", False):
-                print(Fore.RED + f"[XTTS REMOTE ERROR] {response.status_code}" + Fore.RESET)
+                print(Fore.RED + f"[XTTS REMOTE ERROR] {response.status_code}: {response.text}" + Fore.RESET)
             return False
 
     except Exception as e:
