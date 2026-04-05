@@ -1,5 +1,6 @@
 # Byte-compiled / optimized / DLL files
 __pycache__/
+.pytest_cache/
 *.py[cod]
 *$py.class
 
@@ -36,11 +37,15 @@ voices/
 models/
 cache/
 
+# Generated/temporary audio files / voice samples
+voices/
+*.mp3
+*.wav
+*.ogg
+*.flac
+
 # App settings
 settings.json
-
-# Generated/temporary audio files
-*.mp3
 
 # gemini-cli settings
 .gemini/

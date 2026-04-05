@@ -15,6 +15,7 @@ import shutil
 from engines.config import get_setting
 from engines.xtts_local import XTTSWorker, is_xtts_supported
 from engines.audio_cache import get_cache_path, save_to_cache
+from engines.utilities import save_pcm_as_wav
 
 # Attempt to import edge-tts
 try:
@@ -98,6 +99,14 @@ async def generate_edge_tts(text, filename, voice="en-GB-SoniaNeural"):
     """Internal async function for Edge TTS."""
     communicate = edge_tts.Communicate(text, voice)
     await communicate.save(filename)
+
+def save_pcm_as_wav(pcm_data, filename, sample_rate=24000, channels=1, sample_width=2):
+    """Wraps raw PCM data in a WAV header and saves to disk."""
+    with wave.open(filename, 'wb') as wav_file:
+        wav_file.setnchannels(channels)
+        wav_file.setsampwidth(sample_width)
+        wav_file.setframerate(sample_rate)
+        wav_file.writeframes(pcm_data)
 
 def play_audio_windows(filename):
     """Plays audio via VBScript or fallback on Windows."""
