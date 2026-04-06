@@ -168,3 +168,6 @@ def get_text_style(profile_data):
                     getattr(Style, colors.get("label", "NORMAL").upper(), Style.NORMAL)
     narration_style = Fore.LIGHTBLACK_EX + Style.BRIGHT + "\033[3m"
     return char_style, narration_style
+
+def replace_placeholders(text, user_name="User", char_name="Assistant"):
+    return text.replace("{{user}}", user_name).replace("{{user_name}}", user_name).replace("{{char}}", char_name)

@@ -19,8 +19,7 @@ from colorama import init, Fore, Style
 
 # Local imports
 from engines.actions import execute_command
-from engines.utilities import is_command
-from engines.utilities import pick_profile, pick_user_profile, get_text_style
+from engines.utilities import is_command, pick_profile, pick_user_profile, get_text_style, replace_placeholders
 from engines.app_commands import app_commands, RestartRequested
 from engines.responses import get_respond_stream, apply_mood_decay
 from engines.tts_module import generate_audio, play_audio, clean_text_for_tts
@@ -99,6 +98,7 @@ def startup_recap(history_profile_name, user_name, ch_name):
         app_commands("//history")
 
 def run_app():
+    ### --- Character Profile Loading and Initialization ---
     character_profile_path = pick_profile()
     if not character_profile_path:
         return
@@ -127,6 +127,8 @@ def run_app():
     if memory_manager.get_full_data(history_profile_name).get("history"):
         had_history = True
 
+    ### --- End of Initialization ---
+    ### If no history, show starter message and save it to history to prevent it showing again on next startup.
     if not had_history:
         char_style, narration_style = get_text_style(character_profile)
 
@@ -135,6 +137,7 @@ def run_app():
         starter_messages = character_profile.get("starter_messages", [])
         random.shuffle(starter_messages)
         if starter_messages:
+            starter_messages[0] = replace_placeholders(starter_messages[0], user_name=user_name, char_name=ch_name)
             is_currently_narrating = False
             sys.stdout.write(Fore.MAGENTA + Style.BRIGHT + f"{ch_name}: " + Style.RESET_ALL)
             parts = re.split(r'(\*)', starter_messages[0])
