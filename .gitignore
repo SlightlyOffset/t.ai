@@ -30,6 +30,8 @@ character_draft/
 # history / profiles folders / images / voice samples
 history/
 profiles/
+wyvern_cards/
+sillyTavern_cards/
 img/
 voices/
 
