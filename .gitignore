@@ -27,7 +27,7 @@ ENV/
 java_poc/
 character_draft/
 
-# history / profiles folders / images / voice samples
+# history / profiles / images / voice samples folders
 history/
 profiles/
 wyvern_cards/
@@ -39,7 +39,7 @@ voices/
 models/
 cache/
 
-# Generated/temporary audio files / voice samples
+# Generated / temporary audio / voice samples files
 voices/
 *.mp3
 *.wav
