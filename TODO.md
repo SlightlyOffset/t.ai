@@ -39,6 +39,8 @@
 - [x] Response streaming and voice streaming
 - [x] Implementing cloud computing for larger LLM e.g. 40B models
 - [x] Implement recap or load history into terminal view
+- [x] Implement auto-recap on startup
+- [ ] Implement SillyTavern/Wyvern character card support & conversion
 - [ ] Add more complex triggers (time, weather, or custom jokes)
 - [ ] Implement background operation / system tray support
 - [x] Source or record custom voice for **Voice Cloning (XTTS v2)**
