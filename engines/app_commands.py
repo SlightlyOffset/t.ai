@@ -15,6 +15,7 @@ from engines.utilities import pick_history
 from engines.utilities import pick_profile
 from engines.utilities import pick_user_profile, render_historical_message # Import render_historical_message
 from engines.memory_v2 import memory_manager # Import memory_manager
+from engines.character_importer import import_character
 
 # Initialize colorama
 init(autoreset=True)
@@ -41,8 +42,11 @@ def app_commands(ops: str):
     def _help():
         """Lists all available commands."""
         print(Fore.YELLOW + "[AVAILABLE COMMANDS]")
-        for cmd in cmds.keys():
-            print(Fore.CYAN + f"  {cmd}")
+        for cmd, func in cmds.items():
+            doc = func.__doc__ if func.__doc__ else ""
+            # Simple parsing for help text
+            desc = doc.split("\n")[0] if doc else ""
+            print(Fore.CYAN + f"  {cmd:<25}" + Fore.WHITE + f" - {desc}")
 
     def _exit():
         """Exits the application."""
@@ -62,26 +66,31 @@ def app_commands(ops: str):
             print(Fore.CYAN + f"  {key}: " + val_str)
 
     def _toggle_tts():
+        """Toggles Text-to-Speech on or off."""
         is_enabled = get_setting("tts_enabled", True)
         print(Fore.GREEN + "[SYSTEM] Text-to-Speech enabled." if not is_enabled else Fore.RED + "[SYSTEM] Text-to-Speech disabled.")
         update_setting("tts_enabled", not is_enabled)
 
     def _toggle_tts_tag():
+        """Toggles the visibility of the TTS engine tag in chat."""
         is_enabled = get_setting("show_tts_engine", True)
         print(Fore.GREEN + "[SYSTEM] TTS engine tag enabled." if not is_enabled else Fore.RED + "[SYSTEM] TTS engine tag disabled.")
         update_setting("show_tts_engine", not is_enabled)
 
     def _toggle_narration():
+        """Toggles whether narration (text in asterisks) is spoken."""
         is_enabled = get_setting("speak_narration", False)
         print(Fore.GREEN + "[SYSTEM] Narration enabled." if not is_enabled else Fore.RED + "[SYSTEM] Narration disabled.")
         update_setting("speak_narration", not is_enabled)
 
     def _toggle_speak():
+        """Toggles whether character dialogue is spoken."""
         is_enabled = get_setting("character_speak", True)
         print(Fore.GREEN + "[SYSTEM] Character speaking enabled." if not is_enabled else Fore.RED + "[SYSTEM] Character speaking disabled.")
         update_setting("character_speak", not is_enabled)
 
     def _toggle_command():
+        """Toggles the AI's ability to execute system commands."""
         is_enabled = get_setting("execute_command", False)
         print(Fore.GREEN + "[SYSTEM] Command execution enabled." if not is_enabled else Fore.RED + "[SYSTEM] Command execution disabled.")
         update_setting("execute_command", not is_enabled)
@@ -129,7 +138,7 @@ def app_commands(ops: str):
 
     # Note: Still somewhat buggy.
     def _restart():
-        """Signals the main loop to restart."""
+        """Signals the main loop to restart the application."""
         print(Fore.YELLOW + "[SYSTEM] Restarting application...")
         raise RestartRequested()
 
@@ -139,12 +148,12 @@ def app_commands(ops: str):
         print(Fore.YELLOW + "[SYSTEM] Screen cleared.")
 
     def _change_character():
-        """Restarts the app to allow picking a new character."""
+        """Changes the current character profile."""
         print(Fore.YELLOW + "[SYSTEM] Changing character...")
         raise RestartRequested()
 
     def _change_user_profile():
-        """Prompts for a new user profile and restarts."""
+        """Changes the current user profile."""
         print(Fore.YELLOW + "[SYSTEM] Changing user profile.")
         new_profile_path = pick_user_profile()
         if new_profile_path:
@@ -156,17 +165,19 @@ def app_commands(ops: str):
             print(Fore.RED + "[SYSTEM] No user profile selected.")
 
     def _toggle_clear_on_start():
+        """Toggles whether the console clears on application start."""
         is_enabled = get_setting("clear_at_start", True)
         print(Fore.GREEN + "[SYSTEM] Console will now clear at startup." if not is_enabled else Fore.RED + "[SYSTEM] Console will no longer clear at startup.")
         update_setting("clear_at_start", not is_enabled)
 
     def _toggle_errors():
+        """Toggles the suppression of non-critical error messages."""
         is_enabled = get_setting("suppress_errors", False)
         print(Fore.GREEN + "[SYSTEM] Error messages will now be shown." if is_enabled else Fore.RED + "[SYSTEM] Non-critical error messages suppressed.")
         update_setting("suppress_errors", not is_enabled)
 
     def _history(limit: int = 15):
-        """Displays the last 15 messages from the current character's history."""
+        """Displays the recent conversation history."""
         current_profile_setting = get_setting("current_character_profile")
         if not current_profile_setting:
             print(Fore.RED + "[SYSTEM] No character profile active. Cannot display history." + Style.RESET_ALL)
@@ -204,12 +215,13 @@ def app_commands(ops: str):
             print(Fore.YELLOW + "[SYSTEM] No history found for the current profile." + Style.RESET_ALL)
 
     def _toggle_recap_on_start():
+        """Toggles whether a history recap is shown at startup."""
         is_enabled = get_setting("auto_recap_on_start", True)
         print(Fore.GREEN + "[SYSTEM] Auto recap at startup is now enabled." if not is_enabled else Fore.RED + "[SYSTEM] Auto recap at startup is now disabled.")
         update_setting("auto_recap_on_start", not is_enabled)
 
     def _clear_cache():
-        """Clears the TTS cache directory."""
+        """Clears the local TTS audio cache."""
         cache_dir = "cache"
         if os.path.exists(cache_dir):
             try:
@@ -221,10 +233,24 @@ def app_commands(ops: str):
             print(Fore.YELLOW + "[SYSTEM] No TTS cache found to clear.")
 
     def _toggle_mode():
+        """Toggles between Roleplay (RP) and Casual interaction modes."""
         current_mode = get_setting("interaction_mode", "rp")
         new_mode = "casual" if current_mode == "rp" else "rp"
         update_setting("interaction_mode", new_mode)
         print(Fore.GREEN + f"[SYSTEM] Interaction mode set to {new_mode.upper()}.")
+
+    def _import_card(args):
+        """Imports a character card (PNG or JSON) from SillyTavern format."""
+        if not args:
+            print(Fore.RED + "[ERROR] Usage: //import_card <path_to_card_png_or_json>")
+            return
+        
+        path = args.strip().strip('"').strip("'")
+        if not os.path.exists(path):
+            print(Fore.RED + f"[ERROR] File not found: {path}")
+            return
+            
+        import_character(path)
 
     # Mapping of command strings to their respective functions
     cmds = {
@@ -233,6 +259,7 @@ def app_commands(ops: str):
         "//quit": _exit,
         "//help": _help,
         "//clear": _clear,
+        "//import_card": _import_card,
         "//change_character": _change_character,
         "//change_user_profile": _change_user_profile,
         "//reset": _reset,
@@ -256,8 +283,20 @@ def app_commands(ops: str):
     pattern = re.match(r'^/+', ops.strip().lower())
     if pattern:
         ops = "//" + ops[pattern.end():]
-    action = cmds.get(ops.lower())
+    
+    # Split command and arguments
+    parts = ops.split(" ", 1)
+    cmd_name = parts[0].lower()
+    args = parts[1] if len(parts) > 1 else ""
+
+    action = cmds.get(cmd_name)
     if action:
-        action()
+        # Check if the function takes arguments
+        import inspect
+        sig = inspect.signature(action)
+        if len(sig.parameters) > 0:
+            action(args)
+        else:
+            action()
         return True
     return False

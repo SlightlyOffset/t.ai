@@ -6,6 +6,8 @@ Builds the 'brain' instructions for the LLM based on character and user profiles
 import json
 import os
 
+from engines.utilities import replace_placeholders
+
 def load_user_profile():
     """
     Loads the currently selected user profile from the user_profiles directory.
@@ -114,5 +116,8 @@ Mode: {mode.upper()}
         system_content += f"Note: {system_extra_info}\n"
 
     system_content += f"{rule}"
+
+    ### Final pass to replace any placeholders in the base prompt with actual values from the profile
+    system_content = replace_placeholders(system_content, user_name=user_profile.get("name", "User") if user_profile else "User", char_name=profile.get("name", "Assistant"))
 
     return system_content
