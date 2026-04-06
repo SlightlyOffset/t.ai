@@ -23,8 +23,10 @@ class HistoryManager:
 
     def _get_filename(self, profile_name: str) -> str:
         """Generates a safe filename for the history JSON file."""
-        # Allow alphanumeric, spaces, underscores, dashes
-        safe_name = "".join(c for c in profile_name if c.isalnum() or c in (' ', '_', '-')).rstrip()
+        # Allow alphanumeric, underscores, dashes
+        # Replace spaces with underscores
+        safe_name = profile_name.replace(" ", "_")
+        safe_name = "".join(c for c in safe_name if c.isalnum() or c in ('_', '-')).rstrip()
         return os.path.join(self.history_dir, f"{safe_name}_history.json")
 
     def save_history(self, profile_name: str, history: list, mood_score: int = 0):
