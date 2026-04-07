@@ -33,6 +33,7 @@ profiles/
 wyvern_cards/
 sillyTavern_cards/
 img/
+screenshot/
 voices/
 
 # XTTS v2 and Audio Cache
