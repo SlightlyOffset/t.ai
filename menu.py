@@ -59,10 +59,6 @@ def format_rp(text):
             result += part
     return result
 
-def run_recap():
-    # To be implemented later
-    pass
-
 class TaiMenu(App):
     """t.ai - Logic-focused TUI implementation."""
     TITLE = "t.ai"
@@ -194,6 +190,23 @@ class TaiMenu(App):
                                                                      "content": starter_messages[0]}],
                                         mood_score=self.character_profile.get("relationship_score", 0))
 
+    def run_recap(self):
+        messages_history = memory_manager.load_history(self.history_profile_name)
+        # If messages length is less than 15, just load everything to the chat list
+        if messages_history and len(messages_history) <= 15:
+            self.add_message(f"--- Recap: {len(messages_history)} messages loaded ---", role="system")
+            for msg_data in messages_history:
+                role = msg_data.get("role", "assistant")
+                content = msg_data.get("content", "")
+                if role != "system":
+                    content = format_rp(content)
+                self.add_message(content, role=role)
+            self.add_message("--- Recap complete ---", role="system")
+        else:
+            # Anything more than 15 messages, let the AI context summarizer handle it
+            # Will do soon, possibly with Microsoft's new BitNet
+            pass
+
     def load_initial_state(self) -> None:
         """Loads profiles and settings based on pre-selected paths."""
         if not self.char_path:
@@ -219,11 +232,14 @@ class TaiMenu(App):
         self.query_one("#init_msg").update(f"[bold green]System:[/bold green] Loaded character profile: [bold]{self.ch_name}[/bold]")
 
         # Print character's starter messages and save to memory (if any, which should always be any)
-        self.print_starter_message()
+        # Only do this if the history doesn't exist yet, to avoid repeating starter messages on every launch'
+        has_history = memory_manager.has_history(self.history_profile_name)
+        if not has_history:
+            self.print_starter_message()
 
         # Load history recap if enabled
         if get_setting("auto_recap_on_start", False):
-            run_recap()
+            self.run_recap()
 
     def update_sidebar(self):
         rel = self.character_profile.get("relationship_score", 0)
