@@ -16,6 +16,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from textual.app import App, ComposeResult
 from textual.widgets import Header, Footer, Input, Static, Label, Select, ProgressBar, Switch
+from textual_image.widget import Image
 from textual.containers import Container, Vertical, Horizontal, ScrollableContainer
 from textual import work
 from textual.reactive import reactive
@@ -24,7 +25,7 @@ from engines.app_commands import app_commands
 from engines.config import update_setting, get_setting
 from engines.responses import get_respond_stream
 from engines.tts_module import generate_audio, play_audio, clean_text_for_tts
-from engines.utilities import pick_profile, pick_user_profile, render_avatar
+from engines.utilities import pick_profile, pick_user_profile
 from engines.memory_v2 import memory_manager
 
 
@@ -85,7 +86,7 @@ class TaiMenu(App):
                     yield Label("[bold green]System:[/bold green] Waiting for profile...", id="init_msg", classes="system_msg")
                 yield Input(placeholder="Type your message here...", id="user_input")
             with Vertical(id="status_sidebar"):
-                yield Static("", id="avatar_portrait")
+                yield Image(None, id="avatar_portrait")
                 yield Label("--- Companion ---", classes="sidebar_header")
                 yield Label("Name: [bold magenta]None[/bold magenta]", id="lbl_char")
                 yield Label("Mood: [bold]Neutral[/bold]", id="lbl_mood")
@@ -262,8 +263,8 @@ class TaiMenu(App):
 
         # Render avatar portrait
         avatar_path = self.character_profile.get("avatar_path")
-        rendered_art = render_avatar(avatar_path, width=35)
-        self.query_one("#avatar_portrait").update(rendered_art)
+        if avatar_path and os.path.exists(avatar_path):
+            self.query_one("#avatar_portrait", Image).path = avatar_path
 
         # Print character's starter messages and save to memory (if any, which should always be any)
         # Only do this if the history doesn't exist yet, to avoid repeating starter messages on every launch
