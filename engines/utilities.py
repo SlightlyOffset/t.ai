@@ -6,6 +6,8 @@ Provides selection menus for profiles and history files.
 import os
 import re
 import wave
+import shutil
+import subprocess
 from colorama import Fore, Style
 from engines.actions import APPS
 
@@ -171,3 +173,7 @@ def get_text_style(profile_data):
 
 def replace_placeholders(text, user_name="User", char_name="Assistant"):
     return text.replace("{{user}}", user_name).replace("{{user_name}}", user_name).replace("{{char}}", char_name)
+
+def is_chafa_available() -> bool:
+    """Checks if 'chafa' is available in the system path."""
+    return shutil.which("chafa") is not None
