@@ -8,13 +8,14 @@ import random
 import threading
 import time
 import sys
+import ollama
 
 
 # Ensure the project root is in sys.path
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from textual.app import App, ComposeResult
-from textual.widgets import Header, Footer, Input, Static, Label
+from textual.widgets import Header, Footer, Input, Static, Label, Select, ProgressBar, Switch
 from textual.containers import Container, Vertical, Horizontal, ScrollableContainer
 from textual import work
 from textual.reactive import reactive
@@ -71,6 +72,36 @@ class TaiMenu(App):
         background: $panel;
         border-left: tall $accent;
         padding: 1;
+        overflow-y: auto;
+    }
+    .sidebar_header {
+        color: $accent;
+        text-style: bold;
+        margin: 1 0 0 0;
+        border-bottom: $accent;
+        width: 100%;
+    }
+    .sidebar_label {
+        margin: 1 0 0 0;
+        color: $text-disabled;
+    }
+    .setting_row {
+        height: auto;
+        width: 100%;
+        align: center middle;
+        margin: 0 0 1 0;
+    }
+    .setting_label {
+        width: 1fr;
+        color: $text;
+    }
+    #rel_bar {
+        margin: 0 0 1 0;
+        width: 100%;
+    }
+    #model_select, #voice_select {
+        width: 100%;
+        margin: 0 0 1 0;
     }
     .message_row {
         width: 100%;
@@ -130,7 +161,7 @@ class TaiMenu(App):
         try:
             self.query_one("#status_sidebar").display = show
         except Exception:
-            pass # Widget not mounted yet
+            pass # Widget is not mounted yet
 
     def action_toggle_sidebar(self) -> None:
         """Toggle the status sidebar visibility."""
@@ -144,15 +175,104 @@ class TaiMenu(App):
                     yield Label("[bold green]System:[/bold green] Waiting for profile...", id="init_msg", classes="system_msg")
                 yield Input(placeholder="Type your message here...", id="user_input")
             with Vertical(id="status_sidebar"):
-                yield Label("Companion: [bold]None[/bold]", id="lbl_char")
-                yield Label("User: [bold]None[/bold]", id="lbl_user")
-                yield Label("Relationship: [bold]0[/bold]", id="lbl_rel")
+                yield Label("--- Companion ---", classes="sidebar_header")
+                yield Label("Name: [bold magenta]None[/bold magenta]", id="lbl_char")
+                yield Label("Mood: [bold]Neutral[/bold]", id="lbl_mood")
+                yield Label("Relationship:", classes="sidebar_label")
+                yield ProgressBar(total=200, show_percentage=False, id="rel_bar")
+                yield Label("Score: [bold]0[/bold]", id="lbl_rel")
+                
+                yield Label("--- Settings ---", classes="sidebar_header")
+                yield Label("LLM Model:", classes="sidebar_label")
+                yield Select([], id="model_select", prompt="Select Model")
+                
+                with Horizontal(classes="setting_row"):
+                    yield Label("TTS Master:", classes="setting_label")
+                    yield Switch(value=get_setting("tts_enabled", False), id="sw_tts")
+                
+                with Horizontal(classes="setting_row"):
+                    yield Label("Dialogue:", classes="setting_label")
+                    yield Switch(value=get_setting("character_speak", False), id="sw_dialogue")
+                
+                with Horizontal(classes="setting_row"):
+                    yield Label("Narration:", classes="setting_label")
+                    yield Switch(value=get_setting("speak_narration", False), id="sw_narration")
+
+                yield Label("Companion Voice(for edge TTS):", classes="sidebar_label")
+                yield Select([], id="voice_select", prompt="Select Voice")
+
+                yield Label("--- User ---", classes="sidebar_header")
+                yield Label("User: [bold cyan]None[/bold cyan]", id="lbl_user")
         yield Footer()
 
     def on_mount(self) -> None:
         """Initializes the app and load character profiles."""
         self.start_tts_worker()
         self.load_initial_state()
+        self.populate_models()
+        self.populate_voices()
+
+    def populate_models(self) -> None:
+        """Fetch available models from Ollama and populate the Select widget."""
+        try:
+            raw_models = ollama.list().models
+            options = []
+            for m in raw_models:
+                full_name = m.model
+                # Display only the part after the last slash (removes user/repo paths)
+                display_name = full_name.split('/')[-1]
+                options.append((display_name, full_name))
+            
+            select = self.query_one("#model_select", Select)
+            select.set_options(options)
+            
+            # Set current model as default
+            current_model = self.character_profile.get("llm_model", get_setting("default_llm_model", "llama3"))
+            # Find the best match in the list
+            for label, value in options:
+                if value == current_model or value.startswith(current_model + ":"):
+                    select.value = value
+                    break
+        except Exception:
+            pass
+
+    def populate_voices(self) -> None:
+        """Populate the voice selection list with Edge-TTS options."""
+        voices = [
+            ("Andrew (Male)", "en-US-AndrewNeural"),
+            ("Emma (Female)", "en-US-EmmaNeural"),
+            ("Brian (Male)", "en-GB-BrianNeural"),
+            ("Sonia (Female)", "en-GB-SoniaNeural"),
+            ("Aria (Female)", "en-US-AriaNeural"),
+            ("Guy (Male)", "en-US-GuyNeural"),
+            ("Ava (Female)", "en-US-AvaNeural"),
+        ]
+        select = self.query_one("#voice_select", Select)
+        select.set_options(voices)
+        
+        current_voice = self.character_profile.get("preferred_edge_voice", get_setting("narration_tts_voice", "en-US-AndrewNeural"))
+        select.value = current_voice
+
+    def on_switch_changed(self, event: Switch.Changed) -> None:
+        """Handle toggle switches for TTS settings."""
+        if event.switch.id == "sw_tts":
+            update_setting("tts_enabled", event.value)
+            self.add_message(f"TTS Master: {'[bold green]ON[/bold green]' if event.value else '[bold red]OFF[/bold red]'}", role="system")
+        elif event.switch.id == "sw_dialogue":
+            update_setting("character_speak", event.value)
+            self.add_message(f"Dialogue: {'[bold green]ON[/bold green]' if event.value else '[bold red]OFF[/bold red]'}", role="system")
+        elif event.switch.id == "sw_narration":
+            update_setting("speak_narration", event.value)
+            self.add_message(f"Narration: {'[bold green]ON[/bold green]' if event.value else '[bold red]OFF[/bold red]'}", role="system")
+
+    def on_select_changed(self, event: Select.Changed) -> None:
+        """Update the character profile with selected LLM or Voice."""
+        if event.select.id == "model_select" and event.value != Select.BLANK:
+            self.character_profile["llm_model"] = event.value
+            self.add_message(f"LLM model switched to [bold]{event.value}[/bold]", role="system")
+        elif event.select.id == "voice_select" and event.value != Select.BLANK:
+            self.character_profile["preferred_edge_voice"] = event.value
+            self.add_message(f"Companion voice set to [bold]{event.value}[/bold]", role="system")
 
     def start_tts_worker(self) -> None:
         """Starts a worker thread for TTS generation and playback."""
@@ -230,7 +350,7 @@ class TaiMenu(App):
         self.query_one("#init_msg").update(f"[bold green]System:[/bold green] Loaded character profile: [bold]{self.ch_name}[/bold]")
 
         # Print character's starter messages and save to memory (if any, which should always be any)
-        # Only do this if the history doesn't exist yet, to avoid repeating starter messages on every launch'
+        # Only do this if the history doesn't exist yet, to avoid repeating starter messages on every launch
         has_history = memory_manager.has_history(self.history_profile_name)
         if not has_history:
             self.print_starter_message()
@@ -241,9 +361,23 @@ class TaiMenu(App):
 
     def update_sidebar(self):
         rel = self.character_profile.get("relationship_score", 0)
-        self.query_one("#lbl_char").update(f"Companion: [bold magenta]{self.ch_name}[/bold magenta]")
+        
+        # Determine relationship label
+        if rel >= 80: rel_label = "Soulmate / Bestie"
+        elif rel >= 40: rel_label = "Close Friend"
+        elif rel >= 15: rel_label = "Friendly / Liked"
+        elif rel >= -15: rel_label = "Neutral / Acquaintance"
+        elif rel >= -40: rel_label = "Annoyance / Disliked"
+        elif rel >= -80: rel_label = "Hostile / Enemy"
+        else: rel_label = "Arch-Nemesis / Despised"
+
+        self.query_one("#lbl_char").update(f"Name: [bold magenta]{self.ch_name}[/bold magenta]")
+        self.query_one("#lbl_mood").update(f"Mood: [bold]{rel_label}[/bold]")
+        self.query_one("#lbl_rel").update(f"Score: [bold]{rel}[/bold]")
         self.query_one("#lbl_user").update(f"User: [bold cyan]{self.user_name}[/bold cyan]")
-        self.query_one("#lbl_rel").update(f"Relationship: [bold]{rel}[/bold]")
+        
+        # Update progress bar (Map -100/100 to 0/200)
+        self.query_one("#rel_bar").progress = rel + 100
 
     def add_message(self, text, role="user"):
         container = self.query_one("#chat_list")
@@ -320,7 +454,7 @@ class TaiMenu(App):
         tts_in_narration = False
 
         # Get setting for TTS
-        char_voice = self.character_profile.get("preferred_tts_voice", None)
+        char_voice = self.character_profile.get("preferred_edge_voice", None)
         char_engine = self.character_profile.get("tts_engine", "edge-tts")
         char_clone_ref = self.character_profile.get("voice_clone_ref", None)
         char_language = self.character_profile.get("tts_language", "en")
