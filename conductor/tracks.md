@@ -9,6 +9,16 @@ This file tracks all major tracks for the project. Each track has its own detail
 
 ---
 
+- [x] **Track: Sidebar Toggle Implementation (Ctrl+B)**
+*Link: [./tracks/sidebar_toggle_20260408/](./tracks/sidebar_toggle_20260408/)*
+
+---
+
+- [ ] **Track: Visual Avatar Integration using Chafa (Phase 5)**
+*Link: [./tracks/visual_avatars_20260408/](./tracks/visual_avatars_20260408/)*
+
+---
+
 - [ ] **Track: Implement BitNet-based context summarization for long chat histories in t.ai**
 *Link: [./tracks/bitnet_summarizer_20260408/](./tracks/bitnet_summarizer_20260408/)*
 

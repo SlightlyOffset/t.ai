@@ -1,4 +1,4 @@
-# Implementation Plan - Sidebar Toggle
+# Implementation Plan - Sidebar Toggle [checkpoint: baa8cd1]
 
 ## Phase 1: Binding & Logic
 - [x] Define `BINDINGS` in `TaiMenu` to include the toggle key.
