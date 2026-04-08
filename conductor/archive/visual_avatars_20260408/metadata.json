@@ -1,0 +1,8 @@
+{
+  "track_id": "visual_avatars_20260408",
+  "type": "feature",
+  "status": "new",
+  "created_at": "2026-04-08T03:18:00Z",
+  "updated_at": "2026-04-08T03:18:00Z",
+  "description": "Integrate character portraits into the TUI sidebar using Chafa (Phase 5)"
+}
