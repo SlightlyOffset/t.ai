@@ -27,28 +27,6 @@ from engines.utilities import pick_profile, pick_user_profile
 from engines.memory_v2 import memory_manager
 
 
-def get_smart_split_points(text):
-    """
-    Finds split points for TTS.
-    Splits on asterisks (to switch voices) and punctuation (to keep segments short).
-    """
-    points = []
-    in_asterisks = False
-    for i in range(len(text)):
-        char = text[i]
-        if char == '*':
-            in_asterisks = not in_asterisks
-            points.append(i + 1)
-            continue
-        if not in_asterisks:
-            if char in ".!?\n":
-                if char == '.' and i + 1 < len(text) and text[i+1] == '.':
-                    continue
-                if char == '.' and i > 0 and text[i-1] == '.':
-                    continue
-                points.append(i + 1)
-    return points
-
 def format_rp(text):
     """Simple helper to convert *narration* to [i][dim]markup[/dim][/i]."""
     parts = text.split('*')
@@ -306,6 +284,29 @@ class TaiMenu(App):
     @work(thread=True)
     def stream_response(self, message: str) -> None:
         """Worker to handle the LLM streaming and TTS queuing"""
+
+        def _get_smart_split_points(text):
+            """
+            Internal helper function to find split points for TTS.
+            Splits on asterisks (to switch voices) and punctuation (to keep segments short).
+            """
+            points = []
+            in_asterisks = False
+            for i in range(len(text)):
+                char = text[i]
+                if char == '*':
+                    in_asterisks = not in_asterisks
+                    points.append(i + 1)
+                    continue
+                if not in_asterisks:
+                    if char in ".!?\n":
+                        if char == '.' and i + 1 < len(text) and text[i + 1] == '.':
+                            continue
+                        if char == '.' and i > 0 and text[i - 1] == '.':
+                            continue
+                        points.append(i + 1)
+            return points
+
         container = self.query_one("#chat_list")
         
         ai_msg = Static(f"[bold magenta]{self.ch_name}:[/bold magenta]\n", markup=True, classes="message ai_bubble")
@@ -341,7 +342,7 @@ class TaiMenu(App):
             # ---------------------------------------------------------------
             # Check for split points for TTS
             if get_setting("tts_enabled", False):
-                split_points = get_smart_split_points(current_buffer)
+                split_points = _get_smart_split_points(current_buffer)
                 if split_points:
                     last_point = 0
                     for point in split_points:
