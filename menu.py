@@ -17,6 +17,7 @@ from textual.app import App, ComposeResult
 from textual.widgets import Header, Footer, Input, Static, Label
 from textual.containers import Container, Vertical, Horizontal, ScrollableContainer
 from textual import work
+from textual.reactive import reactive
 
 from engines.app_commands import app_commands
 from engines.config import update_setting, get_setting
@@ -61,7 +62,14 @@ def format_rp(text):
 
 class TaiMenu(App):
     """t.ai - Logic-focused TUI implementation."""
-    TITLE = "t.ai"
+    TITLE = "t.ai (made with love from a lone developer! 💖)"
+
+    BINDINGS = [
+        ("ctrl+b", "toggle_sidebar", "Toggle Sidebar"),
+        ("ctrl+q", "quit", "Quit"),
+    ]
+
+    show_sidebar = reactive(True)
 
     CSS = """
     #app_body {
@@ -137,6 +145,23 @@ class TaiMenu(App):
         self.ch_name = "Assistant"
         self.user_name = "User"
         self.history_profile_name = ""
+
+    def watch_show_sidebar(self, show: bool) -> None:
+        """Called when show_sidebar reactive property changes."""
+        try:
+            sidebar = self.query_one("#status_sidebar")
+            body = self.query_one("#app_body")
+            sidebar.display = show
+            if show:
+                body.styles.grid_columns = "1fr 35"
+            else:
+                body.styles.grid_columns = "1fr"
+        except Exception:
+            pass # Widget not mounted yet
+
+    def action_toggle_sidebar(self) -> None:
+        """Toggle the status sidebar visibility."""
+        self.show_sidebar = not self.show_sidebar
 
     def compose(self) -> ComposeResult:
         yield Header(show_clock=True)
