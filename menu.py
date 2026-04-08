@@ -24,7 +24,7 @@ from engines.app_commands import app_commands
 from engines.config import update_setting, get_setting
 from engines.responses import get_respond_stream
 from engines.tts_module import generate_audio, play_audio, clean_text_for_tts
-from engines.utilities import pick_profile, pick_user_profile
+from engines.utilities import pick_profile, pick_user_profile, render_avatar
 from engines.memory_v2 import memory_manager
 
 
@@ -85,6 +85,7 @@ class TaiMenu(App):
                     yield Label("[bold green]System:[/bold green] Waiting for profile...", id="init_msg", classes="system_msg")
                 yield Input(placeholder="Type your message here...", id="user_input")
             with Vertical(id="status_sidebar"):
+                yield Static("", id="avatar_portrait")
                 yield Label("--- Companion ---", classes="sidebar_header")
                 yield Label("Name: [bold magenta]None[/bold magenta]", id="lbl_char")
                 yield Label("Mood: [bold]Neutral[/bold]", id="lbl_mood")
