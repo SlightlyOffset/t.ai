@@ -177,3 +177,35 @@ def replace_placeholders(text, user_name="User", char_name="Assistant"):
 def is_chafa_available() -> bool:
     """Checks if 'chafa' is available in the system path."""
     return shutil.which("chafa") is not None
+
+def render_avatar(image_path: str, width: int = 35) -> str:
+    """
+    Renders an image to an ANSI string using Chafa.
+    If image_path is missing or chafa is unavailable, returns a stylized placeholder.
+    """
+    if not is_chafa_available() or not image_path or not os.path.exists(image_path):
+        # Styled ASCII placeholder box
+        top = "╔" + "═" * (width - 2) + "╗"
+        mid = "║" + " [ No Image ] ".center(width - 2) + "║"
+        bot = "╚" + "═" * (width - 2) + "╝"
+        return f"{Fore.LIGHTBLACK_EX}{top}\n{mid}\n{bot}{Style.RESET_ALL}"
+
+    try:
+        # Calculate height roughly (approx square for common terminal cells)
+        # Using --size flag for Chafa
+        size_arg = f"{width}x{int(width/2)}" # Most terminal cells are ~2x taller than wide
+
+        # Call chafa
+        # --symbols=solid+vhalf to get more "pixel" feel on some terminals
+        # --clear removes any leftover terminal garbage
+        cmd = [
+            "chafa",
+            "--size", size_arg,
+            "--symbols", "solid+vhalf",
+            image_path
+        ]
+
+        result = subprocess.run(cmd, capture_output=True, text=True, check=True)
+        return result.stdout.strip()
+    except Exception as e:
+        return f"{Fore.RED}[Error rendering avatar: {str(e)}]{Style.RESET_ALL}"
