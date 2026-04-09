@@ -8,6 +8,7 @@ import random
 import threading
 import time
 import sys
+import platform
 import ollama
 
 
@@ -28,6 +29,16 @@ from engines.tts_module import generate_audio, play_audio, clean_text_for_tts
 from engines.utilities import pick_profile, pick_user_profile
 from engines.memory_v2 import memory_manager
 
+
+def set_terminal_appearance(title: str = None):
+    """
+    Sets the tab title in Windows Terminal.
+    """
+    # Handle Title (Standard ANSI)
+    if title:
+        sys.stdout.write(f"\033]0;{title}\007")
+
+    sys.stdout.flush()
 
 def format_rp(text):
     """Simple helper to convert *narration* to [i][dim]markup[/dim][/i]."""
@@ -52,6 +63,16 @@ class TaiMenu(App):
     show_sidebar = reactive(True)
 
     CSS_PATH = "menu.tcss"
+
+    EDGE_VOICES = [
+        ("Andrew (Male)", "en-US-AndrewNeural"),
+        ("Emma (Female)", "en-US-EmmaNeural"),
+        ("Brian (Male)", "en-GB-BrianNeural"),
+        ("Sonia (Female)", "en-GB-SoniaNeural"),
+        ("Aria (Female)", "en-US-AriaNeural"),
+        ("Guy (Male)", "en-US-GuyNeural"),
+        ("Ava (Female)", "en-US-AvaNeural"),
+    ]
 
     # Global TTS queue
     tts_text_queue = queue.Queue()
@@ -79,13 +100,27 @@ class TaiMenu(App):
         self.show_sidebar = not self.show_sidebar
 
     def compose(self) -> ComposeResult:
-        # Get initial avatar path
-        init_avatar = None
+        # Get initial avatar path for character and user profiles (if they exist) to display in the sidebar
+        init_avatar = "img/No_Image_Error.png"
+        init_user_avatar = "img/No_Image_Error.png"
+
         if self.char_path:
             try:
                 with open(self.char_path, "r", encoding="utf-8") as f:
                     data = json.load(f)
-                    init_avatar = data.get("avatar_path")
+                    path = data.get("avatar_path")
+                    if path and os.path.exists(path):
+                        init_avatar = path
+            except (FileNotFoundError, json.JSONDecodeError):
+                pass
+
+        if self.user_path:
+            try:
+                with open(self.user_path, "r", encoding="utf-8") as f:
+                    data = json.load(f)
+                    path = data.get("avatar_path")
+                    if path and os.path.exists(path):
+                        init_user_avatar = path
             except (FileNotFoundError, json.JSONDecodeError):
                 pass
 
@@ -96,35 +131,39 @@ class TaiMenu(App):
                     yield Label("[bold green]System:[/bold green] Waiting for profile...", id="init_msg", classes="system_msg")
                 yield Input(placeholder="Type your message here...", id="user_input")
             with Vertical(id="status_sidebar"):
-                yield Image(init_avatar, id="avatar_portrait")
                 yield Label("--- Companion ---", classes="sidebar_header")
+                yield Image(init_avatar, id="avatar_portrait_character")
                 yield Label("Name: [bold magenta]None[/bold magenta]", id="lbl_char")
                 yield Label("Mood: [bold]Neutral[/bold]", id="lbl_mood")
                 yield Label("Relationship:", classes="sidebar_label")
                 yield ProgressBar(total=200, show_percentage=False, id="rel_bar")
                 yield Label("Score: [bold]0[/bold]", id="lbl_rel")
                 
+                yield Label("--- User ---", classes="sidebar_header")
+                yield Image(init_user_avatar, id="avatar_portrait_user")
+                yield Label("User: [bold cyan]None[/bold cyan]", id="lbl_user")
+
                 yield Label("--- Settings ---", classes="sidebar_header")
                 yield Label("LLM Model:", classes="sidebar_label")
                 yield Select([], id="model_select", prompt="Select Model")
-                
+
                 with Horizontal(classes="setting_row"):
                     yield Label("TTS Master:", classes="setting_label")
                     yield Switch(value=get_setting("tts_enabled", False), id="sw_tts")
-                
+
                 with Horizontal(classes="setting_row"):
                     yield Label("Dialogue:", classes="setting_label")
                     yield Switch(value=get_setting("character_speak", False), id="sw_dialogue")
-                
+
                 with Horizontal(classes="setting_row"):
                     yield Label("Narration:", classes="setting_label")
                     yield Switch(value=get_setting("speak_narration", False), id="sw_narration")
 
                 yield Label("Companion Voice(for edge TTS):", classes="sidebar_label")
-                yield Select([], id="voice_select", prompt="Select Voice")
+                yield Select([], id="character_voice_select", prompt="Select Character Voice")
+                yield Label("Narration Voice(for edge TTS):", classes="sidebar_label")
+                yield Select([], id="narration_voice_select", prompt="Select Narration Voice")
 
-                yield Label("--- User ---", classes="sidebar_header")
-                yield Label("User: [bold cyan]None[/bold cyan]", id="lbl_user")
         yield Footer()
 
     def on_mount(self) -> None:
@@ -159,21 +198,16 @@ class TaiMenu(App):
             pass
 
     def populate_voices(self) -> None:
-        """Populate the voice selection list with Edge-TTS options."""
-        voices = [
-            ("Andrew (Male)", "en-US-AndrewNeural"),
-            ("Emma (Female)", "en-US-EmmaNeural"),
-            ("Brian (Male)", "en-GB-BrianNeural"),
-            ("Sonia (Female)", "en-GB-SoniaNeural"),
-            ("Aria (Female)", "en-US-AriaNeural"),
-            ("Guy (Male)", "en-US-GuyNeural"),
-            ("Ava (Female)", "en-US-AvaNeural"),
-        ]
-        select = self.query_one("#voice_select", Select)
-        select.set_options(voices)
-        
-        current_voice = self.character_profile.get("preferred_edge_voice", get_setting("narration_tts_voice", "en-US-AndrewNeural"))
-        select.value = current_voice
+        """Populate the narration voice selection list with Edge-TTS options."""
+        select_na = self.query_one("#narration_voice_select", Select)
+        select_na.set_options(self.EDGE_VOICES)
+        current_na_voice = get_setting("narration_tts_voice", "en-US-AndrewNeural")
+        select_na.value = current_na_voice
+
+        select_ch = self.query_one("#character_voice_select", Select)
+        select_ch.set_options(self.EDGE_VOICES)
+        current_ch_voice = self.character_profile.get("preferred_edge_voice", get_setting("narration_tts_voice", "en-US-AndrewNeural"))
+        select_ch.value = current_ch_voice
 
     def on_switch_changed(self, event: Switch.Changed) -> None:
         """Handle toggle switches for TTS settings."""
@@ -188,13 +222,25 @@ class TaiMenu(App):
             self.add_message(f"Narration: {'[bold green]ON[/bold green]' if event.value else '[bold red]OFF[/bold red]'}", role="system")
 
     def on_select_changed(self, event: Select.Changed) -> None:
-        """Update the character profile with selected LLM or Voice."""
-        if event.select.id == "model_select" and event.value != Select.BLANK:
-            self.character_profile["llm_model"] = event.value
-            self.add_message(f"LLM model switched to [bold]{event.value}[/bold]", role="system")
-        elif event.select.id == "voice_select" and event.value != Select.BLANK:
-            self.character_profile["preferred_edge_voice"] = event.value
-            self.add_message(f"Companion voice set to [bold]{event.value}[/bold]", role="system")
+        """Update the character profile with selected LLM, Character Voice, or Narration Voice."""
+        from engines.utilities import save_json_atomic
+        
+        # Handle cases where value might be Select.BLANK (NULL)
+        val = event.value if event.value != Select.BLANK else None
+
+        if event.select.id == "model_select" and val is not None:
+            self.character_profile["llm_model"] = val
+            save_json_atomic(self.char_path, self.character_profile)
+            self.add_message(f"LLM model switched to [bold]{val}[/bold]", role="system")
+        elif event.select.id == "character_voice_select" and val is not None:
+            self.character_profile["preferred_edge_voice"] = val
+            save_json_atomic(self.char_path, self.character_profile)
+            self.add_message(f"Companion voice set to [bold]{val}[/bold]", role="system")
+        elif event.select.id == "narration_voice_select" and val is not None:
+            if update_setting("narration_tts_voice", val):
+                self.add_message(f"Narration voice set to [bold]{val}[/bold]", role="system")
+            else:
+                self.add_message(f"Failed to set narration voice to [bold]{val}[/bold]", role="system")
 
     def start_tts_worker(self) -> None:
         """Starts a worker thread for TTS generation and playback."""
@@ -446,6 +492,8 @@ class TaiMenu(App):
 
 
 if __name__ == "__main__":
+    print(f"Running on: {platform.system()} {platform.release()}")
+    set_terminal_appearance(title="t.ai")
     c_path = pick_profile()
     u_path = pick_user_profile() if c_path else None
     if c_path:
