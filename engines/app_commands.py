@@ -2,14 +2,17 @@
 Internal CLI command handler for the application.
 Processes commands starting with '//' to manage settings, history, and app state.
 """
+# Standard library imports
 import sys
 import os
 import shutil
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
-
 import re
 import json
+
+# Third-party imports
 from colorama import Fore, init, Style
+
+# Local imports
 from engines.config import update_setting, get_setting
 from engines.utilities import pick_history
 from engines.utilities import pick_profile
@@ -20,6 +23,7 @@ from engines.character_importer import import_character
 # Initialize colorama
 init(autoreset=True)
 
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
 # Path to conversation history files
 HISTORY_PATH = "history/"
