@@ -10,6 +10,7 @@ import time
 import sys
 import platform
 import ollama
+from pathlib import Path
 
 
 # Ensure the project root is in sys.path
@@ -112,6 +113,7 @@ class TaiMenu(App):
         ("Aria (Female)", "en-US-AriaNeural"),
         ("Guy (Male)", "en-US-GuyNeural"),
         ("Ava (Female)", "en-US-AvaNeural"),
+        ("AvaMultilingual (Female)", "en-US-AvaMultilingualNeural")
     ]
 
     # Global TTS queue
@@ -122,12 +124,29 @@ class TaiMenu(App):
         super().__init__(**kwargs)
         self.char_path = char_path
         self.user_path = user_path
+        
+        if not self.char_path:
+            char_profile_name = get_setting("current_character_profile")
+            if char_profile_name:
+                potential_path = os.path.join("profiles", char_profile_name)
+                if os.path.exists(potential_path):
+                    self.char_path = potential_path
+
+        if not self.user_path:
+            user_profile_name = get_setting("current_user_profile")
+            if user_profile_name:
+                potential_path = os.path.join("user_profiles", user_profile_name)
+                if os.path.exists(potential_path):
+                    self.user_path = potential_path
+
         self.character_profile = None
         self.char_name_lbl_color = "magenta"
         self.user_profile = None
         self.ch_name = "Assistant"
         self.user_name = "User"
         self.history_profile_name = ""
+        self._current_char_avatar_path = None
+        self._current_user_avatar_path = None
 
     def watch_show_sidebar(self, show: bool) -> None:
         """Called when show_sidebar reactive property changes."""
@@ -170,6 +189,9 @@ class TaiMenu(App):
             except (FileNotFoundError, json.JSONDecodeError):
                 pass
 
+        self._current_char_avatar_path = str(Path(init_avatar).absolute())
+        self._current_user_avatar_path = str(Path(init_user_avatar).absolute())
+
         yield Header(show_clock=True)
         with Horizontal(id="app_body"):
             with Vertical(id="chat_container"):
@@ -177,21 +199,21 @@ class TaiMenu(App):
                     yield Label("[bold green]System:[/bold green] Waiting for profile...", id="init_msg", classes="system_msg")
                 yield ChatInput(id="user_input")
             with Vertical(id="status_sidebar"):
-                yield Label("--- Companion ---", classes="sidebar_header")
+                yield Label("[ Character ]", classes="sidebar_header")
                 with Vertical(id="char_avatar_wrap", classes="avatar_container"):
-                    yield Image(init_avatar, id="avatar_portrait_character")
+                    yield Image(self._current_char_avatar_path, id="avatar_portrait_character")
                 yield Label("Name: [bold magenta]None[/bold magenta]", id="lbl_char")
                 yield Label("Mood: [bold]Neutral[/bold]", id="lbl_mood")
                 yield Label("Relationship:", classes="sidebar_label")
                 yield ProgressBar(total=200, show_percentage=False, id="rel_bar")
                 yield Label("Score: [bold]0[/bold]", id="lbl_rel")
                 
-                yield Label("--- User ---", classes="sidebar_header")
+                yield Label("[ User ]", classes="sidebar_header")
                 with Vertical(id="user_avatar_wrap", classes="avatar_container"):
-                    yield Image(init_user_avatar, id="avatar_portrait_user")
+                    yield Image(self._current_user_avatar_path, id="avatar_portrait_user")
                 yield Label("User: [bold cyan]None[/bold cyan]", id="lbl_user")
 
-                yield Label("--- Settings ---", classes="sidebar_header")
+                yield Label("[ Settings ]", classes="sidebar_header")
                 yield Label("LLM Model:", classes="sidebar_label")
                 yield Select([], id="model_select", prompt="Select Model")
 
@@ -242,6 +264,20 @@ class TaiMenu(App):
         """Resets the app state and loads a new profile."""
         if not char_path:
             return
+
+        # Clear TTS queues
+        while not self.tts_text_queue.empty():
+            try:
+                self.tts_text_queue.get_nowait()
+                self.tts_text_queue.task_done()
+            except queue.Empty:
+                break
+        while not self.audio_file_queue.empty():
+            try:
+                self.audio_file_queue.get_nowait()
+                self.audio_file_queue.task_done()
+            except queue.Empty:
+                break
 
         self.char_path = char_path
         self.user_path = user_path
@@ -428,7 +464,7 @@ class TaiMenu(App):
             self.print_starter_message()
 
         # Load history recap if enabled
-        if get_setting("auto_recap_on_start", False):
+        if get_setting("auto_recap_on_start", False) and has_history:
             self.run_recap()
 
         # Print tip message
@@ -440,26 +476,32 @@ class TaiMenu(App):
         try:
             # Character Avatar
             char_avatar_path = self.character_profile.get("avatar_path", "img/No_Image_Error.png")
-            if not os.path.exists(char_avatar_path): char_avatar_path = "img/No_Image_Error.png"
+            if not char_avatar_path or not os.path.exists(char_avatar_path): 
+                char_avatar_path = "img/No_Image_Error.png"
             
-            char_wrap = self.query_one("#char_avatar_wrap")
-            # Clear and remount to force textual-image to reload
-            for child in char_wrap.children:
-                child.remove()
-            char_wrap.mount(Image(char_avatar_path, id="avatar_portrait_character"))
+            char_abs_path = str(Path(char_avatar_path).absolute())
+            
+            if getattr(self, "_current_char_avatar_path", None) != char_abs_path:
+                char_img = self.query_one("#avatar_portrait_character", Image)
+                char_img.image = char_abs_path
+                self._current_char_avatar_path = char_abs_path
 
             # User Avatar
             user_avatar_path = "img/No_Image_Error.png"
             if self.user_profile:
                 user_avatar_path = self.user_profile.get("avatar_path", "img/No_Image_Error.png")
-                if not os.path.exists(user_avatar_path): user_avatar_path = "img/No_Image_Error.png"
+                if not user_avatar_path or not os.path.exists(user_avatar_path): 
+                    user_avatar_path = "img/No_Image_Error.png"
             
-            user_wrap = self.query_one("#user_avatar_wrap")
-            for child in user_wrap.children:
-                child.remove()
-            user_wrap.mount(Image(user_avatar_path, id="avatar_portrait_user"))
+            user_abs_path = str(Path(user_avatar_path).absolute())
+            
+            if getattr(self, "_current_user_avatar_path", None) != user_abs_path:
+                user_img = self.query_one("#avatar_portrait_user", Image)
+                user_img.image = user_abs_path
+                self._current_user_avatar_path = user_abs_path
         except Exception as e:
-            # If widgets are not found (e.g., during initialization), skip
+            # For debugging
+            # self.log(f"Error updating avatars: {e}")
             pass
 
         rel = self.character_profile.get("relationship_score", 0)

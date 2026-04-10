@@ -20,6 +20,7 @@
     border-left: tall $accent;
     padding: 1;
     overflow-y: auto;
+    align: center middle;
 }
 .avatar_container {
     width: 100%;
@@ -28,10 +29,9 @@
 }
 
 #avatar_portrait_character, #avatar_portrait_user {
-    width: 23.33;
-    height: 11.67;
+    width: 24;
+    height: 12;
     display: block;
-    content-align: center middle;
     margin-bottom: 1;
     border: round $accent;
 }
