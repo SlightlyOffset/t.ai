@@ -10,6 +10,8 @@ import time
 import asyncio
 import socket
 import subprocess
+import wave
+
 from colorama import Fore
 import shutil
 from engines.config import get_setting
@@ -111,6 +113,7 @@ def save_pcm_as_wav(pcm_data, filename, sample_rate=24000, channels=1, sample_wi
 def play_audio_windows(filename):
     """Plays audio via VBScript or fallback on Windows."""
     abspath = os.path.abspath(filename)
+    escaped_abspath = abspath.replace("\\", "\\\\")
 
     # Method 1: VBScript (Hidden playback)
     vbs_path = os.path.join(os.environ["TEMP"], f"play_sound_{int(time.time())}.vbs")
@@ -121,7 +124,7 @@ def play_audio_windows(filename):
         WScript.Quit 1
     End If
     Sound.settings.volume = 100
-    Sound.URL = "{abspath.replace('\\', '\\\\')}"
+    Sound.URL = "{escaped_abspath}"
     Sound.Controls.play
 
     ' Wait for media to load (max 5 seconds)

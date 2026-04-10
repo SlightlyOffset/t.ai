@@ -19,6 +19,7 @@
 ## User Interface
 - **Terminal (CLI)**: Primary interaction layer.
 - **colorama**: Terminal styling and ANSI color support.
+- **textual-image**: Image rendering in Textual (Sixel/Kitty support).
 
 ## Data and Persistence
 - **JSON**: Storage format for character profiles, user profiles, chat history, and application settings.

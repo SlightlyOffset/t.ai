@@ -17,6 +17,7 @@ Thumbs.db
 .venv/
 env/
 venv/
+aienv/
 ENV/
 
 # Local configuration files
@@ -33,6 +34,7 @@ profiles/
 wyvern_cards/
 sillyTavern_cards/
 img/
+screenshot/
 voices/
 
 # XTTS v2 and Audio Cache

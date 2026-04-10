@@ -6,8 +6,42 @@ Provides selection menus for profiles and history files.
 import os
 import re
 import wave
+import json
 from colorama import Fore, Style
 from engines.actions import APPS
+
+def save_json_atomic(file_path, data, indent=4):
+    """
+    Saves a dictionary to a JSON file atomically to prevent corruption.
+    
+    Args:
+        file_path (str): The destination file path.
+        data (dict): The data to save.
+        indent (int): JSON indentation level.
+        
+    Returns:
+        bool: True if successful, False otherwise.
+    """
+    temp_file = file_path + ".tmp"
+    try:
+        # 1. Serialize to string first to catch TypeErrors (non-serializable objects)
+        # before we even touch the file system.
+        json_data = json.dumps(data, indent=indent, ensure_ascii=False)
+        
+        # 2. Write to a temporary file.
+        with open(temp_file, "w", encoding="utf-8") as f:
+            f.write(json_data)
+        
+        # 3. Atomic rename (overwrites existing file).
+        os.replace(temp_file, file_path)
+        return True
+    except (TypeError, IOError, OSError):
+        if os.path.exists(temp_file):
+            try:
+                os.remove(temp_file)
+            except OSError:
+                pass
+        return False
 
 def save_pcm_as_wav(pcm_data, filename, sample_rate=24000, channels=1, sample_width=2):
     """Wraps raw PCM data in a WAV header and saves to disk."""

@@ -1,10 +1,18 @@
-# 🤖 Terminal-based AI Desktop Companion
+# 🤖 t.ai - Terminal AI Desktop Companion
 
 A lightweight, highly immersive, profile-based AI companion that lives in your terminal. Built for roleplayers and AI enthusiasts who want a character that feels alive, remembers the past, and has a distinct personality.
+
+***Note**: Definally not c.ai but just to spite how c.ai is undergoing an enshitification cycle.*
 
 ---
 
 ## ✨ Key Features
+
+### 🖥️ Modern TUI (Terminal User Interface)
+* **Minimalist Bubble Layout**: A clean, distraction-free chat interface with right-aligned user messages and left-aligned companion responses.
+* **Real-time Streaming**: Watch your companion "think" and type in real-time within immersive side-bordered bubbles.
+* **Immersive Styling**: Automatic italicization and dimming of RP narration (`*actions*`) to separate dialogue from description.
+* **Persistent Sidebars**: Real-time tracking of relationship scores, mood labels, and active profiles.
 
 ### 🎙️ Advanced Audio & Voice Cloning
 
@@ -24,13 +32,6 @@ A lightweight, highly immersive, profile-based AI companion that lives in your t
 * **Enriched Profiles**: Characters have backstories, physical appearances, likes/dislikes, and specific mannerisms they weave into their roleplay.
 * **Persistent History & Recaps**: Saves chat history persistently per profile and automatically generates a recap of your previous session on startup.
 * **User Profiles**: Support for detailed User Profiles so the AI knows exactly who it's talking to (custom user tracking).
-* **Roleplay Preservation**: Advanced regex and smart-splitting ensure that narration is styled correctly (Italics/Grey) and filtered properly for the voice engine.
-
-### ⚡ Technical Efficiency & Cloud Offloading
-
-* **Colab Bridge**: Offload the LLM or XTTS generation to Google Colab using included Jupyter notebooks (`/colab_bridge`). This frees up your local VRAM and allows running heavy models (e.g., 40B models or XTTS v2) on modest hardware.
-* **CLI First**: No heavy GUI overhead. Beautiful terminal rendering with dynamic colors and styles.
-* **Hybrid LLM Support**: Optimized for **Ollama** (specifically tested with Llama-based models) but natively supports remote APIs and Colab endpoints.
 
 ---
 
@@ -55,7 +56,7 @@ A lightweight, highly immersive, profile-based AI companion that lives in your t
 2. **Install dependencies:**
 
     ```bash
-    pip install colorama ollama requests edge-tts pyttsx3
+    pip install colorama ollama requests edge-tts pyttsx3 textual
     ```
 
 3. **Pull the recommended model:**
@@ -66,6 +67,12 @@ A lightweight, highly immersive, profile-based AI companion that lives in your t
 
 ### Running the Companion
 
+For the full immersive TUI experience:
+```bash
+python menu.py
+```
+
+For the classic CLI experience:
 ```bash
 python main.py
 ```
@@ -80,7 +87,7 @@ Inside the chat, you can use the following operational commands:
 
 * `//help`: Show all commands.
 * `//reset`: Clear the current conversation history.
-* `//change_character`: Swap to a different profile (Glitch, Eira, Ria, etc.).
+* `//change_character`: Swap to a different profile (Glitch, Astgenne, Eira, etc.).
 * `//show_settings`: View current app configuration.
 * `//restart`: Cleanly reboot the application.
 
@@ -93,7 +100,7 @@ Edit `settings.json` to customize your experience:
 * `remote_llm_url` / `remote_tts_url`: Set these to your Colab tunneling endpoints for cloud offloading.
 * `tts_enabled`: Toggle voice entirely on/off.
 * `speak_narration`: Choose if the Narrator should speak the actions or only text dialogue.
-* `history_limit`: Control short-term memory limit (messages fed per prompt).
+* `memory_limit`: Control short-term memory limit (messages fed per prompt).
 * `auto_recap_on_start`: Let the AI summarize the previous chat context upon booting.
 
 ---
@@ -102,9 +109,10 @@ Edit `settings.json` to customize your experience:
 
 * [x] **Phase 1-3**: Core Terminal logic, Mood Engine, Persistent Memory, Profiles, and Relationships.
 * [x] **Phase 4**: Cloud Computing (Colab Bridge), Voice & Response Streaming, Session Recaps, and Voice Cloning (XTTS v2).
-* [ ] **Phase 5**: Visual Representation (GUI integration, Live2D, Lip Sync, active Character Expressions).
+* [~] **Phase 5**: TUI Overhaul (**t.ai**), minimalist bubble layout, and real-time streaming UI.
+* [ ] **Live2D Integration**: Map mood scores and sentiment to sprite changes and animations.
 * [ ] **Speech-to-Text**: Full voice control for hands-free conversations.
-* [ ] **Advanced Interactions**: Dynamic Scene Memory (Physical location/time tracking) and automated routines/actions.
+* [ ] **Advanced Interactions**: Dynamic Scene Memory (Physical location/time tracking).
 
 ---
 
@@ -113,3 +121,7 @@ Edit `settings.json` to customize your experience:
 Feel free to fork, submit PRs, or suggest personalities.
 
 *Disclaimer: This is an early build codebase. Expect some quirks.*
+
+---
+
+### 💖 Made with love by [@SlightlyOffset](https://github.com/SlightlyOffset). And thanks to my swamp of AI slaves for their support!

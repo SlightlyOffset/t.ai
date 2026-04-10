@@ -1,10 +1,16 @@
 """
-Main entry point for the Sassy AI Desktop Companion.
+Main entry point for the AI Desktop Companion.
 Handles the interaction loop, multi-threaded TTS pipeline, and UI rendering.
 """
+### ---------------------------
+# NOTE: will be deprecated soon!
+# The main.py logic will be moved into the Menu class in ui/menu.py,
+# which will handle the interaction loop and rendering using Textual.
+# The current main.py will be renamed to something like legacy_main.py
+# and kept for reference during the transition.
+### ---------------------------
 
 # Standard library imports
-from datetime import datetime
 import json
 import threading
 import random
@@ -162,7 +168,7 @@ def run_app():
                 config = json.load(f)
 
             profile_data = load_profile(character_profile_path)
-            char_voice = profile_data.get("preferred_tts_voice", None)
+            char_voice = profile_data.get("preferred_edge_voice", None)
             char_engine = profile_data.get("tts_engine", "edge-tts")
             char_clone_ref = profile_data.get("voice_clone_ref", None)
             char_language = profile_data.get("tts_language", "en")

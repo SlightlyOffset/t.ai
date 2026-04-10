@@ -1,0 +1,120 @@
+#app_body {
+    layout: horizontal;
+    height: 1fr;
+    width: 100%;
+}
+#chat_container {
+    width: 1fr;
+    height: 100%;
+}
+#chat_list {
+    height: 1fr;
+    border: solid $primary;
+    padding: 1;
+    overflow-y: scroll;
+}
+#status_sidebar {
+    width: 35;
+    height: 100%;
+    background: $panel;
+    border-left: tall $accent;
+    padding: 1;
+    overflow-y: auto;
+    align: center middle;
+}
+.avatar_container {
+    width: 100%;
+    height: auto;
+    align: center middle;
+}
+
+#avatar_portrait_character, #avatar_portrait_user {
+    width: 24;
+    height: 12;
+    display: block;
+    margin-bottom: 1;
+    border: round $accent;
+}
+.sidebar_header {
+    color: $accent;
+    text-style: bold;
+    margin: 1 0 0 0;
+    border-bottom: $accent;
+    width: 100%;
+}
+.sidebar_label {
+    margin: 1 0 0 0;
+    color: $text-disabled;
+}
+.setting_row {
+    height: auto;
+    width: 100%;
+    align: center middle;
+    margin: 0 0 1 0;
+}
+.setting_label {
+    width: 1fr;
+    color: $text;
+}
+#rel_bar {
+    margin: 0 0 1 0;
+    width: 100%;
+}
+#model_select, #character_voice_select, #narration_voice_select {
+    width: 100%;
+    margin: 0 0 1 0;
+}
+.message_row {
+    width: 100%;
+    height: auto;
+    margin: 0 0 1 0;
+}
+.user_row {
+    align-horizontal: right;
+}
+.ai_row {
+    align-horizontal: left;
+}
+.message {
+    padding: 0 1;
+    width: auto;
+    max-width: 85%;
+}
+.user_bubble {
+    color: $text;
+    border: round $primary-lighten-2;
+}
+.ai_bubble {
+    color: $text;
+    border: round $primary-lighten-1;
+}
+.system_msg {
+    color: $success;
+    margin: 1 0;
+    width: 100%;
+    text-align: center;
+}
+.tip_msg {
+    color: $warning;
+    margin: 1 0;
+    width: 100%;
+    text-align: center;
+}
+ChatInput {
+    width: 100%;
+    height: auto;
+    min-height: 3;
+    margin: 1 0;
+    padding: 0 1;
+    background: $surface;
+    color: $text;
+    border: tall $primary-darken-1;
+}
+
+ChatInput:focus {
+    border: tall $accent;
+}
+
+Label {
+    margin: 1 0;
+}

@@ -124,15 +124,17 @@ def app_commands(ops: str):
 
     def _reset_rel():
         """Resets the relationship score of a chosen profile to zero."""
+        from engines.utilities import pick_profile, save_json_atomic
         profile_path = pick_profile()
         if profile_path:
-            with open(profile_path, "r+", encoding="UTF-8") as f:
+            with open(profile_path, "r", encoding="UTF-8") as f:
                 profile_data = json.load(f)
-                profile_data["relationship_score"] = 0
-                f.seek(0)
-                json.dump(profile_data, f, indent=4)
-                f.truncate()
-            print(Fore.GREEN + "[SYSTEM] Relationship score reset to 0.")
+            
+            profile_data["relationship_score"] = 0
+            if save_json_atomic(profile_path, profile_data):
+                print(Fore.GREEN + "[SYSTEM] Relationship score reset to 0.")
+            else:
+                print(Fore.RED + "[SYSTEM] Failed to save profile.")
         else:
             print(Fore.RED + "[SYSTEM] No profile selected.")
 

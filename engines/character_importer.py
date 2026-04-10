@@ -96,15 +96,16 @@ class CharacterImporter:
             "system_prompt": f"Character: {char_name}\nPersonality: {replace_placeholders(g('personality'))}\nDescription: {replace_placeholders(g('description'))}\nScenario: {replace_placeholders(g('scenario'))}\n{replace_placeholders(g('system_prompt'))}",
             "good_prompt_modifyer": "Be more friendly and supportive.",
             "bad_prompt_modifyer": "Be more cold and distant.",
-            "preferred_tts_voice": "en-US-AvaNeural",
+            "preferred_tts_voice": None,
             "tts_engine": "edge-tts",
             "voice_clone_ref": None,
             "tts_language": "en",
-            "llm_model": "fluffy/l3-8b-stheno-v3.2",
+            "llm_model": None,
             "relationship_score": 0,
             "colors": {
                 "text": "WHITE",
-                "label": "NORMAL"
+                "label": "NORMAL",
+                "name_lbl": "magenta"
             }
         }
 

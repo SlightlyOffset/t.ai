@@ -16,7 +16,7 @@ class HistoryManager:
         self.history_dir = history_dir
         self._ensure_history_dir()
 
-    def _ensure_history_dir(self):
+    def _ensure_history_dir(self) -> None:
         """Ensures the history directory exists on the filesystem."""
         if not os.path.exists(self.history_dir):
             os.makedirs(self.history_dir)
@@ -29,7 +29,17 @@ class HistoryManager:
         safe_name = "".join(c for c in safe_name if c.isalnum() or c in ('_', '-')).rstrip()
         return os.path.join(self.history_dir, f"{safe_name}_history.json")
 
-    def save_history(self, profile_name: str, history: list, mood_score: int = 0):
+    def has_history(self, profile_name: str) -> bool:
+        """Checks if the history file exists for a given profile."""
+        filename = self._get_filename(profile_name)
+        return os.path.exists(filename)
+
+    def get_history_length(self, profile_name: str) -> int:
+        """Returns the number of messages in the history."""
+        data = self.get_full_data(profile_name)
+        return len(data.get("history", [])) if data else 0
+
+    def save_history(self, profile_name: str, history: list, mood_score: int = 0) -> None:
         """
         Saves history to a JSON file with metadata.
 

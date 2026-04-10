@@ -9,6 +9,21 @@ This file tracks all major tracks for the project. Each track has its own detail
 
 ---
 
+- [x] **Track: Sidebar Toggle Implementation (Ctrl+B)**
+*Link: [./tracks/sidebar_toggle_20260408/](./tracks/sidebar_toggle_20260408/)*
+
+---
+
+- [ ] **Track: Implement BitNet-based context summarization for long chat histories in t.ai**
+*Link: [./tracks/bitnet_summarizer_20260408/](./tracks/bitnet_summarizer_20260408/)*
+
+---
+
+- [x] **Track: Implement 'text bubble' style UI for chat messages in t.ai**
+*Link: [./tracks/text_bubbles_20260408/](./tracks/text_bubbles_20260408/)*
+
+---
+
 - [x] **Track: Recap Viewport Implementation**
   *Link: [./tracks/recap_viewport_20260218/](./tracks/recap_viewport_20260218/)*
 
@@ -36,3 +51,4 @@ This file tracks all major tracks for the project. Each track has its own detail
 
 - [x] **Track: Voice Cloning Optimization (Cached Speaker & Streaming)**
 *Link: [./tracks/voice_cloning_opt_20260404/](./tracks/voice_cloning_opt_20260404/)*
+

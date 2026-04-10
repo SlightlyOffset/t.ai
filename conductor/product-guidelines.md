@@ -7,6 +7,7 @@
 ## Visual and User Interface
 - **Terminal Design**: A minimalist layout that prioritizes chat history and avoids clutter.
 - **Formatting**: Distinct colors and styles should clearly separate character dialogue from narration (actions).
+- **Visual Immersion**: Character portraits provide a constant visual anchor, enhancing the feeling of a "living" companion within the terminal.
 - **Status Indicators**: Minimalist indicators for the current profile and core status.
 
 ## Relationship Mechanics

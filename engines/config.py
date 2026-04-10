@@ -57,7 +57,7 @@ def get_setting(key, default=None):
 
 def update_setting(key, value):
     """
-    Updates a specific setting and saves it back to the file.
+    Updates a specific setting and saves it back to the file atomically.
     
     Args:
         key (str): The setting key to update.
@@ -66,11 +66,7 @@ def update_setting(key, value):
     Returns:
         bool: True if the update was successful, False otherwise.
     """
+    from engines.utilities import save_json_atomic
     settings = load_settings()
     settings[key] = value
-    try:
-        with open(SETTINGS_FILE, "w", encoding="utf-8") as f:
-            json.dump(settings, f, indent=4, ensure_ascii=False)
-        return True
-    except IOError:
-        return False
+    return save_json_atomic(SETTINGS_FILE, settings)
