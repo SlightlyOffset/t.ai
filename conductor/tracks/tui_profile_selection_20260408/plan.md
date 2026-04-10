@@ -1,9 +1,9 @@
 # Implementation Plan - TUI Profile Selection
 
-## Phase 1: Startup Refactoring
+## Phase 1: Startup Refactoring [checkpoint: 7149f8c]
 - [x] Remove `pick_profile` and `pick_user_profile` from the `__main__` block in `menu.py`. d390df1
 - [x] Update `TaiMenu.on_mount` to attempt loading profiles from `settings.json`. 4dbc7a7
-- [ ] If loading fails, push the `ProfileSelectScreen` immediately.
+- [x] If loading fails, push the `ProfileSelectScreen` immediately. d2c7021
 
 ## Phase 2: ProfileSelectScreen Implementation
 - [ ] Review and integrate existing `ProfileSelectScreen.py` into the `menu.py` structure (or import it properly).
