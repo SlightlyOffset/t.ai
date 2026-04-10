@@ -51,3 +51,8 @@ This file tracks all major tracks for the project. Each track has its own detail
 
 - [x] **Track: Voice Cloning Optimization (Cached Speaker & Streaming)**
 *Link: [./tracks/voice_cloning_opt_20260404/](./tracks/voice_cloning_opt_20260404/)*
+
+---
+
+- [x] **Track: Implement a seamless TUI profile selection screen and default to the last active profile on startup.**
+*Link: [./tracks/tui_profile_selection_20260408/](./tracks/tui_profile_selection_20260408/)*
