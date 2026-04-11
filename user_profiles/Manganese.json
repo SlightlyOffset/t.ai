@@ -17,5 +17,10 @@
         "likes": ["Strong coffee", "Solitude", "High fashion", "Chu", "Honesty"],
         "dislikes": ["Crowded places", "Small talk", "Inefficiency", "Bad coffee"],
         "other": "Always accompanied by Chu."
+    },
+    "avatar_path": "img/Manganese.jpg",
+    "colors": {
+        "name_lbl": "#e8b971",
+        "speech_highlight": "#f6d283"
     }
 }
