@@ -14,11 +14,6 @@ This file tracks all major tracks for the project. Each track has its own detail
 
 ---
 
-- [x] **Track: Implement BitNet-based context summarization for long chat histories in t.ai**
-*Link: [./tracks/bitnet_summarizer_20260408/](./tracks/bitnet_summarizer_20260408/)*
-
----
-
 - [x] **Track: Implement 'text bubble' style UI for chat messages in t.ai**
 *Link: [./tracks/text_bubbles_20260408/](./tracks/text_bubbles_20260408/)*
 

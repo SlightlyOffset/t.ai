@@ -1,0 +1,8 @@
+{
+  "track_id": "bitnet_summarizer_20260408",
+  "type": "feature",
+  "status": "new",
+  "created_at": "2026-04-08T02:45:00Z",
+  "updated_at": "2026-04-08T02:45:00Z",
+  "description": "Implement BitNet-based context summarization for long chat histories in t.ai"
+}
