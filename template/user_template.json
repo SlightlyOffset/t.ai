@@ -1,0 +1,34 @@
+{
+    "name": "",
+    "gender": "",
+    "personality_type": "", // a brief description of your personality, e.g. "INFJ - The Calm Observer"
+    "backstory": "", // optional: your character's background for the AI to keep in mind
+    "rp_mannerisms": [ // things you often do in RP, like "fidgets with sleeves" or "speaks softly"
+        "",
+        "",
+        "",
+        "",
+        ""
+    ],
+    "character_info": {
+        "height": "",
+        "appearance": "", // how you want the AI to visualize you
+        "pet": "", // any pets you want the AI to remember
+        "likes": [
+            "",
+            "",
+            ""
+        ],
+        "dislikes": [
+            "",
+            "",
+            ""
+        ],
+        "other": ""
+    },
+    "avatar_path": "", // the path to your avatar image, e.g. "img/MyUser.png"
+    "colors": {
+        "name_lbl": "", // hex or color name for your name tag in the TUI
+        "speech_highlight": "" // hex or color name for your speech in the TUI
+    }
+}
