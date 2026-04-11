@@ -29,11 +29,11 @@
 }
 
 #avatar_portrait_character, #avatar_portrait_user {
-    width: 24;
-    height: 12;
+    width: 100%;
+    height: auto;
     display: block;
     margin-bottom: 1;
-    border: round $accent;
+    border: solid $accent;
 }
 .sidebar_header {
     color: $accent;
@@ -41,10 +41,18 @@
     margin: 1 0 0 0;
     border-bottom: $accent;
     width: 100%;
+    text-align: center;
+    content-align: center middle;
 }
 .sidebar_label {
     margin: 1 0 0 0;
     color: $text-disabled;
+    text-align: center;
+    width: 100%;
+}
+#lbl_char, #lbl_mood, #lbl_rel, #lbl_user {
+    width: 100%;
+    text-align: center;
 }
 .setting_row {
     height: auto;

@@ -190,7 +190,7 @@ class TaiMenu(App):
                     yield Label("[bold green]System:[/bold green] Waiting for profile...", id="init_msg", classes="system_msg")
                 yield ChatInput(id="user_input")
             with Vertical(id="status_sidebar"):
-                yield Label("[ Character ]", classes="sidebar_header")
+                yield Label("--- Character ---", classes="sidebar_header")
                 with Vertical(id="char_avatar_wrap", classes="avatar_container"):
                     yield Image(self._current_char_avatar_path, id="avatar_portrait_character")
                 yield Label("Name: [bold magenta]None[/bold magenta]", id="lbl_char")
@@ -199,12 +199,12 @@ class TaiMenu(App):
                 yield ProgressBar(total=200, show_percentage=False, id="rel_bar")
                 yield Label("Score: [bold]0[/bold]", id="lbl_rel")
                 
-                yield Label("[ User ]", classes="sidebar_header")
+                yield Label("--- User ---", classes="sidebar_header")
                 with Vertical(id="user_avatar_wrap", classes="avatar_container"):
                     yield Image(self._current_user_avatar_path, id="avatar_portrait_user")
                 yield Label("User: [bold cyan]None[/bold cyan]", id="lbl_user")
 
-                yield Label("[ Settings ]", classes="sidebar_header")
+                yield Label("--- Settings ---", classes="sidebar_header")
                 yield Label("LLM Model:", classes="sidebar_label")
                 yield Select([], id="model_select", prompt="Select Model")
 
