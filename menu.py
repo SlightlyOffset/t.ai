@@ -25,7 +25,7 @@ from textual.message import Message
 # First-party imports
 from engines.app_commands import app_commands, RestartRequested
 from engines.config import update_setting, get_setting
-from engines.responses import get_respond_stream
+from engines.responses import get_respond_stream, generate_summary
 from engines.tts_module import generate_audio, play_audio, clean_text_for_tts
 from engines.memory_v2 import memory_manager
 from engines.prompts import get_mood_rule
@@ -421,8 +421,10 @@ class TaiMenu(App):
 
     def run_recap(self):
         messages_history = memory_manager.load_history(self.history_profile_name)
-        # If messages length is less than 15, just load everything to the chat list
-        if messages_history and len(messages_history) <= 15:
+        if not messages_history:
+            return
+
+        if len(messages_history) <= 15:
             self.add_message(f"--- Recap: {len(messages_history)} messages loaded ---", role="system")
             for msg_data in messages_history:
                 role = msg_data.get("role", "assistant")
@@ -432,9 +434,34 @@ class TaiMenu(App):
                 self.add_message(content, role=role)
             self.add_message("--- Recap complete ---", role="system")
         else:
-            # Anything more than 15 messages, let the AI context summarizer handle it
-            # Will do soon, possibly with Microsoft's new BitNet
-            pass
+            # History is long, trigger summarization (Split: older history vs. recent 5)
+            older_history = messages_history[:-5]
+            recent_history = messages_history[-5:]
+
+            self.add_message(f"--- Recap: {len(messages_history)} messages. Analyzing past memories... ---", role="system")
+            self.summarize_and_display(older_history, recent_history)
+
+    @work(thread=True)
+    def summarize_and_display(self, older_history: list, recent_history: list):
+        """Worker for summarizing history in the background."""
+        # Use a specific summarizer model if set, otherwise fallback to character model
+        summarizer_model = get_setting("summarizer_model", "bitnet")
+        remote_url = get_setting("remote_llm_url")
+        
+        summary = generate_summary(older_history, model=summarizer_model, remote_url=remote_url)
+        
+        def update_ui():
+            self.add_message(summary, role="system")
+            self.add_message("--- Recent Continuity ---", role="system")
+            for msg_data in recent_history:
+                role = msg_data.get("role", "assistant")
+                content = msg_data.get("content", "")
+                if role != "system":
+                    content = self.format_rp(content, role=role)
+                self.add_message(content, role=role)
+            self.add_message("--- Recap complete ---", role="system")
+
+        self.app.call_from_thread(update_ui)
 
     def load_initial_state(self) -> None:
         """Loads profiles and settings based on pre-selected paths or settings.json."""
@@ -629,7 +656,7 @@ class TaiMenu(App):
 
         container = self.query_one("#chat_list")
         
-        ai_msg = Static(f"[bold magenta]{self.ch_name}:[/bold magenta]\n", markup=True, classes="message ai_bubble")
+        ai_msg = Static(f"[bold {self.char_name_lbl_color}]{self.ch_name}:[/bold {self.char_name_lbl_color}]\n", markup=True, classes="message ai_bubble")
         row = Horizontal(ai_msg, classes="message_row ai_row")
         
         self.app.call_from_thread(container.mount, row)
