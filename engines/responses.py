@@ -126,7 +126,7 @@ def generate_summary(messages: list, model: str, remote_url: str = None) -> str:
     
     Args:
         messages (list): The chat history to summarize.
-        model (str): The model to use for summarization (e.g., 'bitnet').
+        model (str): The model to use for summarization (e.g., 'gemma2:2b').
         remote_url (str, optional): The URL for remote LLM inference.
         
     Returns:

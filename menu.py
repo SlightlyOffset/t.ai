@@ -444,8 +444,8 @@ class TaiMenu(App):
     @work(thread=True)
     def summarize_and_display(self, older_history: list, recent_history: list):
         """Worker for summarizing history in the background."""
-        # Use a specific summarizer model if set, otherwise fallback to character model
-        summarizer_model = get_setting("summarizer_model", "bitnet")
+        # Default to gemma2:2b for efficient summarization
+        summarizer_model = get_setting("summarizer_model", "gemma2:2b")
         remote_url = get_setting("remote_llm_url")
         
         summary = generate_summary(older_history, model=summarizer_model, remote_url=remote_url)
@@ -580,6 +580,8 @@ class TaiMenu(App):
         container = self.query_one("#chat_list")
         if role == "system":
             container.mount(Static(text, markup=True, classes="system_msg"))
+        elif role == "command":
+            container.mount(Static(text, markup=True, classes="command_msg"))
         elif role == "summary":
             container.mount(Static(text, markup=True, classes="summary_msg"))
         elif role == "tip_message":
@@ -612,7 +614,7 @@ class TaiMenu(App):
                 success, messages = app_commands(message, suppress_output=True)
                 if success:
                     for msg in messages:
-                        self.add_message(msg, role="system")
+                        self.add_message(msg, role="command")
                     self.update_sidebar()
                     return
             except RestartRequested:
@@ -685,7 +687,7 @@ class TaiMenu(App):
             current_buffer += chunk
 
             # Update UI from thread
-            self.app.call_from_thread(ai_msg.update, f"[bold magenta]{self.ch_name}:[/bold magenta]\n{self.format_rp(full_response, role='assistant')}")
+            self.app.call_from_thread(ai_msg.update, f"[bold {self.char_name_lbl_color}]{self.ch_name}:[/bold {self.char_name_lbl_color}]\n{self.format_rp(full_response, role='assistant')}")
             self.app.call_from_thread(container.scroll_end, animate=False)
 
             # ---------------------------------------------------------------
