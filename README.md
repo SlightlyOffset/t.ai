@@ -78,6 +78,40 @@ python main.py
 
 ---
 
+## 🎭 Importing Characters
+
+You can easily import character profiles from other sources. The importer is designed to work with **SillyTavern** character cards (`.png`) and character definitions (`.json`).
+
+There are two ways to import a character:
+
+### 1. In-App Command
+
+While running the application, use the `//import_card` command followed by the file path:
+
+```
+//import_card "C:\path\to\your\character.png"
+```
+
+The new profile will be added to your `profiles` directory and will be available the next time you use the `//change_character` command.
+
+### 2. Standalone Importer Script
+
+If you want to import multiple cards without running the main TUI, you can use the standalone `card_importer.py` script.
+
+1.  Run the script from your terminal:
+    ```bash
+    python card_importer.py
+    ```
+
+2.  Follow the prompt to import your card using the `//import` command:
+    ```
+    Enter command: //import "C:\path\to\your\other_character.json"
+    ```
+
+This provides a quick way to batch-import your character library.
+
+---
+
 ## 🎮 Commands
 
 Inside the chat, you can use the following operational commands:
@@ -87,7 +121,7 @@ Inside the chat, you can use the following operational commands:
 * `//reset`: Clear the current conversation history.
 * `//change_character`: Swap to a different character profile.
 * `//change_user_profile`: Swap to a different user profile.
-* `//import_card <path>`: Import a SillyTavern character card.
+* `//import_card <path>`: Imports a character card. See the "Importing Characters" section for details.
 * `//show_settings`: View current app configuration.
 * `//toggle_clear_on_start`: Toggle console clearing at launch.
 * `//restart`: Cleanly reboot the application.
