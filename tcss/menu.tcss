@@ -47,12 +47,10 @@
 .sidebar_label {
     margin: 1 0 0 0;
     color: $text-disabled;
-    text-align: center;
     width: 100%;
 }
 #lbl_char, #lbl_mood, #lbl_rel, #lbl_user {
     width: 100%;
-    text-align: center;
 }
 .setting_row {
     height: auto;
