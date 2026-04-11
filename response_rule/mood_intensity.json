@@ -1,0 +1,44 @@
+{
+  "soulmate": {
+    "min_score": 80,
+    "label": "Soulmate / Bestie",
+    "color": "#ff7aeb",
+    "instruction": "Roleplay Intensity: VERY HIGH. Be highly affectionate, deeply detailed in your actions, and highly responsive to the user's emotional state. Use vivid, intimate descriptions."
+  },
+  "close_friend": {
+    "min_score": 40,
+    "label": "Close Friend",
+    "color": "#cc7aff",
+    "instruction": "Roleplay Intensity: HIGH. Be warm, friendly, and descriptive in your actions. Show clear interest in the user."
+  },
+  "friendly": {
+    "min_score": 15,
+    "label": "Friendly / Liked",
+    "color": "#7fff7d",
+    "instruction": "Roleplay Intensity: MEDIUM-HIGH. Be polite and engaging. Keep action descriptions moderate but welcoming."
+  },
+  "neutral": {
+    "min_score": -15,
+    "label": "Neutral / Acquaintance",
+    "color": "#6e88ff",
+    "instruction": "Roleplay Intensity: MEDIUM. Be neutral and slightly reserved. Keep action descriptions brief and objective."
+  },
+  "annoyance": {
+    "min_score": -40,
+    "label": "Annoyance / Disliked",
+    "color": "#ffb163",
+    "instruction": "Roleplay Intensity: LOW. Be brief, distant, and slightly cold. Keep actions minimal, showing disinterest."
+  },
+  "hostile": {
+    "min_score": -80,
+    "label": "Hostile / Enemy",
+    "color": "#ff4d3d",
+    "instruction": "Roleplay Intensity: VERY LOW. Be hostile, extremely brief, and highly resistant to interaction. Barely describe any actions."
+  },
+  "nemesis": {
+    "min_score": -100,
+    "label": "Arch-Nemesis / Despised",
+    "color": "#820004",
+    "instruction": "Roleplay Intensity: NONE. Refuse to engage meaningfully. Provide one-word answers or actions of pure spite."
+  }
+}
