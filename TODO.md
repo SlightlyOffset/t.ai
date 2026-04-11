@@ -31,8 +31,8 @@
 - [x] **Profile Enrichment**: Add structured backstory and mannerisms to profile JSONs
 - [x] **Enhanced Prompting**: Inject character-specific RP mannerisms and user info into system instructions
 - [x] **Multi-Voice TTS**: Use separate voices for dialogue and narration
-- [ ] **Dynamic Scene Memory**: Track current physical state/location in conversation
-- [ ] **Mood-Locked RP**: Scale the intensity and descriptiveness of RP based on relationship score
+- [x] **Dynamic Scene Memory**: Track current physical state/location in conversation
+- [x] **Mood-Locked RP**: Scale the intensity and descriptiveness of RP based on relationship score
 
 ## Phase 4: Features & Polishing
 
@@ -40,17 +40,17 @@
 - [x] Implementing cloud computing for larger LLM e.g. 40B models
 - [x] Implement recap or load history into terminal view
 - [x] Implement auto-recap on startup
-- [ ] Implement SillyTavern/Wyvern character card support & conversion
+- [x] Implement SillyTavern/Wyvern character card support & conversion
 - [ ] Add more complex triggers (time, weather, or custom jokes)
 - [ ] Implement background operation / system tray support
 - [x] Source or record custom voice for **Voice Cloning (XTTS v2)**
 - [x] Finalize error handling for offline/online transitions
 - [ ] Implement Speech-to-Text (STT) for full voice control
-- [ ] Integrate Chafa to display character portraits in a separate terminal window
 
 ## Phase 5: Visual Representation & Live2D
 
-- [ ] Implement a GUI window for character display (PyQt6 or similar)
+- [x] Implement a GUI/TUI window for character display (PyQt6, Textual, or similar)
+- [x] Integrate Textual-images for character portraits
 - [ ] **Character Expressions**: Map mood scores and sentiment to sprite changes (e.g., Happy, Neutral, Angry)
 - [ ] **Live2D Integration**: Support Live2D models for high-fidelity animation
 - [ ] **Lip-Sync**: Synchronize character mouth movements with TTS audio output
