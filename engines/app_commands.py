@@ -32,89 +32,111 @@ class RestartRequested(Exception):
     """Exception raised to signal the main loop to restart the application."""
     pass
 
-def app_commands(ops: str):
+def app_commands(ops: str, suppress_output: bool = False):
     """
     Dispatcher for internal operational commands.
 
     Args:
         ops (str): The raw command input (e.g., '//help').
+        suppress_output (bool): If True, returns (success, message) instead of printing.
 
     Returns:
-        bool: True if the command was recognized and handled, False otherwise.
+        bool or tuple: True/False if not suppressed, or (bool, str) if suppressed.
     """
+    output_buffer = []
+
+    def _log(msg, color=Fore.WHITE):
+        if suppress_output:
+            # Strip ANSI codes for the TUI message
+            clean_msg = re.sub(r'\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])', '', str(msg))
+            output_buffer.append(clean_msg)
+        else:
+            print(color + str(msg))
 
     def _help():
         """Lists all available commands."""
-        print(Fore.YELLOW + "[AVAILABLE COMMANDS]")
+        _log("[AVAILABLE COMMANDS]", Fore.YELLOW)
         for cmd, func in cmds.items():
             doc = func.__doc__ if func.__doc__ else ""
-            # Simple parsing for help text
             desc = doc.split("\n")[0] if doc else ""
-            print(Fore.CYAN + f"  {cmd:<25}" + Fore.WHITE + f" - {desc}")
+            _log(f"  {cmd:<25} - {desc}", Fore.CYAN)
 
     def _exit():
         """Exits the application."""
-        print(Fore.YELLOW + "[SYSTEM] Exiting application...")
+        _log("[SYSTEM] Exiting application...", Fore.YELLOW)
         sys.exit(0)
 
     def _show_settings():
         """Displays current system settings from settings.json."""
         from engines.config import load_settings
         settings = load_settings()
-        print(Fore.YELLOW + "[CURRENT SETTINGS]")
+        _log("[CURRENT SETTINGS]", Fore.YELLOW)
         for key, value in settings.items():
-            # Color-code booleans for readability
-            val_str = Fore.GREEN + str(value) if isinstance(value, bool) and value else \
-                      Fore.RED + str(value) if isinstance(value, bool) else \
-                      Fore.WHITE + str(value)
-            print(Fore.CYAN + f"  {key}: " + val_str)
+            _log(f"  {key}: {value}", Fore.CYAN)
 
     def _toggle_tts():
         """Toggles Text-to-Speech on or off."""
         is_enabled = get_setting("tts_enabled", True)
-        print(Fore.GREEN + "[SYSTEM] Text-to-Speech enabled." if not is_enabled else Fore.RED + "[SYSTEM] Text-to-Speech disabled.")
+        _log("[SYSTEM] Text-to-Speech enabled." if not is_enabled else "[SYSTEM] Text-to-Speech disabled.", 
+             Fore.GREEN if not is_enabled else Fore.RED)
         update_setting("tts_enabled", not is_enabled)
 
     def _toggle_tts_tag():
         """Toggles the visibility of the TTS engine tag in chat."""
         is_enabled = get_setting("show_tts_engine", True)
-        print(Fore.GREEN + "[SYSTEM] TTS engine tag enabled." if not is_enabled else Fore.RED + "[SYSTEM] TTS engine tag disabled.")
+        _log("[SYSTEM] TTS engine tag enabled." if not is_enabled else "[SYSTEM] TTS engine tag disabled.",
+             Fore.GREEN if not is_enabled else Fore.RED)
         update_setting("show_tts_engine", not is_enabled)
 
     def _toggle_narration():
         """Toggles whether narration (text in asterisks) is spoken."""
         is_enabled = get_setting("speak_narration", False)
-        print(Fore.GREEN + "[SYSTEM] Narration enabled." if not is_enabled else Fore.RED + "[SYSTEM] Narration disabled.")
+        _log("[SYSTEM] Narration enabled." if not is_enabled else "[SYSTEM] Narration disabled.",
+             Fore.GREEN if not is_enabled else Fore.RED)
         update_setting("speak_narration", not is_enabled)
 
     def _toggle_speak():
         """Toggles whether character dialogue is spoken."""
         is_enabled = get_setting("character_speak", True)
-        print(Fore.GREEN + "[SYSTEM] Character speaking enabled." if not is_enabled else Fore.RED + "[SYSTEM] Character speaking disabled.")
+        _log("[SYSTEM] Character speaking enabled." if not is_enabled else "[SYSTEM] Character speaking disabled.",
+             Fore.GREEN if not is_enabled else Fore.RED)
         update_setting("character_speak", not is_enabled)
 
     def _toggle_command():
         """Toggles the AI's ability to execute system commands."""
         is_enabled = get_setting("execute_command", False)
-        print(Fore.GREEN + "[SYSTEM] Command execution enabled." if not is_enabled else Fore.RED + "[SYSTEM] Command execution disabled.")
+        _log("[SYSTEM] Command execution enabled." if not is_enabled else "[SYSTEM] Command execution disabled.",
+             Fore.GREEN if not is_enabled else Fore.RED)
         update_setting("execute_command", not is_enabled)
 
     def _reset():
-        """Wipes a specific history file chosen by the user."""
-        print(Fore.YELLOW + "[SYSTEM] Conversation history reset.")
+        """Wipes a specific history file (only works in CLI)."""
+        if suppress_output:
+            _log("[SYSTEM] Manual history picking is only supported in CLI mode. Use //reset_all to clear active profile.", Fore.RED)
+            return
+
+        _log("[SYSTEM] Conversation history reset.", Fore.YELLOW)
         history_path = pick_history()
         if history_path:
-            # Extract profile name from filename (e.g., 'Glitch_history.json' -> 'Glitch')
             profile_name = os.path.basename(history_path).replace("_history.json", "")
             memory_manager.save_history(profile_name, [])
-            print(Fore.GREEN + "[SYSTEM] History cleared.")
-
-            # Reprint starter message if a profile is currently active
+            _log("[SYSTEM] History cleared.", Fore.GREEN)
         else:
-            print(Fore.RED + "[SYSTEM] No history selected.")
+            _log("[SYSTEM] No history selected.", Fore.RED)
 
     def _reset_all():
         """Wipes ALL history files in the history directory."""
+        if suppress_output:
+            # In TUI, we don't want interactive prompts here. 
+            # We'll just assume they want to clear everything or we could make a specific TUI command.
+            from engines.memory_v2 import memory_manager
+            for filename in os.listdir(HISTORY_PATH):
+                if filename.endswith(".json"):
+                    profile_name = filename.replace("_history.json", "")
+                    memory_manager.save_history(profile_name, [])
+            _log("[SYSTEM] All history files have been wiped.", Fore.GREEN)
+            return
+
         confirm = input(Fore.RED + "Are you sure you want to reset ALL history files? (y/n): ").strip().lower()
         if confirm == 'y':
             from engines.memory_v2 import memory_manager
@@ -122,12 +144,16 @@ def app_commands(ops: str):
                 if filename.endswith(".json"):
                     profile_name = filename.replace("_history.json", "")
                     memory_manager.save_history(profile_name, [])
-            print(Fore.GREEN + "[SYSTEM] All history files have been wiped.")
+            _log("[SYSTEM] All history files have been wiped.", Fore.GREEN)
         else:
-            print(Fore.YELLOW + "[SYSTEM] Reset cancelled.")
+            _log("[SYSTEM] Reset cancelled.", Fore.YELLOW)
 
     def _reset_rel():
-        """Resets the relationship score of a chosen profile to zero."""
+        """Resets the relationship score of a chosen profile to zero (CLI only)."""
+        if suppress_output:
+             _log("[SYSTEM] Manual relationship reset is only supported in CLI mode.", Fore.RED)
+             return
+
         from engines.utilities import pick_profile, save_json_atomic
         profile_path = pick_profile()
         if profile_path:
@@ -136,63 +162,72 @@ def app_commands(ops: str):
             
             profile_data["relationship_score"] = 0
             if save_json_atomic(profile_path, profile_data):
-                print(Fore.GREEN + "[SYSTEM] Relationship score reset to 0.")
+                _log("[SYSTEM] Relationship score reset to 0.", Fore.GREEN)
             else:
-                print(Fore.RED + "[SYSTEM] Failed to save profile.")
+                _log("[SYSTEM] Failed to save profile.", Fore.RED)
         else:
-            print(Fore.RED + "[SYSTEM] No profile selected.")
+            _log("[SYSTEM] No profile selected.", Fore.RED)
 
-    # Note: Still somewhat buggy.
     def _restart():
         """Signals the main loop to restart the application."""
-        print(Fore.YELLOW + "[SYSTEM] Restarting application...")
+        _log("[SYSTEM] Restarting application...", Fore.YELLOW)
         raise RestartRequested()
 
     def _clear():
-        """Clears the terminal screen."""
+        """Clears the terminal screen (CLI only)."""
+        if suppress_output:
+            _log("[SYSTEM] Use //history to recap. TUI cannot be cleared.", Fore.YELLOW)
+            return
         print("\033[H\033[J", end="")
-        print(Fore.YELLOW + "[SYSTEM] Screen cleared.")
+        _log("[SYSTEM] Screen cleared.", Fore.YELLOW)
 
     def _change_character():
         """Changes the current character profile."""
-        print(Fore.YELLOW + "[SYSTEM] Changing character...")
+        _log("[SYSTEM] Changing character...", Fore.YELLOW)
         raise RestartRequested()
 
     def _change_user_profile():
-        """Changes the current user profile."""
-        print(Fore.YELLOW + "[SYSTEM] Changing user profile.")
+        """Changes the current user profile (CLI only)."""
+        if suppress_output:
+            _log("[SYSTEM] Profile switching is handled via the 'Profiles' button in TUI.", Fore.YELLOW)
+            return
+
+        _log("[SYSTEM] Changing user profile.", Fore.YELLOW)
         new_profile_path = pick_user_profile()
         if new_profile_path:
             new_profile_name = os.path.basename(new_profile_path)
             update_setting("current_user_profile", new_profile_name)
-            print(Fore.GREEN + f"[SYSTEM] User profile changed to {new_profile_name}. Restarting...")
+            _log(f"[SYSTEM] User profile changed to {new_profile_name}. Restarting...", Fore.GREEN)
             raise RestartRequested()
         else:
-            print(Fore.RED + "[SYSTEM] No user profile selected.")
+            _log("[SYSTEM] No user profile selected.", Fore.RED)
 
     def _toggle_clear_on_start():
         """Toggles whether the console clears on application start."""
-        is_enabled = get_setting("clear_at_start", True)
-        print(Fore.GREEN + "[SYSTEM] Console will now clear at startup." if not is_enabled else Fore.RED + "[SYSTEM] Console will no longer clear at startup.")
-        update_setting("clear_at_start", not is_enabled)
+        is_enabled = get_setting("clear_on_start", True)
+        _log("[SYSTEM] Console will now clear at startup." if not is_enabled else "[SYSTEM] Console will no longer clear at startup.",
+             Fore.GREEN if not is_enabled else Fore.RED)
+        update_setting("clear_on_start", not is_enabled)
 
     def _toggle_errors():
         """Toggles the suppression of non-critical error messages."""
         is_enabled = get_setting("suppress_errors", False)
-        print(Fore.GREEN + "[SYSTEM] Error messages will now be shown." if is_enabled else Fore.RED + "[SYSTEM] Non-critical error messages suppressed.")
+        _log("[SYSTEM] Error messages will now be shown." if is_enabled else "[SYSTEM] Non-critical error messages suppressed.",
+             Fore.GREEN if is_enabled else Fore.RED)
         update_setting("suppress_errors", not is_enabled)
 
     def _history(limit: int = 15):
-        """Displays the recent conversation history."""
-        current_profile_setting = get_setting("current_character_profile")
-        if not current_profile_setting:
-            print(Fore.RED + "[SYSTEM] No character profile active. Cannot display history." + Style.RESET_ALL)
+        """Displays the recent conversation history (CLI only)."""
+        if suppress_output:
+            _log("[SYSTEM] History recap is already visible in TUI.", Fore.YELLOW)
             return
 
-        # Extract character name from the profile path stored in settings
-        profile_name = os.path.basename(current_profile_setting).replace(".json", "")
+        current_profile_setting = get_setting("current_character_profile")
+        if not current_profile_setting:
+            _log("[SYSTEM] No character profile active. Cannot display history.", Fore.RED)
+            return
 
-        # Try to get display names
+        profile_name = os.path.basename(current_profile_setting).replace(".json", "")
         ch_name = "Assistant"
         user_name = "User"
         char_color = None
@@ -213,17 +248,18 @@ def app_commands(ops: str):
 
         recap_messages = memory_manager.load_history(profile_name, limit=limit)
         if recap_messages:
-            print(Fore.WHITE + Style.DIM + "\n=== Past Conversation ===" + Style.RESET_ALL)
+            _log("\n=== Past Conversation ===", Fore.WHITE)
             for msg in recap_messages:
                 render_historical_message(msg.get("role"), msg.get("content", ""), user_name=user_name, char_name=ch_name, char_color=char_color)
-            print(Fore.WHITE + Style.DIM + "=========================" + Style.RESET_ALL)
+            _log("=========================", Fore.WHITE)
         else:
-            print(Fore.YELLOW + "[SYSTEM] No history found for the current profile." + Style.RESET_ALL)
+            _log("[SYSTEM] No history found for the current profile.", Fore.YELLOW)
 
     def _toggle_recap_on_start():
         """Toggles whether a history recap is shown at startup."""
         is_enabled = get_setting("auto_recap_on_start", True)
-        print(Fore.GREEN + "[SYSTEM] Auto recap at startup is now enabled." if not is_enabled else Fore.RED + "[SYSTEM] Auto recap at startup is now disabled.")
+        _log("[SYSTEM] Auto recap at startup is now enabled." if not is_enabled else "[SYSTEM] Auto recap at startup is now disabled.",
+             Fore.GREEN if not is_enabled else Fore.RED)
         update_setting("auto_recap_on_start", not is_enabled)
 
     def _clear_cache():
@@ -232,31 +268,33 @@ def app_commands(ops: str):
         if os.path.exists(cache_dir):
             try:
                 shutil.rmtree(cache_dir)
-                print(Fore.GREEN + "[SYSTEM] TTS cache cleared.")
+                _log("[SYSTEM] TTS cache cleared.", Fore.GREEN)
             except Exception as e:
-                print(Fore.RED + f"[SYSTEM] Failed to clear TTS cache: {e}")
+                _log(f"[SYSTEM] Failed to clear TTS cache: {e}", Fore.RED)
         else:
-            print(Fore.YELLOW + "[SYSTEM] No TTS cache found to clear.")
+            _log("[SYSTEM] No TTS cache found to clear.", Fore.YELLOW)
 
     def _toggle_mode():
         """Toggles between Roleplay (RP) and Casual interaction modes."""
         current_mode = get_setting("interaction_mode", "rp")
         new_mode = "casual" if current_mode == "rp" else "rp"
         update_setting("interaction_mode", new_mode)
-        print(Fore.GREEN + f"[SYSTEM] Interaction mode set to {new_mode.upper()}.")
+        _log(f"[SYSTEM] Interaction mode set to {new_mode.upper()}.", Fore.GREEN)
 
     def _import_card(args):
         """Imports a character card (PNG or JSON) from SillyTavern format."""
         if not args:
-            print(Fore.RED + "[ERROR] Usage: //import_card <path_to_card_png_or_json>")
+            _log("[ERROR] Usage: //import_card <path_to_card_png_or_json>", Fore.RED)
             return
         
         path = args.strip().strip('"').strip("'")
         if not os.path.exists(path):
-            print(Fore.RED + f"[ERROR] File not found: {path}")
+            _log(f"[ERROR] File not found: {path}", Fore.RED)
             return
             
         import_character(path)
+        _log(f"[SYSTEM] Successfully imported character card: {os.path.basename(path)}", Fore.GREEN)
+
 
     # Mapping of command strings to their respective functions
     cmds = {
@@ -277,7 +315,7 @@ def app_commands(ops: str):
         "//toggle_speak": _toggle_speak,
         "//toggle_narration": _toggle_narration,
         "//toggle_command": _toggle_command,
-        "//toggle_clear_at_start": _toggle_clear_on_start,
+        "//toggle_clear_on_start": _toggle_clear_on_start,
         "//toggle_recap_on_start": _toggle_recap_on_start,
         "//toggle_errors": _toggle_errors,
         "//show_settings": _show_settings,
@@ -300,9 +338,23 @@ def app_commands(ops: str):
         # Check if the function takes arguments
         import inspect
         sig = inspect.signature(action)
-        if len(sig.parameters) > 0:
-            action(args)
-        else:
-            action()
-        return True
+        try:
+            if len(sig.parameters) > 0:
+                action(args)
+            else:
+                action()
+            
+            if suppress_output:
+                return True, output_buffer
+            return True
+        except RestartRequested:
+            raise
+        except Exception as e:
+            _log(f"[ERROR] Command failed: {e}", Fore.RED)
+            if suppress_output:
+                return True, output_buffer
+            return True
+
+    if suppress_output:
+        return False, []
     return False

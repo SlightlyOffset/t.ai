@@ -10,7 +10,6 @@ import random
 import threading
 import time
 import sys
-import platform
 from pathlib import Path
 
 # Third-party imports
@@ -24,7 +23,7 @@ from textual.reactive import reactive
 from textual.message import Message
 
 # First-party imports
-from engines.app_commands import app_commands
+from engines.app_commands import app_commands, RestartRequested
 from engines.config import update_setting, get_setting
 from engines.responses import get_respond_stream
 from engines.tts_module import generate_audio, play_audio, clean_text_for_tts
@@ -310,7 +309,9 @@ class TaiMenu(App):
         if role == "assistant":
             speech_color = self.character_profile.get("colors", {}).get("speech_highlight", "yellow")
         else:
-            speech_color = self.user_profile.get("colors", {}).get("speech_highlight", "yellow")
+            speech_color = "yellow"
+            if self.user_profile:
+                speech_color = self.user_profile.get("colors", {}).get("speech_highlight", "yellow")
         text = re.sub(r'["“](.*?)["”]', fr'[{speech_color}]"\1"[/{speech_color}]', text, flags=re.DOTALL)
 
         return text
@@ -578,9 +579,16 @@ class TaiMenu(App):
 
         # Handle commands (original message)
         if message.startswith("//"):
-            if app_commands(message):
-                self.update_sidebar()
-                return
+            try:
+                success, messages = app_commands(message, suppress_output=True)
+                if success:
+                    for msg in messages:
+                        self.add_message(msg, role="system")
+                    self.update_sidebar()
+                    return
+            except RestartRequested:
+                self.exit()
+                raise
         
         # Trigger AI response
         self.stream_response(message)
@@ -699,10 +707,3 @@ class TaiMenu(App):
         with open(profile_path, "r", encoding="utf-8") as f:
             self.character_profile = json.load(f)
         self.app.call_from_thread(self.update_sidebar)
-
-
-if __name__ == "__main__":
-    print(f"Running on: {platform.system()} {platform.release()}")
-    set_terminal_appearance(title="t.ai")
-    app = TaiMenu(char_path=None, user_path=None)
-    app.run()
