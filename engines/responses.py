@@ -120,6 +120,52 @@ def get_sentiment_score(user_input: str, model: str, remote_url: str = None, pro
         pass
     return 0
 
+def generate_summary(messages: list, model: str, remote_url: str = None) -> str:
+    """
+    Generates a concise summary of the provided conversation history.
+    
+    Args:
+        messages (list): The chat history to summarize.
+        model (str): The model to use for summarization (e.g., 'bitnet').
+        remote_url (str, optional): The URL for remote LLM inference.
+        
+    Returns:
+        str: The generated summary.
+    """
+    summary_prompt = (
+        "Summarize the following conversation history concisely in bullet points. "
+        "Focus on key events, character reactions, and the current state of the relationship. "
+        "Keep the summary short and informative. Use [bold yellow] Memory Core Summary [/bold yellow] as header."
+    )
+    
+    formatted_history = ""
+    for msg in messages:
+        role = msg.get("role", "unknown")
+        content = msg.get("content", "")
+        formatted_history += f"{role.upper()}: {content}\n"
+
+    summary_messages = [
+        {"role": "system", "content": summary_prompt},
+        {"role": "user", "content": f"History to summarize:\n{formatted_history}"}
+    ]
+
+    try:
+        if remote_url:
+            full_url = f"{remote_url.rstrip('/')}/chat"
+            # OpenAI-compatible API call
+            payload = {"messages": summary_messages, "temperature": 0.3, "max_tokens": 500}
+            response = requests.post(full_url, json=payload, stream=False, timeout=60)
+            result = response.json()
+            # Remote API might return differently, adjust as needed
+            if 'choices' in result:
+                return result['choices'][0]['message']['content'].strip()
+            return result.get('message', {}).get('content', 'Error generating remote summary.')
+        else:
+            result = ollama.chat(model=model, messages=summary_messages, stream=False)
+            return result['message']['content'].strip()
+    except Exception as e:
+        return f"Error generating summary: {str(e)}"
+
 def get_respond_stream(user_input: str, profile: dict, should_obey: bool | None = None, profile_path: str = None, system_extra_info: str = None, history_profile_name: str = None):
     """
     Generates a streaming response from the LLM (Local Ollama or Remote API).
