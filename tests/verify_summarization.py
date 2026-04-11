@@ -25,8 +25,10 @@ def verify():
         recent = history[-5:]
         print(f"Summarizing {len(older)} messages...")
         
-        # Use a model that is likely available, or get from settings
-        model = get_setting("default_llm_model", "llama3")
+        # Default to gemma2:2b
+        model = get_setting("summarizer_model", "gemma2:2b")
+        
+        print(f"Using model: {model}")
         summary = generate_summary(older, model=model)
         
         print("\n--- GENERATED SUMMARY ---")
