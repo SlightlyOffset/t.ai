@@ -16,6 +16,7 @@ A lightweight, highly immersive AI companion that lives in the terminal. It feat
 
 ## Key Features
 - **Zero-Latency Multi-Voice TTS**: Intelligent switching between narrator and character voices using multi-threaded queuing.
+- **BitNet Context Summarization**: Automatically condenses long histories (>15 messages) using lightweight 1-bit models to preserve context without bloating VRAM.
 - **Seamless TUI Profile Management**: Non-blocking selection screen for companion and user profiles, with automated restoration of the last active session.
 - **High-Fidelity Voice Cloning**: Integration of XTTS v2 for personalized character voices via local GPU or remote Colab bridge.
 - **Relationship & Mood Engine**: A persistent -100 to +100 meter that dictates the AI's tone, obedience, and emotional state.
