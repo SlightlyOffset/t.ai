@@ -739,3 +739,44 @@ class TaiMenu(App):
         with open(profile_path, "r", encoding="utf-8") as f:
             self.character_profile = json.load(f)
         self.app.call_from_thread(self.update_sidebar)
+
+        # Trigger rolling summarization check
+        self.check_for_rolling_summary()
+
+    def check_for_rolling_summary(self):
+        """Checks if enough new messages have accumulated to update the Memory Core."""
+        history_len = memory_manager.get_history_length(self.history_profile_name)
+        last_index = memory_manager.get_last_summarized_index(self.history_profile_name)
+        limit = get_setting("memory_limit", 15)
+        
+        # We summarize if the unsummarized gap is larger than the window + buffer (5)
+        if (history_len - last_index) > (limit + 5):
+            # We want to summarize everything EXCEPT the last 'limit' messages 
+            # which are kept in active context.
+            to_summarize_count = history_len - limit
+            if to_summarize_count > last_index:
+                full_history = memory_manager.load_history(self.history_profile_name)
+                # Messages to include in the NEW summary part
+                new_messages_to_sum = full_history[last_index:to_summarize_count]
+                
+                self.perform_rolling_summary(new_messages_to_sum, to_summarize_count)
+
+    @work(thread=True)
+    def perform_rolling_summary(self, new_messages: list, new_index: int):
+        """Background worker to update the Memory Core."""
+        existing_core = memory_manager.get_memory_core(self.history_profile_name)
+        summarizer_model = get_setting("summarizer_model", "gemma2:2b")
+        remote_url = get_setting("remote_llm_url")
+        
+        new_core = update_rolling_summary(
+            existing_core, 
+            new_messages, 
+            model=summarizer_model, 
+            remote_url=remote_url,
+            user_name=self.user_name,
+            char_name=self.ch_name
+        )
+        
+        # Persist the update
+        memory_manager.update_memory_core(self.history_profile_name, new_core, new_index)
+        # self.log(f"Memory Core updated to index {new_index}")
