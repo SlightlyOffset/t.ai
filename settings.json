@@ -17,5 +17,6 @@
     "debug_mode": false,
     "clear_on_start": false,
     "auto_recap_on_start": true,
+    "summarizer_model": "gemma2:2b",
     "interaction_mode": "rp"
 }
