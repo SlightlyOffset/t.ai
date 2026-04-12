@@ -5,9 +5,9 @@
 - [x] Add getter and setter methods for the Memory Core in `HistoryManager`. (21728c8)
 
 ## Phase 2: Rolling Summarizer Logic
-- [ ] In `engines/responses.py`, create a `update_rolling_summary` helper function.
-- [ ] This function should accept the current Memory Core, the new messages to summarize, and the model configuration.
-- [ ] Draft a specific prompt for consolidating an existing summary with new events.
+- [x] In `engines/responses.py`, create a `update_rolling_summary` helper function. (e9d8857)
+- [x] This function should accept the current Memory Core, the new messages to summarize, and the model configuration. (e9d8857)
+- [x] Draft a specific prompt for consolidating an existing summary with new events. (e9d8857)
 
 ## Phase 3: Background Worker Integration
 - [ ] In `menu.py` (or the appropriate controller), trigger a background check after every few user interactions.
