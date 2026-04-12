@@ -1,25 +1,4 @@
 {
-  "entries": [
-    {
-      "id": "1",
-      "keys": ["tavern", "old oak", "inn"],
-      "content": "The Old Oak Tavern is a bustling inn run by a grumpy dwarf named Gorbag. It smells of stale ale and roasted pork.",
-      "enabled": true,
-      "insertion_order": 50
-    },
-    {
-      "id": "2",
-      "keys": ["gorbag", "dwarf"],
-      "content": "Gorbag is the 150-year-old dwarf proprietor of the Old Oak Tavern. He has a braided iron-grey beard and hates elves.",
-      "enabled": true,
-      "insertion_order": 100
-    },
-    {
-      "id": "3",
-      "keys": ["elf", "elves"],
-      "content": "Elves in this world are known for their graceful archery and deep connection to the ancient forests of Silvanus.",
-      "enabled": true,
-      "insertion_order": 100
-    }
-  ]
+    "entries": [
+    ]
 }
