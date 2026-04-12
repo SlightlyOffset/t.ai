@@ -320,8 +320,20 @@ def app_commands(ops: str, suppress_output: bool = False):
             keys_str, content = sub_args.split("|", 1)
             keys = [k.strip() for k in keys_str.split(",")]
             
-            lore_path = "lorebooks/default.json"
-            os.makedirs("lorebooks", exist_ok=True)
+            # Detect the active character's lorebook
+            from engines.config import get_setting
+            char_profile_setting = get_setting("current_character_profile")
+            lore_path = "lorebooks/default.json" # Default fallback
+            
+            if char_profile_setting:
+                try:
+                    with open(os.path.join("profiles", char_profile_setting), "r", encoding="UTF-8") as f:
+                        p_data = json.load(f)
+                        lore_path = p_data.get("lorebook_path", lore_path)
+                except Exception:
+                    pass
+
+            os.makedirs(os.path.dirname(lore_path), exist_ok=True) if os.path.dirname(lore_path) else None
             
             from engines.lorebook import load_lorebook
             lore_data = load_lorebook(lore_path)
@@ -339,7 +351,7 @@ def app_commands(ops: str, suppress_output: bool = False):
             with open(lore_path, "w", encoding="UTF-8") as f:
                 json.dump(lore_data, f, indent=4)
             
-            _log(f"[SYSTEM] Added lore entry for: {', '.join(keys)}", Fore.GREEN)
+            _log(f"[SYSTEM] Added lore entry to {os.path.basename(lore_path)} for: {', '.join(keys)}", Fore.GREEN)
         else:
             _log(f"[ERROR] Unknown lore command: {subcommand}", Fore.RED)
 

@@ -254,7 +254,8 @@ def get_respond_stream(user_input: str, profile: dict, should_obey: bool | None 
 
     # 1. Lorebook Scanning
     # Scan recent history (last 3 messages) + current user input for keywords
-    lorebook_data = load_lorebook("lorebooks/default.json")
+    lore_file = profile.get("lorebook_path", "lorebooks/default.json")
+    lorebook_data = load_lorebook(lore_file)
     recent_context = history[-3:] + [{'role': 'user', 'content': user_input}]
     activated_lore = scan_for_lore(recent_context, lorebook_data)
 
