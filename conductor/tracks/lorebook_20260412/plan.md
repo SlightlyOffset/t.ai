@@ -16,7 +16,7 @@ Build and integrate a scalable Lorebook system that injects dynamic context into
    - Implement `scan_for_lore(recent_messages, lorebook_data)` to iterate over recent history and find matching keywords via whole-word Regex (`\bword\b`).
    - Format the matched entries into a structured `[WORLD INFO / LORE]` string block, respecting the `insertion_order` property.
 
-2. **Integrate Scanner into Prompt Context (`engines/responses.py`)**
+2. [x] **Integrate Scanner into Prompt Context (`engines/responses.py`)** [249d1ed]
    - In `get_respond_stream`, load the lorebook data (could be cached per session).
    - Pass the last `N` messages to `scan_for_lore()`.
    - Take the resulting lore text and prepend/append it to `system_extra_info` alongside the `Memory Core` and `CURRENT SCENE`.
