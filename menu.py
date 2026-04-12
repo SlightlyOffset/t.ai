@@ -25,7 +25,7 @@ from textual.message import Message
 # First-party imports
 from engines.app_commands import app_commands, RestartRequested
 from engines.config import update_setting, get_setting
-from engines.responses import get_respond_stream, generate_summary
+from engines.responses import get_respond_stream, generate_summary, update_rolling_summary
 from engines.tts_module import generate_audio, play_audio, clean_text_for_tts
 from engines.memory_v2 import memory_manager
 from engines.prompts import get_mood_rule
@@ -279,7 +279,17 @@ class TaiMenu(App):
         self.populate_models()
         self.populate_voices()
 
-    def format_rp(self, text, role):
+    @staticmethod
+    def format_summary(summary: str) -> str:
+        # Handle ## headers (Markdown style)
+        text = re.sub(r'^##\s+(.*)$', r'[b][u]\1[/u][/b]', summary, flags=re.MULTILINE)
+        # Handle **bold**
+        text = re.sub(r'\*\*(.*?)\*\*', r'[b]\1[/b]', text, flags=re.DOTALL)
+        # Convert * to bullet points
+        text = text.replace("*", "•")
+        return text
+
+    def format_rp(self, text, role) -> str:
         """
         Formats text with basic markdown-like syntax for the TUI.
         - **bold** -> [b]bold[/b]
@@ -452,7 +462,7 @@ class TaiMenu(App):
                                    user_name=self.user_name, char_name=self.ch_name)
         
         def update_ui():
-            self.add_message(summary, role="summary")
+            self.add_message(self.format_summary(summary), role="summary")
             self.add_message("--- Recent Continuity ---", role="system")
             for msg_data in recent_history:
                 role = msg_data.get("role", "assistant")

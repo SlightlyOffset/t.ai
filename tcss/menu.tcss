@@ -111,7 +111,7 @@
     padding: 0 1;
 }
 .summary_msg {
-    color: $warning;
+    color: $warning-lighten-3;
     border: double $warning;
     margin: 1 0;
     width: 100%;
