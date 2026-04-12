@@ -39,7 +39,9 @@ class HistoryManager:
         data = self.get_full_data(profile_name)
         return len(data.get("history", [])) if data else 0
 
-    def save_history(self, profile_name: str, history: list, mood_score: int = 0, current_scene: str = "Unknown Location") -> None:
+    def save_history(self, profile_name: str, history: list, mood_score: int = 0, 
+                     current_scene: str = "Unknown Location", memory_core: str = "", 
+                     last_summarized_index: int = 0) -> None:
         """
         Saves history to a JSON file with metadata.
 
@@ -48,6 +50,8 @@ class HistoryManager:
             history (list): List of message dictionaries.
             mood_score (int): Current relationship/mood score.
             current_scene (str): The physical location or state of the RP.
+            memory_core (str): The consolidated rolling summary.
+            last_summarized_index (int): The index of the last message included in the summary.
         """
         filename = self._get_filename(profile_name)
         now = datetime.now()
@@ -57,7 +61,9 @@ class HistoryManager:
             "metadata": {
                 "last_interaction": current_time,
                 "mood_score": mood_score,
-                "current_scene": current_scene
+                "current_scene": current_scene,
+                "memory_core": memory_core,
+                "last_summarized_index": last_summarized_index
             },
             "history": history
         }
@@ -75,7 +81,9 @@ class HistoryManager:
             "metadata": {
                 "last_interaction": None,
                 "mood_score": 0,
-                "current_scene": "Unknown Location"
+                "current_scene": "Unknown Location",
+                "memory_core": "",
+                "last_summarized_index": 0
             },
             "history": []
         }
@@ -100,7 +108,9 @@ class HistoryManager:
                         "metadata": {
                             "last_interaction": last_time,
                             "mood_score": 0,
-                            "current_scene": "Unknown Location"
+                            "current_scene": "Unknown Location",
+                            "memory_core": "",
+                            "last_summarized_index": 0
                         },
                         "history": [m for m in data if m.get("role") != "system"]
                     }
