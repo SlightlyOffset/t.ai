@@ -21,7 +21,7 @@ Build and integrate a scalable Lorebook system that injects dynamic context into
    - Pass the last `N` messages to `scan_for_lore()`.
    - Take the resulting lore text and prepend/append it to `system_extra_info` alongside the `Memory Core` and `CURRENT SCENE`.
 
-3. **Implement Basic Command Hooks (`engines/app_commands.py`)**
+3. [x] **Implement Basic Command Hooks (`engines/app_commands.py`)** [df8bacf]
    - Add a basic `//lore reload` command to hot-reload the `lorebook.json` from disk.
    - (Optional) Add `//lore add [keys] | [content]` for quick runtime additions.
 
