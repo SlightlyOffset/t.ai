@@ -171,5 +171,25 @@ class HistoryManager:
         diff = now - last_time
         return (diff.total_seconds() / 3600) <= hours
 
+    def get_memory_core(self, profile_name: str) -> str:
+        """Retrieves the consolidated rolling summary for a profile."""
+        data = self.get_full_data(profile_name)
+        return data.get("metadata", {}).get("memory_core", "")
+
+    def get_last_summarized_index(self, profile_name: str) -> int:
+        """Retrieves the index of the last summarized message."""
+        data = self.get_full_data(profile_name)
+        return data.get("metadata", {}).get("last_summarized_index", 0)
+
+    def update_memory_core(self, profile_name: str, summary: str, last_index: int) -> None:
+        """Updates the Memory Core and its last summarized index without losing history."""
+        data = self.get_full_data(profile_name)
+        data["metadata"]["memory_core"] = summary
+        data["metadata"]["last_summarized_index"] = last_index
+        
+        filename = self._get_filename(profile_name)
+        with open(filename, "w", encoding="UTF-8") as f:
+            json.dump(data, f, ensure_ascii=False, indent=4)
+
 # Global instance for easy access across the application
 memory_manager = HistoryManager()

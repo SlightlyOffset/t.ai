@@ -24,5 +24,17 @@ class TestMemoryRolling(unittest.TestCase):
         self.assertEqual(data["metadata"].get("memory_core"), "Old summary")
         self.assertEqual(data["metadata"].get("last_summarized_index"), 5)
 
+    def test_getter_setter_memory_core(self):
+        # Initial state should be defaults
+        self.assertEqual(self.manager.get_memory_core(self.profile_name), "")
+        self.assertEqual(self.manager.get_last_summarized_index(self.profile_name), 0)
+        
+        # Set new values
+        self.manager.update_memory_core(self.profile_name, "New summary", 10)
+        
+        # Verify
+        self.assertEqual(self.manager.get_memory_core(self.profile_name), "New summary")
+        self.assertEqual(self.manager.get_last_summarized_index(self.profile_name), 10)
+
 if __name__ == "__main__":
     unittest.main()
