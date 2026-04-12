@@ -314,7 +314,7 @@ def app_commands(ops: str, suppress_output: bool = False):
             try:
                 with open(os.path.join("profiles", char_profile_setting), "r", encoding="UTF-8") as f:
                     p_data = json.load(f)
-                    lore_path = p_data.get("lorebook_path", lore_path)
+                    lore_path = p_data.get("lorebook_path") or lore_path
             except Exception:
                 pass
 
