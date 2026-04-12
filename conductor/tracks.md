@@ -44,6 +44,11 @@ This file tracks all major tracks for the project. Each track has its own detail
 
 ---
 
+- [x] **Track: Rolling Summarization & Memory Core Injection**
+*Link: [./tracks/rolling_summarization_20260411/](./tracks/rolling_summarization_20260411/)*
+
+---
+
 - [x] **Track: Voice Cloning Optimization (Cached Speaker & Streaming)**
 *Link: [./tracks/voice_cloning_opt_20260404/](./tracks/voice_cloning_opt_20260404/)*
 
