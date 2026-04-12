@@ -789,4 +789,4 @@ class TaiMenu(App):
         
         # Persist the update
         memory_manager.update_memory_core(self.history_profile_name, new_core, new_index)
-        # self.log(f"Memory Core updated to index {new_index}")
+        self.log(f"Memory Core updated to index {new_index}")
