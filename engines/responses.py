@@ -174,6 +174,52 @@ def generate_summary(messages: list, model: str, remote_url: str = None, user_na
     except Exception as e:
         return f"Error generating summary: {str(e)}"
 
+def update_rolling_summary(existing_core: str, new_messages: list, model: str, 
+                           remote_url: str = None, user_name: str = "User", 
+                           char_name: str = "Assistant") -> str:
+    """
+    Consolidates the existing Memory Core with new conversation messages.
+    """
+    summary_prompt = (
+        f"You are updating the Memory Core for {char_name}. "
+        f"Below is the existing Memory Core summary and a set of new messages between {user_name} and {char_name}. "
+        "Create a NEW, consolidated Memory Core that incorporates the new events while keeping the total length concise. "
+        "Maintain bullet points. Focus on character growth and key plot developments. "
+        "Always start with '[bold yellow] Memory Core Summary [/bold yellow]'."
+    )
+    
+    formatted_new_history = ""
+    for msg in new_messages:
+        role = msg.get("role", "unknown")
+        name = user_name if role == "user" else char_name
+        content = msg.get("content", "")
+        formatted_new_history += f"{name.upper()}: {content}\n"
+
+    input_content = (
+        f"EXISTING MEMORY CORE:\n{existing_core}\n\n"
+        f"NEW MESSAGES TO CONSOLIDATE:\n{formatted_new_history}"
+    )
+
+    summary_messages = [
+        {"role": "system", "content": summary_prompt},
+        {"role": "user", "content": input_content}
+    ]
+
+    try:
+        if remote_url:
+            full_url = f"{remote_url.rstrip('/')}/chat"
+            payload = {"messages": summary_messages, "temperature": 0.3, "max_tokens": 600}
+            response = requests.post(full_url, json=payload, stream=False, timeout=60)
+            result = response.json()
+            if 'choices' in result:
+                return result['choices'][0]['message']['content'].strip()
+            return result.get('message', {}).get('content', 'Error updating remote rolling summary.')
+        else:
+            result = ollama.chat(model=model, messages=summary_messages, stream=False)
+            return result['message']['content'].strip()
+    except Exception as e:
+        return f"Error updating rolling summary: {str(e)}"
+
 def get_respond_stream(user_input: str, profile: dict, should_obey: bool | None = None, profile_path: str = None, system_extra_info: str = None, history_profile_name: str = None):
     """
     Generates a streaming response from the LLM (Local Ollama or Remote API).
