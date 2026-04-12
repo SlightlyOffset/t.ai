@@ -246,6 +246,7 @@ def get_respond_stream(user_input: str, profile: dict, should_obey: bool | None 
     # Load history and metadata
     full_data = memory_manager.get_full_data(history_profile_name)
     current_scene = full_data.get("metadata", {}).get("current_scene", "Unknown Location")
+    memory_core = full_data.get("metadata", {}).get("memory_core", "")
     
     limit = get_setting("memory_limit", 15)
     history = memory_manager.load_history(history_profile_name, limit=limit)
@@ -254,11 +255,15 @@ def get_respond_stream(user_input: str, profile: dict, should_obey: bool | None 
     rel_score = profile.get("relationship_score", 0)
     interaction_mode = get_setting("interaction_mode", "rp")
 
-    # Handle Dynamic Scene Context
+    # Handle Dynamic Scene Context and Memory Core
     scene_instruction = f"CURRENT SCENE: {current_scene}. Keep this context in mind."
     if interaction_mode == "rp":
         scene_instruction += " If the location or activity changes significantly, append [SCENE: new location] at the VERY end of your response."
     
+    if memory_core:
+        # Prepend the Memory Core to provide long-term context
+        scene_instruction = f"{memory_core}\n\n{scene_instruction}"
+
     if system_extra_info:
         system_extra_info = f"{scene_instruction}\n{system_extra_info}"
     else:
