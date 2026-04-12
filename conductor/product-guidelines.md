@@ -14,6 +14,7 @@
 ## Relationship Mechanics
 - **Tone and Obedience**: The relationship meter (-100 to +100) directly influences the AI's behavior. High scores yield cooperative and affectionate responses, while low scores trigger more resistant or sarcastic tones.
 - **Temporal Decay**: The relationship score slowly decays over time to encourage regular interaction and maintain a sense of a living companion.
+- **Memory Core Injection**: The AI's responses are informed by a rolling summary of the entire conversation history, enabling deep character recall and long-term narrative continuity.
 
 ## Character Integrity
 - **Profile Consistency**: The character's personality must remain consistent with its defined profile, even as its mood fluctuates.
