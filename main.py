@@ -24,7 +24,8 @@ def ensure_directories():
         "cache",
         "voices",
         "template",
-        "response_rule"
+        "response_rule",
+        "lorebooks"
     ]
     for directory in required_dirs:
         if not os.path.exists(directory):

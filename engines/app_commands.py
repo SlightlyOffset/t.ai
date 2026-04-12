@@ -295,6 +295,69 @@ def app_commands(ops: str, suppress_output: bool = False):
         import_character(path)
         _log(f"[SYSTEM] Successfully imported character card: {os.path.basename(path)}", Fore.GREEN)
 
+    def _lore(args):
+        """Manages the Lorebook (World Info). Usage: //lore [reload|add]"""
+        if not args:
+            _log("[ERROR] Usage: //lore [reload|add]", Fore.RED)
+            return
+        
+        parts = args.strip().split(" ", 1)
+        subcommand = parts[0].lower()
+        sub_args = parts[1] if len(parts) > 1 else ""
+
+        # Detect the active character's lorebook
+        from engines.config import get_setting
+        char_profile_setting = get_setting("current_character_profile")
+        lore_path = "lorebooks/default.json" # Default fallback
+        
+        if char_profile_setting:
+            try:
+                with open(os.path.join("profiles", char_profile_setting), "r", encoding="UTF-8") as f:
+                    p_data = json.load(f)
+                    lore_path = p_data.get("lorebook_path") or lore_path
+            except Exception:
+                pass
+
+        if subcommand == "reload":
+            # Since load_lorebook is called per-turn, reload just confirms existence
+            if os.path.exists(lore_path):
+                _log(f"[SYSTEM] Lorebook ({os.path.basename(lore_path)}) reloaded successfully.", Fore.GREEN)
+            else:
+                _log(f"[SYSTEM] {os.path.basename(lore_path)} not found, but system is ready.", Fore.YELLOW)
+        elif subcommand == "add":
+            if "|" not in sub_args:
+                _log("[ERROR] Usage: //lore add keys | content", Fore.RED)
+                return
+            
+            keys_str, content = sub_args.split("|", 1)
+            keys = [k.strip() for k in keys_str.split(",") if k.strip()]
+
+            if not keys:
+                _log("[ERROR] No valid keys provided. Usage: //lore add keys | content", Fore.RED)
+                return
+
+            os.makedirs(os.path.dirname(lore_path), exist_ok=True) if os.path.dirname(lore_path) else None
+            
+            from engines.lorebook import load_lorebook
+            lore_data = load_lorebook(lore_path)
+            
+            new_entry = {
+                "id": str(len(lore_data.get("entries", [])) + 1),
+                "keys": keys,
+                "content": content.strip(),
+                "enabled": True,
+                "insertion_order": 100
+            }
+            
+            lore_data.setdefault("entries", []).append(new_entry)
+            
+            with open(lore_path, "w", encoding="UTF-8") as f:
+                json.dump(lore_data, f, indent=4)
+            
+            _log(f"[SYSTEM] Added lore entry to {os.path.basename(lore_path)} for: {', '.join(keys)}", Fore.GREEN)
+        else:
+            _log(f"[ERROR] Unknown lore command: {subcommand}", Fore.RED)
+
 
     # Mapping of command strings to their respective functions
     cmds = {
@@ -304,6 +367,7 @@ def app_commands(ops: str, suppress_output: bool = False):
         "//help": _help,
         "//clear": _clear,
         "//import_card": _import_card,
+        "//lore": _lore,
         "//change_character": _change_character,
         "//change_user_profile": _change_user_profile,
         "//reset": _reset,

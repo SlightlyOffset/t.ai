@@ -24,6 +24,7 @@
 
 ## Data and Persistence
 - **JSON**: Storage format for character profiles, user profiles, chat history, and application settings.
+- **Lorebook (JSON)**: Structured format for world information with keyword triggers and prioritized insertion.
 
 ## Network and Communication
 - **requests**: HTTP library for communication with local/remote LLM APIs.

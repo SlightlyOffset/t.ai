@@ -38,6 +38,7 @@
     "bad_prompt_modifyer": "", // a prompt that is added to the system prompt when the character is behaving in a bad way, to encourage more bad behavior
     "preferred_edge_voice": "", // the name of the preferred TTS voice for this character, should be a valid voice from edge-tts
     "avatar_path": "", // the path to the character's avatar image, e.g. "img/MyChar.png"
+    "lorebook_path": "", // the path to the character's lorebook, e.g. "lorebooks/arknights.json"
     "tts_engine": "", // "edge-tts" or "xtts" — use "xtts" to enable voice cloning
     "voice_clone_ref": "", // path to the character's voice sample directory, e.g. "voices/MyChar". All .wav files inside are used for cloning. More samples = better quality. Null to disable.
     "tts_language": "", // language code passed to XTTS, e.g. "en", "ja", "fr"

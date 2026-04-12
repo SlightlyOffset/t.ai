@@ -19,6 +19,7 @@ A lightweight, highly immersive AI companion that lives in the terminal. It feat
 - **BitNet Context Summarization**: Automatically condenses long histories (>15 messages) using lightweight 1-bit models to preserve context without bloating VRAM.
 - **Rolling Summarization & Memory Core Injection**: Automatically consolidates older chat history into a "Memory Core" that is injected into every AI interaction, ensuring long-term narrative recall without performance loss.
 - **Seamless TUI Profile Management**: Non-blocking selection screen for companion and user profiles, with automated restoration of the last active session.
+- **Dynamic Lorebook (World Info)**: Efficiently injects relevant world or character facts into the LLM context based on keywords detected in the recent conversation, enabling "infinite" world-building.
 - **High-Fidelity Voice Cloning**: Integration of XTTS v2 for personalized character voices via local GPU or remote Colab bridge.
 - **Relationship & Mood Engine**: A persistent -100 to +100 meter that dictates the AI's tone, obedience, and emotional state.
 - **Profile-Dependent Personalities**: Customizable character profiles that dictate behavior, voice, and reaction styles.

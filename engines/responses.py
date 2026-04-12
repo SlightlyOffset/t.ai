@@ -11,6 +11,7 @@ from datetime import datetime
 from engines.memory_v2 import memory_manager
 from engines.config import get_setting
 from engines.prompts import build_system_prompt
+from engines.lorebook import load_lorebook, scan_for_lore
 
 def apply_mood_decay(profile_path: str, history_profile_name: str):
     """
@@ -251,6 +252,13 @@ def get_respond_stream(user_input: str, profile: dict, should_obey: bool | None 
     limit = get_setting("memory_limit", 15)
     history = memory_manager.load_history(history_profile_name, limit=limit)
 
+    # 1. Lorebook Scanning
+    # Scan recent history (last 3 messages) + current user input for keywords
+    lore_file = profile.get("lorebook_path") or "lorebooks/default.json"
+    lorebook_data = load_lorebook(lore_file)
+    recent_context = history[-3:] + [{'role': 'user', 'content': user_input}]
+    activated_lore = scan_for_lore(recent_context, lorebook_data)
+
     # Determine relationship score and interaction mode
     rel_score = profile.get("relationship_score", 0)
     interaction_mode = get_setting("interaction_mode", "rp")
@@ -263,6 +271,10 @@ def get_respond_stream(user_input: str, profile: dict, should_obey: bool | None 
     if memory_core:
         # Prepend the Memory Core to provide long-term context
         scene_instruction = f"{memory_core}\n\n{scene_instruction}"
+
+    if activated_lore:
+        # Prepend activated lore to provide immediate world/character context
+        scene_instruction = f"{activated_lore}\n\n{scene_instruction}"
 
     if system_extra_info:
         system_extra_info = f"{scene_instruction}\n{system_extra_info}"
