@@ -15,6 +15,6 @@
 - [x] Save the updated Memory Core and new index back to disk upon completion. (9c22795)
 
 ## Phase 4: Context Injection
-- [ ] Modify `get_respond_stream` in `engines/responses.py` to fetch the current Memory Core.
-- [ ] Inject the summary string (if present) into the `system_extra_info` parameter or directly into the system prompt compilation.
+- [x] Modify `get_respond_stream` in `engines/responses.py` to fetch the current Memory Core. (79570e4)
+- [x] Inject the summary string (if present) into the `system_extra_info` parameter or directly into the system prompt compilation. (79570e4)
 - [ ] Validate that the AI references the injected memory correctly during chat.
