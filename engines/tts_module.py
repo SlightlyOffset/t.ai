@@ -162,11 +162,11 @@ def play_audio_windows(filename):
 
 def resolve_voice_refs(clone_ref):
     """
-    Resolves voice_clone_ref from a profile into a flat list of WAV file paths.
+    Resolves voice_clone_ref from a profile into a flat list of 3 WAV file paths.
 
     Accepts:
       - None                          → None
-      - "voices/Astgenne"             → all .wav files inside that directory (sorted)
+      - "voices/Astgenne"             → up to 3 .wav files inside that directory (sorted)
       - "voices/Astgenne/sample.wav"  → ["voices/Astgenne/sample.wav"]
       - ["voices/Astgenne", ...]      → expands any directories in the list
 
