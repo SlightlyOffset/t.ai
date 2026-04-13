@@ -96,6 +96,11 @@ class TaiMenu(App):
 
     CSS_PATH = "tcss/menu.tcss"
 
+    TTS_ENGINES = [
+        ("Edge-TTS", "edge-tts"),
+        ("XTTS-v2", "xtts"),
+    ]
+
     EDGE_VOICES = [
         ("Andrew (Male)", "en-US-AndrewNeural"),
         ("Emma (Female)", "en-US-EmmaNeural"),
@@ -209,6 +214,9 @@ class TaiMenu(App):
                 yield Label("LLM Model:", classes="sidebar_label")
                 yield Select([], id="model_select", prompt="Select Model")
 
+                yield Label("TTS Engine:", classes="sidebar_label")
+                yield Select([], id="tts_engine_select", prompt="Select TTS Engine")
+
                 with Horizontal(classes="setting_row"):
                     yield Label("TTS Master:", classes="setting_label")
                     yield Switch(value=get_setting("tts_enabled", False), id="sw_tts")
@@ -240,6 +248,7 @@ class TaiMenu(App):
 
         self.populate_models()
         self.populate_voices()
+        self.populate_tts_engines()
 
     def on_profile_selected(self, result: dict) -> None:
         """Callback handled when ProfileSelect screen is dismissed."""
@@ -326,6 +335,13 @@ class TaiMenu(App):
 
         return text
 
+    def populate_tts_engines(self) -> None:
+        """Populate the TTS engine selection list with available options."""
+        select = self.query_one("#tts_engine_select", Select)
+        select.set_options(self.TTS_ENGINES)
+        current_engine = self.character_profile.get("tts_engine", get_setting("default_tts_engine", "edge"))
+        select.value = current_engine
+
     def populate_models(self) -> None:
         """Fetch available models from Ollama and populate the Select widget."""
         try:
@@ -394,6 +410,10 @@ class TaiMenu(App):
                 self.add_message(f"Narration voice set to [bold]{val}[/bold]", role="system")
             else:
                 self.add_message(f"Failed to set narration voice to [bold]{val}[/bold]", role="system")
+        elif event.select.id == "tts_engine_select" and val is not None:
+            self.character_profile["tts_engine"] = val
+            save_json_atomic(self.char_path, self.character_profile)
+            self.add_message(f"TTS engine set to [bold]{val}[/bold]", role="system")
 
     def start_tts_worker(self) -> None:
         """Starts a worker thread for TTS generation and playback."""

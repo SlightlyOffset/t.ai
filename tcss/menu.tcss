@@ -68,7 +68,7 @@
     margin: 0 0 1 0;
     width: 100%;
 }
-#model_select, #character_voice_select, #narration_voice_select {
+#model_select, #character_voice_select, #narration_voice_select, #tts_engine_select {
     width: 100%;
     margin: 0 0 1 0;
 }
@@ -142,3 +142,5 @@ ChatInput:focus {
 Label {
     margin: 1 0;
 }
+
+
