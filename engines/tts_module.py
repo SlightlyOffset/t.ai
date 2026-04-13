@@ -180,17 +180,14 @@ def resolve_voice_refs(clone_ref):
     resolved = []
     for ref in refs:
         if os.path.isdir(ref):
-            # Limit to top 3 best samples for XTTS v2 quality/performance
             wavs = sorted(
                 os.path.join(ref, f) for f in os.listdir(ref)
                 if f.lower().endswith(".wav")
-            )[:3]
+            )
             resolved.extend(wavs)
         else:
             resolved.append(ref)
-    
-    # Final safety: if multiple refs/dirs provided, still cap at 3 total
-    return resolved[:3] if resolved else None
+    return resolved if resolved else None
 
 
 def generate_audio(text, filename, voice=None, engine="edge-tts", clone_ref=None, language="en"):
