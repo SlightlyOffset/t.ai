@@ -72,15 +72,13 @@ def ensure_voice_on_bridge(bridge_url, speaker_id, speaker_wavs):
             print(Fore.RED + f"[XTTS UPLOAD ERROR] No wav files found for speaker '{speaker_id}'" + Fore.RESET)
             return False
 
-        # STRICT LIMIT: Only upload the SINGLE largest/most-representative sample.
-        # This minimizes the POST body size to ~1-2MB, which is the most stable range
-        # for Colab/Ngrok during peak hours.
-        candidates = speaker_wavs[:3]
-        best_sample = max(candidates, key=os.path.getsize)
-        upload_samples = [best_sample]
+        # NEW LIMIT: Upload up to 3 samples.
+        # Since they are now normalized to 24kHz, the total size is small enough
+        # to be stable over Ngrok/Colab while providing much better cloning quality.
+        upload_samples = speaker_wavs[:3]
 
         if get_setting("debug_mode", False):
-            print(Fore.MAGENTA + f"[DEBUG] Using best single sample: {os.path.basename(best_sample)} ({os.path.getsize(best_sample)} bytes)" + Fore.RESET)
+            print(Fore.MAGENTA + f"[DEBUG] Uploading {len(upload_samples)} samples for voice cloning." + Fore.RESET)
 
         file_handles = [open(p, "rb") for p in upload_samples]
         try:
