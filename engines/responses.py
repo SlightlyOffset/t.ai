@@ -252,6 +252,7 @@ def get_respond_stream(user_input: str, profile: dict, should_obey: bool | None 
     
     limit = get_setting("memory_limit", 15)
     history = memory_manager.load_history(history_profile_name, limit=limit)
+    prompt_history = list(history) if history else []
 
     # 1. Lorebook Scanning
     # Scan recent history (last 3 messages) + current user input for keywords
@@ -301,16 +302,20 @@ def get_respond_stream(user_input: str, profile: dict, should_obey: bool | None 
     messages = [{'role': 'system', 'content': system_content}]
     
     if is_regeneration:
-        # If regenerating, we want the LLM to provide a new response to the LAST user message
-        # So we pop the last assistant message from history before sending to LLM
-        if history and history[-1].get("role") == "assistant":
-            history.pop()
-        messages.extend(history)
-        # The user_input passed in is the last user message
-        if not history or history[-1].get("content") != user_input:
+        # If regenerating, we want the LLM to provide a new response to the LAST user message.
+        # Remove the trailing assistant turn only from the prompt copy, not from persistent history.
+        if prompt_history and prompt_history[-1].get("role") == "assistant":
+            prompt_history.pop()
+        messages.extend(prompt_history)
+        # The user_input passed in is the last user message.
+        if (
+            not prompt_history
+            or prompt_history[-1].get("role") != "user"
+            or prompt_history[-1].get("content") != user_input
+        ):
             messages.append({'role': 'user', 'content': user_input})
     else:
-        messages.extend(history)
+        messages.extend(prompt_history)
         messages.append({'role': 'user', 'content': user_input})
 
     full_reply = ""
@@ -336,8 +341,11 @@ def get_respond_stream(user_input: str, profile: dict, should_obey: bool | None 
             full_reply += content
             yield content
 
-        # Score the user's message sentiment via a separate dedicated call
-        score_change = get_sentiment_score(user_input, model, remote_url, profile)
+        # Regeneration should be idempotent: do not re-score sentiment or mutate relationship score.
+        if is_regeneration:
+            score_change = 0
+        else:
+            score_change = get_sentiment_score(user_input, model, remote_url, profile)
         reply = full_reply.strip()
 
         # Parse for scene updates

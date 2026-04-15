@@ -731,7 +731,10 @@ class TaiMenu(App):
                     self.query_one("#chat_list").children[-1].remove()
                 except Exception:
                     pass
-                self.action_next_or_regenerate_response()
+                full_history = memory_manager.load_history(self.history_profile_name)
+                if len(full_history) >= 2 and full_history[-2].get("role") == "user":
+                    user_text = full_history[-2].get("content", "")
+                    self.stream_response(user_text, is_regeneration=True)
                 return
         
         # Trigger AI response
