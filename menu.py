@@ -21,6 +21,7 @@ from textual.containers import Vertical, Horizontal, ScrollableContainer
 from textual import work, events
 from textual.reactive import reactive
 from textual.message import Message
+from rich.markup import escape
 
 # First-party imports
 from engines.app_commands import app_commands, RestartRequested, RegenerateRequested
@@ -353,8 +354,10 @@ class TaiMenu(App):
 
     @staticmethod
     def format_summary(summary: str) -> str:
+        # Treat LLM summary text as untrusted markup input.
+        text = escape(summary)
         # Handle ## headers (Markdown style)
-        text = re.sub(r'^##\s+(.*)$', r'[b][u]\1[/u][/b]', summary, flags=re.MULTILINE)
+        text = re.sub(r'^##\s+(.*)$', r'[b][u]\1[/u][/b]', text, flags=re.MULTILINE)
         # Handle **bold**
         text = re.sub(r'\*\*(.*?)\*\*', r'[b]\1[/b]', text, flags=re.DOTALL)
         # Convert * to bullet points
