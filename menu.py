@@ -24,7 +24,7 @@ from textual.message import Message
 from rich.markup import escape
 
 # First-party imports
-from engines.app_commands import app_commands, RestartRequested, RegenerateRequested
+from engines.app_commands import app_commands, RestartRequested, RegenerateRequested, RewindRequested
 from engines.config import update_setting, get_setting
 from engines.responses import get_respond_stream, generate_summary, update_rolling_summary
 from engines.tts_module import generate_audio, play_audio, clean_text_for_tts
@@ -203,11 +203,34 @@ class TaiMenu(App):
                 # Visual feedback
                 try:
                     ai_bubble = self.query(".ai_bubble").last()
-                    ai_bubble.update(f"[bold {self.char_name_lbl_color}]{self.ch_name}:[/bold {self.char_name_lbl_color}]\n[dim italic]Regenerating response...[/dim italic]")
+                    ai_bubble.update(
+                        f"{self._message_header('assistant', self._current_assistant_message_number())}\n"
+                        "[dim italic]Regenerating response...[/dim italic]"
+                    )
                 except Exception:
                     pass
                 
                 self.stream_response(user_text, is_regeneration=True)
+
+    def _message_header(self, role: str, message_number: int | None) -> str:
+        """Build a standardized bubble header with optional message numbering."""
+        if role == "user":
+            name = self.user_name
+            color = self.user_name_lbl_color
+        else:
+            name = self.ch_name
+            color = self.char_name_lbl_color
+
+        if message_number is None:
+            return f"[bold {color}]{name}:[/bold {color}]"
+        return f"[dim]#{message_number}[/dim] [bold {color}]{name}:[/bold {color}]"
+
+    def _current_assistant_message_number(self) -> int | None:
+        """Return the 1-based history index for the latest assistant message, if available."""
+        full_history = memory_manager.load_history(self.history_profile_name)
+        if full_history and full_history[-1].get("role") == "assistant":
+            return len(full_history)
+        return None
 
     def refresh_last_ai_message(self, content: str, index: int, total: int) -> None:
         """Updates the text and indicator of the last AI message in the UI."""
@@ -215,7 +238,9 @@ class TaiMenu(App):
             ai_bubble = self.query(".ai_bubble").last()
             indicator = f"\n\n[dim]< {index + 1}/{total} >[/dim]" if total > 1 else ""
             formatted_text = self.format_rp(content, role="assistant") + indicator
-            ai_bubble.update(f"[bold {self.char_name_lbl_color}]{self.ch_name}:[/bold {self.char_name_lbl_color}]\n{formatted_text}")
+            ai_bubble.update(
+                f"{self._message_header('assistant', self._current_assistant_message_number())}\n{formatted_text}"
+            )
         except Exception:
             pass
 
@@ -513,7 +538,7 @@ class TaiMenu(App):
         starter_messages = self.character_profile.get("starter_messages", [])
         if starter_messages:
             random.shuffle(starter_messages)
-            self.add_message(self.format_rp(starter_messages[0], role="assistant"), role="assistant")
+            self.add_message(self.format_rp(starter_messages[0], role="assistant"), role="assistant", message_number=1)
             memory_manager.save_history(self.history_profile_name, [{"role": "assistant",
                                                                      "content": starter_messages[0]}],
                                         mood_score=self.character_profile.get("relationship_score", 0))
@@ -525,12 +550,13 @@ class TaiMenu(App):
 
         if len(messages_history) <= 15:
             self.add_message(f"--- Recap: {len(messages_history)} messages loaded ---", role="system")
-            for msg_data in messages_history:
+            for index, msg_data in enumerate(messages_history, start=1):
                 role = msg_data.get("role", "assistant")
                 content = msg_data.get("content", "")
                 if role != "system":
                     content = self.format_rp(content, role=role)
-                self.add_message(content, role=role, msg_data=msg_data)
+                message_number = index if role in ("user", "assistant") else None
+                self.add_message(content, role=role, msg_data=msg_data, message_number=message_number)
             self.add_message("--- Recap complete ---", role="system")
         else:
             # History is long, trigger summarization (Split: older history vs. recent 5)
@@ -538,10 +564,10 @@ class TaiMenu(App):
             recent_history = messages_history[-5:]
 
             self.add_message("--- [bold cyan]Analyzing past memories...[/bold cyan] ---", role="system")
-            self.summarize_and_display(older_history, recent_history)
+            self.summarize_and_display(older_history, recent_history, len(older_history) + 1)
 
     @work(thread=True)
-    def summarize_and_display(self, older_history: list, recent_history: list):
+    def summarize_and_display(self, older_history: list, recent_history: list, recent_start_index: int):
         """Worker for summarizing history in the background."""
         # Default to gemma2:2b for efficient summarization
         summarizer_model = get_setting("summarizer_model", "gemma2:2b")
@@ -553,12 +579,13 @@ class TaiMenu(App):
         def update_ui():
             self.add_message(self.format_summary(summary), role="summary")
             self.add_message("--- Recent Continuity ---", role="system")
-            for msg_data in recent_history:
+            for offset, msg_data in enumerate(recent_history):
                 role = msg_data.get("role", "assistant")
                 content = msg_data.get("content", "")
                 if role != "system":
                     content = self.format_rp(content, role=role)
-                self.add_message(content, role=role, msg_data=msg_data)
+                message_number = recent_start_index + offset if role in ("user", "assistant") else None
+                self.add_message(content, role=role, msg_data=msg_data, message_number=message_number)
             self.add_message("--- Recap complete ---", role="system")
 
         self.app.call_from_thread(update_ui)
@@ -676,7 +703,7 @@ class TaiMenu(App):
         # Update progress bar (Map -100/100 to 0/200)
         self.query_one("#rel_bar").progress = rel + 100
 
-    def add_message(self, text, role="user", msg_data=None):
+    def add_message(self, text, role="user", msg_data=None, message_number: int | None = None):
         container = self.query_one("#chat_list")
         if role == "system":
             container.mount(Static(text, markup=True, classes="system_msg"))
@@ -689,8 +716,7 @@ class TaiMenu(App):
         else:
             row_class = "user_row" if role == "user" else "ai_row"
             bubble_class = "user_bubble" if role == "user" else "ai_bubble"
-            name = self.user_name if role == "user" else self.ch_name
-            name_color = self.user_name_lbl_color if role == "user" else self.char_name_lbl_color
+            header = self._message_header(role, message_number)
             
             # Multi-response pagination indicator
             indicator = ""
@@ -700,12 +726,27 @@ class TaiMenu(App):
                     idx = msg_data.get("selected_index", 0)
                     indicator = f"\n\n[dim]< {idx + 1}/{len(alternatives)} >[/dim]"
 
-            bubble = Static(f"[bold {name_color}]{name}:[/bold {name_color}]\n{text}{indicator}", markup=True, classes=f"message {bubble_class}")
+            bubble = Static(f"{header}\n{text}{indicator}", markup=True, classes=f"message {bubble_class}")
             row = Horizontal(bubble, classes=f"message_row {row_class}")
             
             container.mount(row)
             
         container.scroll_end(animate=False)
+
+    def reload_chat_from_history(self) -> None:
+        """Rebuilds the visible chat list from persisted history."""
+        container = self.query_one("#chat_list", ScrollableContainer)
+        for child in list(container.children):
+            child.remove()
+
+        history = memory_manager.load_history(self.history_profile_name)
+        for index, msg_data in enumerate(history, start=1):
+            role = msg_data.get("role", "assistant")
+            content = msg_data.get("content", "")
+            if role != "system":
+                content = self.format_rp(content, role=role)
+            message_number = index if role in ("user", "assistant") else None
+            self.add_message(content, role=role, msg_data=msg_data, message_number=message_number)
 
     async def on_chat_input_submitted(self, event: ChatInput.Submitted) -> None:
         """Handles user input submission from ChatInput."""
@@ -714,7 +755,10 @@ class TaiMenu(App):
 
         # Format user message for display
         display_message = self.format_rp(message, role="user")
-        self.add_message(display_message, role="user")
+        user_message_number = None
+        if not message.startswith("//"):
+            user_message_number = memory_manager.get_history_length(self.history_profile_name) + 1
+        self.add_message(display_message, role="user", message_number=user_message_number)
 
         # Handle commands (original message)
         if message.startswith("//"):
@@ -739,9 +783,28 @@ class TaiMenu(App):
                     user_text = full_history[-2].get("content", "")
                     self.stream_response(user_text, is_regeneration=True)
                 return
+            except RewindRequested as rewind_request:
+                try:
+                    original_count, kept_count = memory_manager.rewind_history(
+                        self.history_profile_name,
+                        rewind_request.message_number,
+                    )
+                except ValueError as exc:
+                    self.add_message(f"[ERROR] {exc}", role="command")
+                    return
+
+                self.reload_chat_from_history()
+                # If summary state was reset by rewind, this will rebuild it once enough messages exist.
+                self.check_for_rolling_summary()
+                self.add_message(
+                    f"[SYSTEM] Rewound conversation from {original_count} to {kept_count} messages.",
+                    role="command",
+                )
+                return
         
         # Trigger AI response
-        self.stream_response(message)
+        assistant_message_number = (user_message_number + 1) if user_message_number is not None else None
+        self.stream_response(message, message_number=assistant_message_number)
 
     async def on_input_submitted(self, event: Input.Submitted) -> None:
         """Fallback for any standard Input widgets (legacy or other)."""
@@ -751,16 +814,25 @@ class TaiMenu(App):
                 self.value = value
         await self.on_chat_input_submitted(MockEvent(event.value))
         
-    def _prepare_stream_widgets(self, is_regeneration: bool) -> tuple[ScrollableContainer, Static]:
+    def _prepare_stream_widgets(
+        self,
+        is_regeneration: bool,
+        message_number: int | None = None,
+    ) -> tuple[ScrollableContainer, Static, str]:
         """Resolve chat widgets on the main thread before background streaming starts."""
         container = self.query_one("#chat_list", ScrollableContainer)
+        history_len = memory_manager.get_history_length(self.history_profile_name)
+        assistant_message_number = message_number
+        if assistant_message_number is None:
+            assistant_message_number = history_len if is_regeneration else history_len + 2
+        header = self._message_header("assistant", assistant_message_number)
 
         if is_regeneration:
             try:
                 ai_msg = self.query(".ai_bubble").last()
             except Exception:
                 ai_msg = Static(
-                    f"[bold {self.char_name_lbl_color}]{self.ch_name}:[/bold {self.char_name_lbl_color}]\n",
+                    f"{header}\n",
                     markup=True,
                     classes="message ai_bubble",
                 )
@@ -768,7 +840,7 @@ class TaiMenu(App):
                 container.mount(row)
         else:
             ai_msg = Static(
-                f"[bold {self.char_name_lbl_color}]{self.ch_name}:[/bold {self.char_name_lbl_color}]\n",
+                f"{header}\n",
                 markup=True,
                 classes="message ai_bubble",
             )
@@ -776,12 +848,12 @@ class TaiMenu(App):
             container.mount(row)
 
         container.scroll_end(animate=False)
-        return container, ai_msg
+        return container, ai_msg, header
 
-    def stream_response(self, message: str, is_regeneration: bool = False) -> None:
+    def stream_response(self, message: str, is_regeneration: bool = False, message_number: int | None = None) -> None:
         """Prepare UI targets on the main thread, then stream in a worker thread."""
-        container, ai_msg = self._prepare_stream_widgets(is_regeneration)
-        self._stream_response_worker(message, is_regeneration, container, ai_msg)
+        container, ai_msg, header = self._prepare_stream_widgets(is_regeneration, message_number=message_number)
+        self._stream_response_worker(message, is_regeneration, container, ai_msg, header)
 
     @work(thread=True)
     def _stream_response_worker(
@@ -790,6 +862,7 @@ class TaiMenu(App):
         is_regeneration: bool,
         container: ScrollableContainer,
         ai_msg: Static,
+        header: str,
     ) -> None:
         """Worker to handle the LLM streaming and TTS queuing."""
 
@@ -836,7 +909,7 @@ class TaiMenu(App):
             current_buffer += chunk
 
             # Update UI from thread
-            self.app.call_from_thread(ai_msg.update, f"[bold {self.char_name_lbl_color}]{self.ch_name}:[/bold {self.char_name_lbl_color}]\n{self.format_rp(full_response, role='assistant')}")
+            self.app.call_from_thread(ai_msg.update, f"{header}\n{self.format_rp(full_response, role='assistant')}")
             self.app.call_from_thread(container.scroll_end, animate=False)
 
             # ---------------------------------------------------------------
@@ -890,7 +963,7 @@ class TaiMenu(App):
             if alternatives:
                 idx = last_msg.get("selected_index", 0)
                 indicator = f"\n\n[dim]< {idx + 1}/{len(alternatives)} >[/dim]"
-                self.app.call_from_thread(ai_msg.update, f"[bold {self.char_name_lbl_color}]{self.ch_name}:[/bold {self.char_name_lbl_color}]\n{self.format_rp(full_response, role='assistant')}{indicator}")
+                self.app.call_from_thread(ai_msg.update, f"{header}\n{self.format_rp(full_response, role='assistant')}{indicator}")
 
         # Refresh score display
         profile_path = os.path.join("profiles", get_setting("current_character_profile"))
