@@ -745,9 +745,47 @@ class TaiMenu(App):
                 self.value = value
         await self.on_chat_input_submitted(MockEvent(event.value))
         
-    @work(thread=True)
+    def _prepare_stream_widgets(self, is_regeneration: bool) -> tuple[ScrollableContainer, Static]:
+        """Resolve chat widgets on the main thread before background streaming starts."""
+        container = self.query_one("#chat_list", ScrollableContainer)
+
+        if is_regeneration:
+            try:
+                ai_msg = self.query(".ai_bubble").last()
+            except Exception:
+                ai_msg = Static(
+                    f"[bold {self.char_name_lbl_color}]{self.ch_name}:[/bold {self.char_name_lbl_color}]\n",
+                    markup=True,
+                    classes="message ai_bubble",
+                )
+                row = Horizontal(ai_msg, classes="message_row ai_row")
+                container.mount(row)
+        else:
+            ai_msg = Static(
+                f"[bold {self.char_name_lbl_color}]{self.ch_name}:[/bold {self.char_name_lbl_color}]\n",
+                markup=True,
+                classes="message ai_bubble",
+            )
+            row = Horizontal(ai_msg, classes="message_row ai_row")
+            container.mount(row)
+
+        container.scroll_end(animate=False)
+        return container, ai_msg
+
     def stream_response(self, message: str, is_regeneration: bool = False) -> None:
-        """Worker to handle the LLM streaming and TTS queuing"""
+        """Prepare UI targets on the main thread, then stream in a worker thread."""
+        container, ai_msg = self._prepare_stream_widgets(is_regeneration)
+        self._stream_response_worker(message, is_regeneration, container, ai_msg)
+
+    @work(thread=True)
+    def _stream_response_worker(
+        self,
+        message: str,
+        is_regeneration: bool,
+        container: ScrollableContainer,
+        ai_msg: Static,
+    ) -> None:
+        """Worker to handle the LLM streaming and TTS queuing."""
 
         def _get_smart_split_points(text):
             """
@@ -771,27 +809,9 @@ class TaiMenu(App):
                         points.append(i + 1)
             return points
 
-        container = self.query_one("#chat_list")
-        
-        if is_regeneration:
-            try:
-                ai_msg = self.query(".ai_bubble").last()
-            except Exception:
-                # Fallback if no bubble found
-                ai_msg = Static(f"[bold {self.char_name_lbl_color}]{self.ch_name}:[/bold {self.char_name_lbl_color}]\n", markup=True, classes="message ai_bubble")
-                row = Horizontal(ai_msg, classes="message_row ai_row")
-                self.app.call_from_thread(container.mount, row)
-        else:
-            ai_msg = Static(f"[bold {self.char_name_lbl_color}]{self.ch_name}:[/bold {self.char_name_lbl_color}]\n", markup=True, classes="message ai_bubble")
-            row = Horizontal(ai_msg, classes="message_row ai_row")
-            self.app.call_from_thread(container.mount, row)
-        
-        self.app.call_from_thread(container.scroll_end, animate=False)
-
         full_response = ""
         current_buffer = ""
         tts_in_narration = False
-        first_chunk = True
 
         # Get setting for TTS
         char_voice = self.character_profile.get("preferred_edge_voice", None)
