@@ -1,0 +1,24 @@
+{
+    "entries": [
+        {
+            "id": "1",
+            "keys": [
+                "keyword1",
+                "keyword2"
+            ],
+            "content": "This is the information that will be injected into the AI's context when any of the keywords above are mentioned in the recent chat history.",
+            "enabled": true,
+            "insertion_order": 100
+        },
+        {
+            "id": "2",
+            "keys": [
+                "example character",
+                "npc name"
+            ],
+            "content": "Example character is a secondary NPC. Describing them here ensures the AI remembers their personality and appearance consistently.",
+            "enabled": true,
+            "insertion_order": 50
+        }
+    ]
+}
