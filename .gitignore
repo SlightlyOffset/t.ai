@@ -19,6 +19,7 @@ env/
 venv/
 aienv/
 ENV/
+*.lock
 
 # Local configuration files
 .env
@@ -67,3 +68,5 @@ conductor/
 
 # Llama Modelfile for custom LLM
 Modelfile
+
+pyproject.toml
