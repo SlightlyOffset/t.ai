@@ -29,7 +29,7 @@ ENV/
 java_poc/
 character_draft/
 
-# history / profiles / images / voice samples folders
+# history / profiles / lorebooks / images / voice samples folders
 history/
 profiles/
 wyvern_cards/
@@ -37,6 +37,7 @@ sillyTavern_cards/
 img/
 screenshot/
 voices/
+lorebooks/
 
 # XTTS v2 and Audio Cache
 models/
