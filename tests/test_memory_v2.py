@@ -92,6 +92,61 @@ class TestHistoryManager(unittest.TestCase):
         # Should NOT be recent anymore
         self.assertFalse(self.manager.is_recent_interaction(profile, hours=24))
 
+    def test_rewind_history_truncates_and_clamps_summarized_index(self):
+        profile = "RewindProfile"
+        history = [{"role": "user", "content": f"msg {i}"} for i in range(6)]
+        self.manager.save_history(
+            profile,
+            history,
+            mood_score=12,
+            current_scene="Cafe",
+            memory_core="Summary exists",
+            last_summarized_index=4,
+        )
+
+        original_count, kept_count = self.manager.rewind_history(profile, 3)
+        self.assertEqual((original_count, kept_count), (6, 3))
+
+        data = self.manager.get_full_data(profile)
+        self.assertEqual(len(data["history"]), 3)
+        self.assertEqual(data["metadata"]["last_summarized_index"], 0)
+        self.assertEqual(data["metadata"]["memory_core"], "")
+        self.assertEqual(data["metadata"]["mood_score"], 12)
+        self.assertEqual(data["metadata"]["current_scene"], "Cafe")
+
+    def test_rewind_history_keeps_valid_summary_index(self):
+        profile = "RewindProfile2"
+        history = [{"role": "assistant", "content": f"msg {i}"} for i in range(5)]
+        self.manager.save_history(
+            profile,
+            history,
+            memory_core="Still valid",
+            last_summarized_index=2,
+        )
+
+        self.manager.rewind_history(profile, 4)
+        data = self.manager.get_full_data(profile)
+        self.assertEqual(len(data["history"]), 4)
+        self.assertEqual(data["metadata"]["last_summarized_index"], 2)
+        self.assertEqual(data["metadata"]["memory_core"], "Still valid")
+
+    def test_rewind_history_clears_memory_core_on_large_rewind_distance(self):
+        profile = "RewindProfile3"
+        history = [{"role": "user", "content": f"msg {i}"} for i in range(30)]
+        self.manager.save_history(
+            profile,
+            history,
+            memory_core="Large summary",
+            last_summarized_index=10,
+        )
+
+        # Remove 15 messages (threshold): should clear summary state.
+        self.manager.rewind_history(profile, 15)
+        data = self.manager.get_full_data(profile)
+        self.assertEqual(len(data["history"]), 15)
+        self.assertEqual(data["metadata"]["memory_core"], "")
+        self.assertEqual(data["metadata"]["last_summarized_index"], 0)
+
 if __name__ == "__main__":
     unittest.main()
 
