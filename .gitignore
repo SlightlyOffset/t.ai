@@ -19,6 +19,7 @@ env/
 venv/
 aienv/
 ENV/
+*.lock
 
 # Local configuration files
 .env
@@ -28,7 +29,7 @@ ENV/
 java_poc/
 character_draft/
 
-# history / profiles / images / voice samples folders
+# history / profiles / lorebooks / images / voice samples folders
 history/
 profiles/
 wyvern_cards/
@@ -36,6 +37,7 @@ sillyTavern_cards/
 img/
 screenshot/
 voices/
+lorebooks/
 
 # XTTS v2 and Audio Cache
 models/
@@ -58,3 +60,14 @@ TODO.md
 
 # GitHub App credentials
 gha-creds-*.json
+
+conductor/
+.github/
+
+# Test coverage reports
+.coverage
+
+# Llama Modelfile for custom LLM
+Modelfile
+
+pyproject.toml

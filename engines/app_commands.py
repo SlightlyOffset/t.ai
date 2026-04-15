@@ -32,6 +32,10 @@ class RestartRequested(Exception):
     """Exception raised to signal the main loop to restart the application."""
     pass
 
+class RegenerateRequested(Exception):
+    """Exception raised to signal the TUI to regenerate the last AI message."""
+    pass
+
 def app_commands(ops: str, suppress_output: bool = False):
     """
     Dispatcher for internal operational commands.
@@ -274,6 +278,13 @@ def app_commands(ops: str, suppress_output: bool = False):
         else:
             _log("[SYSTEM] No TTS cache found to clear.", Fore.YELLOW)
 
+    def _regen():
+        """Regenerates the last AI response (TUI only)."""
+        if suppress_output:
+            raise RegenerateRequested()
+        else:
+            _log("[SYSTEM] Regeneration is only supported in TUI mode.", Fore.RED)
+
     def _toggle_mode():
         """Toggles between Roleplay (RP) and Casual interaction modes."""
         current_mode = get_setting("interaction_mode", "rp")
@@ -386,6 +397,8 @@ def app_commands(ops: str, suppress_output: bool = False):
         "//history": _history,
         "//recap": _history,
         "//clear_cache": _clear_cache,
+        "//regen": _regen,
+        "//regenerate": _regen,
     }
 
     pattern = re.match(r'^/+', ops.strip().lower())
@@ -413,6 +426,11 @@ def app_commands(ops: str, suppress_output: bool = False):
             return True
         except RestartRequested:
             raise
+        except RegenerateRequested:
+            if suppress_output:
+                raise
+            _log("[SYSTEM] Regeneration is only supported in TUI mode.", Fore.RED)
+            return True
         except Exception as e:
             _log(f"[ERROR] Command failed: {e}", Fore.RED)
             if suppress_output:

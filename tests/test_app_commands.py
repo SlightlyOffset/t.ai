@@ -10,7 +10,7 @@ from colorama import Fore, Style # Import Fore and Style
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
 # Import app_commands and its dependencies (memory_manager, get_setting) at the top level
-from engines.app_commands import app_commands, RestartRequested
+from engines.app_commands import app_commands, RestartRequested, RegenerateRequested
 from engines.memory_v2 import memory_manager
 from engines.config import get_setting
 
@@ -107,6 +107,12 @@ class TestAppCommands(unittest.TestCase):
         self.mock_memory_manager.load_history.assert_called_with("TestProfile", limit=15)
         output = strip_ansi(mock_stdout.getvalue())
         self.assertIn("User: Hello there!", output)
+
+    def test_regen_commands_propagate_in_tui_mode(self):
+        for cmd in ("//regen", "//regenerate"):
+            with self.subTest(cmd=cmd):
+                with self.assertRaises(RegenerateRequested):
+                    app_commands(cmd, suppress_output=True)
 
 
     @patch('sys.stdout', new_callable=StringIO)
