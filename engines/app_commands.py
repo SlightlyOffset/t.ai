@@ -426,6 +426,11 @@ def app_commands(ops: str, suppress_output: bool = False):
             return True
         except RestartRequested:
             raise
+        except RegenerateRequested:
+            if suppress_output:
+                raise
+            _log("[SYSTEM] Regeneration is only supported in TUI mode.", Fore.RED)
+            return True
         except Exception as e:
             _log(f"[ERROR] Command failed: {e}", Fore.RED)
             if suppress_output:
