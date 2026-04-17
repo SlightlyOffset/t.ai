@@ -14,7 +14,6 @@ def _resolve_tts_runtime(character_profile: dict) -> dict:
         "narrator_voice": get_setting("narration_tts_voice", "en-US-AndrewNeural"),
         "narrator_engine": "edge-tts",
         "narration_enable": get_setting("speak_narration", False),
-        "tts_enabled": get_setting("tts_enabled", False),
     }
 
 
@@ -60,7 +59,9 @@ def iterate_response_events(
         current_buffer += chunk
         yield {"type": "chunk", "full_response": full_response}
 
-        if not runtime["tts_enabled"]:
+        # Preserve legacy behavior: the TTS master toggle should apply immediately
+        # even while a response is still streaming.
+        if not get_setting("tts_enabled", False):
             continue
 
         split_points = get_tts_split_points(current_buffer)
@@ -91,7 +92,7 @@ def iterate_response_events(
 
         current_buffer = current_buffer[last_point:]
 
-    if runtime["tts_enabled"] and current_buffer.strip():
+    if get_setting("tts_enabled", False) and current_buffer.strip():
         cleaned = clean_text_for_tts(current_buffer.strip(), speak_narration=True)
         if cleaned:
             voice = runtime["narrator_voice"] if tts_in_narration else runtime["char_voice"]
