@@ -9,6 +9,7 @@ A lightweight, highly immersive, profile-based AI companion that lives in your t
 ## ✨ Key Features
 
 ### 🖥️ Modern TUI (Terminal User Interface)
+
 * **Minimalist Bubble Layout**: A clean, distraction-free chat interface with right-aligned user messages and left-aligned companion responses.
 * **Real-time Streaming**: Watch your companion "think" and type in real-time within immersive side-bordered bubbles.
 * **Immersive Styling**: Automatic italicization and dimming of RP narration (`*actions*`) to separate dialogue from description.
@@ -17,7 +18,7 @@ A lightweight, highly immersive, profile-based AI companion that lives in your t
 ### 🎙️ Advanced Audio & Voice Cloning
 
 * **Multi-Voice TTS**: Automatically switches between a narrator voice for actions (`*...*`) and a character voice for dialogue.
-    * *Note: Using the **XTTS Colab Bridge** is highly recommended for voice cloning. Local installation is complex and resource-heavy, while the bridge provides high-speed GPU inference for free.*
+  * *Note: Using the **XTTS Colab Bridge** is highly recommended for voice cloning. Local installation is complex and resource-heavy, while the bridge provides high-speed GPU inference for free.*
 * **Voice Cloning (XTTS v2)**: Clone distinct voices locally or via Colab, giving your companion a truly unique and realistic voice.
 * **Edge Neural Support**: Built-in support for Microsoft's high-fidelity neural voices as a lightweight fallback.
 * **Pipelined Streaming**: Uses a multi-threaded queue system to generate and play audio *while* the LLM is still typing. Zero latency.
@@ -69,6 +70,7 @@ A lightweight, highly immersive, profile-based AI companion that lives in your t
 ### Running the Companion
 
 Simply run the main launcher to perform dependency checks and start the TUI:
+
 ```bash
 python main.py
 ```
@@ -87,26 +89,27 @@ There are two ways to import a character:
 
 ### 1. In-App Command
 
-While running the CLI application, use the `//import_card` command followed by the file path:
+While running the CLI/TUI application, use the `//import_card` command followed by the file path:
 
-```
+``` text
 //import_card "C:\path\to\your\character.png"
 ```
 
 The new profile will be added to your `profiles` directory and will be available the next time you use the `//change_character` command.
 
-2. Standalone Importer Script
+1. Standalone Importer Script
 
-If you want to import multiple cards without running the main TUI, you can use the standalone `card_importer.py` script.
+If you want to import multiple cards without running the main CLI/TUI, you can use the standalone `card_importer.py` script.
 
-1.  Run the script from your terminal:
+1. Run the script from your terminal:
+
     ```bash
     python card_importer.py
     ```
 
-2.  Follow the prompt to import a single card or a whole directory:
-    *   **Single Import**: `//import "C:\path\to\character.png"`
-    *   **Batch Import**: `//batch_import "C:\path\to\characters_folder"`
+2. Follow the prompt to import a single card or a whole directory:
+    * **Single Import**: `//import "C:\path\to\character.png"`
+    * **Batch Import**: `//batch_import "C:\path\to\characters_folder"`
 
 This provides a quick way to batch-import your character library.
 
@@ -162,4 +165,4 @@ Feel free to fork, submit PRs, or suggest personalities.
 
 ---
 
-### 💖 Made with love by [@SlightlyOffset](https://github.com/SlightlyOffset). And thanks to my swamp of AI slaves for their support!
+### 💖 Made with love by [@SlightlyOffset](https://github.com/SlightlyOffset). And thanks to my swamp of AI slaves for their support
