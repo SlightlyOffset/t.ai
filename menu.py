@@ -103,8 +103,8 @@ class ChatInput(TextArea):
     def on_key(self, event: events.Key) -> None:
         """Handle Enter for submission and provide fallbacks for newlines."""
         if event.key == "enter":
-            # Only submit on plain "enter". 
-            # If the terminal sends "shift+enter" or "ctrl+enter" as distinct keys, 
+            # Only submit on plain "enter".
+            # If the terminal sends "shift+enter" or "ctrl+enter" as distinct keys,
             # they will fall through to the default TextArea behavior (newline).
             event.prevent_default()
             text = self.text.strip()
@@ -265,7 +265,7 @@ class TaiMenu(App):
                 yield Label("Relationship:", classes="sidebar_label")
                 yield ProgressBar(total=200, show_percentage=False, id="rel_bar")
                 yield Label("Score: [bold]0[/bold]", id="lbl_rel")
-                
+
                 yield Label("--- User ---", classes="sidebar_header")
                 with Vertical(id="user_avatar_wrap", classes="avatar_container"):
                     yield Image(self._current_user_avatar_path, id="avatar_portrait_user")
@@ -301,7 +301,7 @@ class TaiMenu(App):
         """Initializes the app and load character profiles."""
         self.start_tts_worker()
         self.load_initial_state()
-        
+
         if not self.char_path:
             from ProfileSelectScreen import ProfileSelect
             self.push_screen(ProfileSelect(), callback=self.on_profile_selected)
@@ -316,10 +316,10 @@ class TaiMenu(App):
         if result:
             char_name = result.get("character")
             user_name = result.get("user")
-            
+
             char_path = os.path.join("profiles", char_name) if char_name else None
             user_path = os.path.join("user_profiles", user_name) if user_name else None
-            
+
             self.switch_profile(char_path, user_path)
 
     def switch_profile(self, char_path: str, user_path: str = None) -> None:
@@ -343,7 +343,7 @@ class TaiMenu(App):
 
         self.char_path = char_path
         self.user_path = user_path
-        
+
         # Re-initialize state
         self.load_initial_state()
         self.populate_models()
@@ -361,12 +361,13 @@ class TaiMenu(App):
         - *italic* -> [i][dim]italic[/dim][/i] (Narration)
         - "speech" -> [yellow]"speech"[/yellow] (Highlight)
         """
+        character_profile = self.character_profile or {}
         user_name = self.user_profile.get("name", "User") if self.user_profile else "User"
-        character_name = self.character_profile.get("name", "Assistant") if self.character_profile else "Assistant"
+        character_name = character_profile.get("name", "Assistant")
         user_speech_color = "yellow"
         if self.user_profile:
             user_speech_color = self.user_profile.get("colors", {}).get("speech_highlight", "yellow")
-        assistant_speech_color = self.character_profile.get("colors", {}).get("speech_highlight", "yellow")
+        assistant_speech_color = character_profile.get("colors", {}).get("speech_highlight", "yellow")
         return format_roleplay_text(
             text=text,
             role=role,
@@ -396,10 +397,10 @@ class TaiMenu(App):
                 # Display only the part after the last slash (removes user/repo paths)
                 display_name = full_name.split('/')[-1]
                 options.append((display_name, full_name))
-            
+
             select = self.query_one("#model_select", Select)
             select.set_options(options)
-            
+
             # Set current model as default
             current_model = self.character_profile.get("llm_model", get_setting("default_llm_model", "llama3"))
             # Find the best match in the list
@@ -437,7 +438,7 @@ class TaiMenu(App):
     def on_select_changed(self, event: Select.Changed) -> None:
         """Update the character profile with selected LLM, Character Voice, or Narration Voice."""
         from engines.utilities import save_json_atomic
-        
+
         # Handle cases where value might be Select.BLANK (NULL)
         val = event.value if event.value != Select.BLANK else None
 
@@ -521,7 +522,7 @@ class TaiMenu(App):
     def summarize_and_display(self, older_history: list, recent_history: list, recent_start_index: int):
         """Worker for summarizing history in the background."""
         summary = generate_recap_summary(older_history, user_name=self.user_name, char_name=self.ch_name)
-        
+
         def update_ui():
             self.add_message(self.format_summary(summary), role="summary")
             self.add_message("--- Recent Continuity ---", role="system")
@@ -629,7 +630,7 @@ class TaiMenu(App):
             row_class = "user_row" if role == "user" else "ai_row"
             bubble_class = "user_bubble" if role == "user" else "ai_bubble"
             header = self._message_header(role, message_number)
-            
+
             # Multi-response pagination indicator
             indicator = ""
             if msg_data and role == "assistant":
@@ -640,9 +641,9 @@ class TaiMenu(App):
 
             bubble = Static(f"{header}\n{text}{indicator}", markup=True, classes=f"message {bubble_class}")
             row = Horizontal(bubble, classes=f"message_row {row_class}")
-            
+
             container.mount(row)
-            
+
         container.scroll_end(animate=False)
 
     def reload_chat_from_history(self) -> None:
@@ -707,7 +708,11 @@ class TaiMenu(App):
                     role="command",
                 )
                 return
-        
+
+            if command_action["type"] == "command_noop":
+                self.add_message("[SYSTEM] Recognized command pattern but no action taken: Non-existent command.", role="command")
+                return
+
         # Trigger AI response
         assistant_message_number = (user_message_number + 1) if user_message_number is not None else None
         self.stream_response(message, message_number=assistant_message_number)
@@ -719,7 +724,7 @@ class TaiMenu(App):
             def __init__(self, value):
                 self.value = value
         await self.on_chat_input_submitted(MockEvent(event.value))
-        
+
     def _prepare_stream_widgets(
         self,
         is_regeneration: bool,
@@ -827,7 +832,7 @@ class TaiMenu(App):
             user_name=self.user_name,
             char_name=self.ch_name,
         )
-        
+
         # Persist the update
         memory_manager.update_memory_core(self.history_profile_name, new_core, new_index)
         self.log(f"Memory Core updated to index {new_index}")
