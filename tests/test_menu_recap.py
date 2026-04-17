@@ -63,9 +63,10 @@ class TestMenuRecap(unittest.TestCase):
 
         # Check if summarize_and_display was called
         app.summarize_and_display.assert_called_once()
-        older, recent = app.summarize_and_display.call_args[0]
+        older, recent, recent_start = app.summarize_and_display.call_args[0]
         self.assertEqual(len(older), 15)
         self.assertEqual(len(recent), 5)
+        self.assertEqual(recent_start, 16)
 
     @patch('menu.memory_manager')
     @patch('menu.get_setting')

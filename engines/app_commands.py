@@ -36,6 +36,12 @@ class RegenerateRequested(Exception):
     """Exception raised to signal the TUI to regenerate the last AI message."""
     pass
 
+class RewindRequested(Exception):
+    """Exception raised to signal the TUI to rewind history to a message index."""
+    def __init__(self, message_number: int):
+        super().__init__(f"Rewind requested to message {message_number}")
+        self.message_number = message_number
+
 def app_commands(ops: str, suppress_output: bool = False):
     """
     Dispatcher for internal operational commands.
@@ -285,6 +291,46 @@ def app_commands(ops: str, suppress_output: bool = False):
         else:
             _log("[SYSTEM] Regeneration is only supported in TUI mode.", Fore.RED)
 
+    def _rewind(args):
+        """Rewinds conversation to a specific message number. Usage: //rewind <message_number>"""
+        if not args or not args.strip():
+            _log("[ERROR] Usage: //rewind <message_number>", Fore.RED)
+            return
+
+        raw_value = args.strip()
+        try:
+            message_number = int(raw_value)
+        except ValueError:
+            _log(f"[ERROR] Invalid message number: {raw_value}", Fore.RED)
+            return
+
+        if message_number < 1:
+            _log("[ERROR] Message number must be 1 or greater.", Fore.RED)
+            return
+
+        current_profile_setting = get_setting("current_character_profile")
+        if not current_profile_setting:
+            _log("[SYSTEM] No character profile active. Cannot rewind history.", Fore.RED)
+            return
+
+        profile_name = os.path.basename(current_profile_setting).replace(".json", "")
+        full_data = memory_manager.get_full_data(profile_name)
+        history = full_data.get("history", [])
+
+        if not history:
+            _log("[SYSTEM] No history found for the current profile.", Fore.YELLOW)
+            return
+
+        if message_number > len(history):
+            _log(f"[ERROR] Message number out of range. Current history has {len(history)} messages.", Fore.RED)
+            return
+
+        if suppress_output:
+            raise RewindRequested(message_number)
+
+        original_count, kept_count = memory_manager.rewind_history(profile_name, message_number)
+        _log(f"[SYSTEM] Rewound conversation from {original_count} to {kept_count} messages.", Fore.GREEN)
+
     def _toggle_mode():
         """Toggles between Roleplay (RP) and Casual interaction modes."""
         current_mode = get_setting("interaction_mode", "rp")
@@ -399,6 +445,7 @@ def app_commands(ops: str, suppress_output: bool = False):
         "//clear_cache": _clear_cache,
         "//regen": _regen,
         "//regenerate": _regen,
+        "//rewind": _rewind,
     }
 
     pattern = re.match(r'^/+', ops.strip().lower())
@@ -430,6 +477,11 @@ def app_commands(ops: str, suppress_output: bool = False):
             if suppress_output:
                 raise
             _log("[SYSTEM] Regeneration is only supported in TUI mode.", Fore.RED)
+            return True
+        except RewindRequested:
+            if suppress_output:
+                raise
+            _log("[SYSTEM] Rewind is only supported in TUI mode.", Fore.RED)
             return True
         except Exception as e:
             _log(f"[ERROR] Command failed: {e}", Fore.RED)

@@ -10,7 +10,7 @@ from colorama import Fore, Style # Import Fore and Style
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
 # Import app_commands and its dependencies (memory_manager, get_setting) at the top level
-from engines.app_commands import app_commands, RestartRequested, RegenerateRequested
+from engines.app_commands import app_commands, RestartRequested, RegenerateRequested, RewindRequested
 from engines.memory_v2 import memory_manager
 from engines.config import get_setting
 
@@ -113,6 +113,46 @@ class TestAppCommands(unittest.TestCase):
             with self.subTest(cmd=cmd):
                 with self.assertRaises(RegenerateRequested):
                     app_commands(cmd, suppress_output=True)
+
+    def test_rewind_command_propagates_in_tui_mode(self):
+        self.mock_get_setting.return_value = "TestProfile.json"
+        self.mock_memory_manager.get_full_data.return_value = {
+            "history": [
+                {"role": "user", "content": "1"},
+                {"role": "assistant", "content": "2"},
+                {"role": "user", "content": "3"},
+            ]
+        }
+
+        with self.assertRaises(RewindRequested) as cm:
+            app_commands("//rewind 2", suppress_output=True)
+
+        self.assertEqual(cm.exception.message_number, 2)
+
+    def test_rewind_command_calls_memory_manager_in_cli_mode(self):
+        self.mock_get_setting.return_value = "TestProfile.json"
+        self.mock_memory_manager.get_full_data.return_value = {
+            "history": [
+                {"role": "user", "content": "1"},
+                {"role": "assistant", "content": "2"},
+                {"role": "user", "content": "3"},
+            ]
+        }
+        self.mock_memory_manager.rewind_history.return_value = (3, 2)
+
+        result = app_commands("//rewind 2")
+        self.assertTrue(result)
+        self.mock_memory_manager.rewind_history.assert_called_once_with("TestProfile", 2)
+
+    def test_rewind_command_rejects_out_of_range_in_tui_mode(self):
+        self.mock_get_setting.return_value = "TestProfile.json"
+        self.mock_memory_manager.get_full_data.return_value = {
+            "history": [{"role": "user", "content": "1"}]
+        }
+
+        success, messages = app_commands("//rewind 3", suppress_output=True)
+        self.assertTrue(success)
+        self.assertTrue(any("out of range" in msg.lower() for msg in messages))
 
 
     @patch('sys.stdout', new_callable=StringIO)

@@ -12,6 +12,8 @@ class HistoryManager:
     """
     Manages loading, saving, and truncation of conversation history.
     """
+    REWIND_MEMORY_CORE_RESET_THRESHOLD = 15
+
     def __init__(self, history_dir: str = "history"):
         self.history_dir = history_dir
         self._ensure_history_dir()
@@ -39,8 +41,8 @@ class HistoryManager:
         data = self.get_full_data(profile_name)
         return len(data.get("history", [])) if data else 0
 
-    def save_history(self, profile_name: str, history: list, mood_score: int = 0, 
-                     current_scene: str = "Unknown Location", memory_core: str = "", 
+    def save_history(self, profile_name: str, history: list, mood_score: int = 0,
+                     current_scene: str = "Unknown Location", memory_core: str = "",
                      last_summarized_index: int = 0) -> None:
         """
         Saves history to a JSON file with metadata.
@@ -87,7 +89,7 @@ class HistoryManager:
             },
             "history": []
         }
-        
+
         if not os.path.exists(filename):
             return default_data
 
@@ -186,10 +188,49 @@ class HistoryManager:
         data = self.get_full_data(profile_name)
         data["metadata"]["memory_core"] = summary
         data["metadata"]["last_summarized_index"] = last_index
-        
+
         filename = self._get_filename(profile_name)
         with open(filename, "w", encoding="UTF-8") as f:
             json.dump(data, f, ensure_ascii=False, indent=4)
+
+    def rewind_history(self, profile_name: str, keep_count: int) -> tuple[int, int]:
+        """
+        Truncates conversation history to the first `keep_count` messages.
+
+        Args:
+            profile_name (str): The profile whose history should be rewound.
+            keep_count (int): Number of earliest messages to keep (0..len(history)).
+
+        Returns:
+            tuple[int, int]: (original_count, kept_count)
+        """
+        if keep_count < 0:
+            raise ValueError("keep_count must be 0 or greater")
+
+        data = self.get_full_data(profile_name)
+        history = data.get("history", [])
+        original_count = len(history)
+        removed_count = original_count - keep_count
+
+        if keep_count > original_count:
+            raise ValueError("keep_count cannot exceed history length")
+
+        metadata = data.setdefault("metadata", {})
+        old_last_summarized = int(metadata.get("last_summarized_index", 0) or 0)
+        if removed_count >= self.REWIND_MEMORY_CORE_RESET_THRESHOLD or keep_count < old_last_summarized:
+            metadata["memory_core"] = ""
+            metadata["last_summarized_index"] = 0
+        else:
+            metadata["last_summarized_index"] = min(old_last_summarized, keep_count)
+
+        metadata["last_interaction"] = datetime.now().strftime("%Y-%m-%d | %H:%M:%S")
+        data["history"] = history[:keep_count]
+
+        filename = self._get_filename(profile_name)
+        with open(filename, "w", encoding="UTF-8") as f:
+            json.dump(data, f, ensure_ascii=False, indent=4)
+
+        return original_count, keep_count
 
 # Global instance for easy access across the application
 memory_manager = HistoryManager()
