@@ -36,5 +36,13 @@ class TestMemoryRolling(unittest.TestCase):
         self.assertEqual(self.manager.get_memory_core(self.profile_name), "New summary")
         self.assertEqual(self.manager.get_last_summarized_index(self.profile_name), 10)
 
+    def test_narrative_state_roundtrip(self):
+        self.assertEqual(self.manager.get_narrative_state(self.profile_name), {})
+        state = {"current_goal": "Advance scene", "unresolved_threads": ["Find clue"]}
+        self.manager.update_narrative_state(self.profile_name, state, turn_metrics={"total": 8.2})
+        self.assertEqual(self.manager.get_narrative_state(self.profile_name), state)
+        data = self.manager.get_full_data(self.profile_name)
+        self.assertEqual(data["metadata"]["last_turn_metrics"], {"total": 8.2})
+
 if __name__ == "__main__":
     unittest.main()
