@@ -561,7 +561,7 @@ def get_respond_stream(user_input: str, profile: dict, should_obey: bool | None 
                 if (
                     regeneration_previous_replies
                     and buffered_reply
-                    and buffered_reply in regeneration_previous_replies
+                    and _is_duplicate_reply(buffered_reply, regeneration_previous_replies)
                 ):
                     retry_messages = list(messages) + [
                         {
