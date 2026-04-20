@@ -11,6 +11,7 @@ import re
 from datetime import datetime
 
 from engines.config import get_setting
+from engines.utilities import sanitize_profile_name
 
 
 def _tokenize(text: str) -> set[str]:
@@ -269,7 +270,7 @@ def update_narrative_state(previous_state: dict | None, user_input: str, assista
 def append_turn_telemetry(history_profile_name: str, payload: dict) -> None:
     if not get_setting("overhaul_instrumentation_enabled", False):
         return
-    safe_name = "".join(char for char in history_profile_name if char.isalnum() or char in ("_", "-", " ")).strip().replace(" ", "_")
+    safe_name = sanitize_profile_name(history_profile_name)
     if not safe_name:
         safe_name = "session"
     out_dir = "history"

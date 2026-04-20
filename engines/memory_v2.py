@@ -7,6 +7,7 @@ import json
 import re
 import os
 from datetime import datetime
+from engines.utilities import sanitize_profile_name
 
 class HistoryManager:
     """
@@ -25,10 +26,7 @@ class HistoryManager:
 
     def _get_filename(self, profile_name: str) -> str:
         """Generates a safe filename for the history JSON file."""
-        # Allow alphanumeric, underscores, dashes
-        # Replace spaces with underscores
-        safe_name = profile_name.replace(" ", "_")
-        safe_name = "".join(c for c in safe_name if c.isalnum() or c in ('_', '-')).rstrip()
+        safe_name = sanitize_profile_name(profile_name)
         return os.path.join(self.history_dir, f"{safe_name}_history.json")
 
     def has_history(self, profile_name: str) -> bool:

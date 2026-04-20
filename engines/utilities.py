@@ -10,6 +10,14 @@ import json
 from colorama import Fore, Style
 from engines.actions import APPS
 
+def sanitize_profile_name(profile_name: str) -> str:
+    """
+    Normalizes a profile/session name to a filesystem-safe stem.
+    Allows alphanumeric characters, underscores, and dashes.
+    """
+    safe_name = (profile_name or "").replace(" ", "_")
+    return "".join(char for char in safe_name if char.isalnum() or char in ("_", "-")).rstrip()
+
 def save_json_atomic(file_path, data, indent=4):
     """
     Saves a dictionary to a JSON file atomically to prevent corruption.
