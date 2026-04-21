@@ -273,7 +273,7 @@ def append_turn_telemetry(history_profile_name: str, payload: dict) -> None:
     safe_name = sanitize_profile_name(history_profile_name)
     if not safe_name:
         safe_name = "session"
-    out_dir = "history"
+    out_dir = "telemetry"
     if not os.path.exists(out_dir):
         os.makedirs(out_dir)
     out_path = os.path.join(out_dir, f"{safe_name}_telemetry.jsonl")
