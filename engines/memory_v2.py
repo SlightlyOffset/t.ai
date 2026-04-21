@@ -7,6 +7,7 @@ import json
 import re
 import os
 from datetime import datetime
+from engines.utilities import sanitize_profile_name
 
 class HistoryManager:
     """
@@ -25,10 +26,7 @@ class HistoryManager:
 
     def _get_filename(self, profile_name: str) -> str:
         """Generates a safe filename for the history JSON file."""
-        # Allow alphanumeric, underscores, dashes
-        # Replace spaces with underscores
-        safe_name = profile_name.replace(" ", "_")
-        safe_name = "".join(c for c in safe_name if c.isalnum() or c in ('_', '-')).rstrip()
+        safe_name = sanitize_profile_name(profile_name) or "session"
         return os.path.join(self.history_dir, f"{safe_name}_history.json")
 
     def has_history(self, profile_name: str) -> bool:
@@ -85,7 +83,9 @@ class HistoryManager:
                 "mood_score": 0,
                 "current_scene": "Unknown Location",
                 "memory_core": "",
-                "last_summarized_index": 0
+                "last_summarized_index": 0,
+                "narrative_state": {},
+                "last_turn_metrics": {},
             },
             "history": []
         }
@@ -112,7 +112,9 @@ class HistoryManager:
                             "mood_score": 0,
                             "current_scene": "Unknown Location",
                             "memory_core": "",
-                            "last_summarized_index": 0
+                            "last_summarized_index": 0,
+                            "narrative_state": {},
+                            "last_turn_metrics": {},
                         },
                         "history": [m for m in data if m.get("role") != "system"]
                     }
@@ -188,6 +190,23 @@ class HistoryManager:
         data = self.get_full_data(profile_name)
         data["metadata"]["memory_core"] = summary
         data["metadata"]["last_summarized_index"] = last_index
+
+        filename = self._get_filename(profile_name)
+        with open(filename, "w", encoding="UTF-8") as f:
+            json.dump(data, f, ensure_ascii=False, indent=4)
+
+    def get_narrative_state(self, profile_name: str) -> dict:
+        """Retrieves persisted narrative state for pipeline-based generation."""
+        data = self.get_full_data(profile_name)
+        return data.get("metadata", {}).get("narrative_state", {})
+
+    def update_narrative_state(self, profile_name: str, narrative_state: dict, turn_metrics: dict | None = None) -> None:
+        """Persists narrative state and optional turn metrics without touching history messages."""
+        data = self.get_full_data(profile_name)
+        metadata = data.setdefault("metadata", {})
+        metadata["narrative_state"] = narrative_state or {}
+        if turn_metrics is not None:
+            metadata["last_turn_metrics"] = turn_metrics
 
         filename = self._get_filename(profile_name)
         with open(filename, "w", encoding="UTF-8") as f:

@@ -579,12 +579,15 @@ class TaiMenu(App):
         if not has_history:
             self.print_starter_message()
 
-        # Load history recap if enabled
+        # Run a history recap on startup only when enabled and prior history exists.
         if get_setting("auto_recap_on_start", False) and has_history:
             self.run_recap()
 
+
         # Print tip message
+        self.add_message("Tip: Use [bold]Ctrl+B[/bold] to toggle the sidebar.", role="tip_message")
         self.add_message("Tip: Use [bold]Ctrl+J[/bold] for a newline.", role="tip_message")
+        self.add_message("Tip: Type [bold cyan]//help[/bold cyan] for a list of available commands.", role="tip_message")
 
     def update_sidebar(self):
         """Update the sidebar content including avatars and relationship stats."""

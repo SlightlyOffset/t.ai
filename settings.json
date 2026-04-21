@@ -19,5 +19,14 @@
     "clear_on_start": false,
     "auto_recap_on_start": true,
     "summarizer_model": "gemma2:2b",
-    "interaction_mode": "rp"
+    "interaction_mode": "rp",
+    "overhaul_pipeline_enabled": true,
+    "overhaul_instrumentation_enabled": true,
+    "overhaul_state_enabled": true,
+    "overhaul_memory_enabled": true,
+    "overhaul_planner_enabled": true,
+    "overhaul_candidates_enabled": true,
+    "overhaul_critic_enabled": true,
+    "overhaul_candidate_count": 3,
+    "overhaul_style_profile": "balanced"
 }
