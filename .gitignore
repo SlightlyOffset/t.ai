@@ -29,8 +29,9 @@ ENV/
 java_poc/
 character_draft/
 
-# history / profiles / lorebooks / images / voice samples folders
+# history / telemetry / profiles / lorebooks / images / voice samples folders
 history/
+telemetry/
 profiles/
 wyvern_cards/
 sillyTavern_cards/
@@ -53,6 +54,7 @@ voices/
 # App settings
 settings.json
 
+# TODO file
 TODO.md
 
 # gemini-cli settings

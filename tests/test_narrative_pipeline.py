@@ -1,6 +1,11 @@
+import json
+import os
+import tempfile
 import unittest
+from unittest.mock import patch
 
 from engines.narrative_pipeline import (
+    append_turn_telemetry,
     build_canonical_state,
     build_narrative_plan,
     needs_critic_pass,
@@ -58,6 +63,33 @@ class TestNarrativePipeline(unittest.TestCase):
         updated = update_narrative_state({}, "continue", "I will return later with the answer.", 1, "Inn")
         self.assertEqual(updated["current_scene"], "Inn")
         self.assertTrue(updated["unresolved_threads"])
+
+    @patch("engines.narrative_pipeline.get_setting")
+    def test_append_turn_telemetry_writes_to_telemetry_dir(self, mock_get_setting):
+        mock_get_setting.side_effect = lambda key, default=None: {
+            "overhaul_instrumentation_enabled": True,
+        }.get(key, default)
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            previous_cwd = os.getcwd()
+            try:
+                os.chdir(temp_dir)
+                append_turn_telemetry("Test Profile", {"event": "unit-test", "score": 3.14})
+                telemetry_dir = os.path.join(temp_dir, "telemetry")
+                self.assertTrue(os.path.isdir(telemetry_dir))
+
+                files = os.listdir(telemetry_dir)
+                self.assertEqual(len(files), 1)
+                self.assertTrue(files[0].endswith("_telemetry.jsonl"))
+
+                out_path = os.path.join(telemetry_dir, files[0])
+                with open(out_path, "r", encoding="utf-8") as file:
+                    row = json.loads(file.readline())
+                self.assertEqual(row["event"], "unit-test")
+                self.assertEqual(row["score"], 3.14)
+                self.assertIn("timestamp", row)
+            finally:
+                os.chdir(previous_cwd)
 
 
 if __name__ == "__main__":
