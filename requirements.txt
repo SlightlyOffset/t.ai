@@ -7,7 +7,4 @@ edge-tts
 pyttsx3
 python-dotenv
 Pillow
-torch
-torchvision
-torchaudio
-TTS
+
