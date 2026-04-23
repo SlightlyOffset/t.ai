@@ -47,6 +47,46 @@ def _is_duplicate_reply(candidate: str, previous_replies: list[str]) -> bool:
     previous_norm = {_normalize_for_duplicate_check(reply) for reply in previous_replies if reply}
     return candidate_norm in previous_norm
 
+
+def _extract_remote_message_content(response: requests.Response) -> str:
+    """Parse common remote LLM response envelopes, with plain-text fallback."""
+    response.raise_for_status()
+
+    result = None
+    try:
+        result = response.json()
+    except ValueError:
+        result = None
+
+    if isinstance(result, dict):
+        choices = result.get("choices")
+        if isinstance(choices, list) and choices:
+            first = choices[0]
+            if isinstance(first, dict):
+                message = first.get("message")
+                if isinstance(message, dict):
+                    content = message.get("content")
+                    if isinstance(content, str) and content.strip():
+                        return content.strip()
+                text = first.get("text")
+                if isinstance(text, str) and text.strip():
+                    return text.strip()
+
+        message = result.get("message")
+        if isinstance(message, dict):
+            content = message.get("content")
+            if isinstance(content, str) and content.strip():
+                return content.strip()
+
+        content = result.get("content")
+        if isinstance(content, str) and content.strip():
+            return content.strip()
+
+    plain = (response.text or "").strip()
+    if plain:
+        return plain
+    raise ValueError("Remote LLM response did not include parseable content.")
+
 def apply_mood_decay(profile_path: str, history_profile_name: str):
     """
     Calculates time passed since the last interaction and decays the relationship
@@ -198,11 +238,7 @@ def generate_summary(messages: list, model: str, remote_url: str = None, user_na
             # OpenAI-compatible API call
             payload = {"messages": summary_messages, "temperature": 0.3, "max_tokens": 500}
             response = requests.post(full_url, json=payload, stream=False, timeout=60)
-            result = response.json()
-            # Remote API might return differently, adjust as needed
-            if 'choices' in result:
-                return result['choices'][0]['message']['content'].strip()
-            return result.get('message', {}).get('content', 'Error generating remote summary.')
+            return _extract_remote_message_content(response)
         else:
             result = ollama.chat(model=model, messages=summary_messages, stream=False)
             return result['message']['content'].strip()
@@ -245,10 +281,7 @@ def update_rolling_summary(existing_core: str, new_messages: list, model: str,
             full_url = f"{remote_url.rstrip('/')}/chat"
             payload = {"messages": summary_messages, "temperature": 0.3, "max_tokens": 600}
             response = requests.post(full_url, json=payload, stream=False, timeout=60)
-            result = response.json()
-            if 'choices' in result:
-                return result['choices'][0]['message']['content'].strip()
-            return result.get('message', {}).get('content', 'Error updating remote rolling summary.')
+            return _extract_remote_message_content(response)
         else:
             result = ollama.chat(model=model, messages=summary_messages, stream=False)
             return result['message']['content'].strip()
@@ -262,14 +295,7 @@ def _call_llm_once(messages: list, model: str, remote_url: str = None, temperatu
         full_url = f"{remote_url.rstrip('/')}/chat"
         payload = {"messages": messages, "temperature": temperature, "max_tokens": max_tokens}
         response = requests.post(full_url, json=payload, stream=False, timeout=90)
-        response.raise_for_status()
-        result = response.json()
-        if isinstance(result, dict):
-            if "choices" in result and result["choices"]:
-                return result["choices"][0]["message"]["content"].strip()
-            if "message" in result and isinstance(result["message"], dict):
-                return result["message"].get("content", "").strip()
-        return ""
+        return _extract_remote_message_content(response)
 
     result = ollama.chat(
         model=model,

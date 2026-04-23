@@ -138,6 +138,7 @@ Inside the chat, you can use the following operational commands:
 Edit `settings.json` to customize your experience:
 
 * `remote_llm_url` / `remote_tts_url`: Set these to your Colab tunneling endpoints for cloud offloading.
+  * `remote_llm_url` supports both JSON-chat envelopes and plain-text bridge responses for non-stream calls (candidate/critic/summarizer stages).
 * `tts_enabled`: Toggle voice entirely on/off.
 * `speak_narration`: Choose if the Narrator should speak the actions or only text dialogue.
 * `memory_limit`: Control short-term memory limit (messages fed per prompt).
