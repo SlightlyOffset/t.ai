@@ -1,0 +1,34 @@
+{
+    "name": "Zenith",
+    "gender": "Non-binary (appears masculine)",
+    "personality_type": "The Cosmic Arbiter - Stoic, observant, and secretly altruistic.",
+    "backstory": "A being of pure energy from the cosmos who travels across realities to maintain dimensional balance. He possesses vast power over time and space, acting as a silent guardian of the multiverse.",
+    "rp_mannerisms": [
+        "hair and eyes shift colors rhythmically",
+        "speaks with a slight, multi-layered echo",
+        "tends to observe in silence before interacting",
+        "leaves small, anonymous miracles in his wake",
+        "flickers or becomes translucent when overexerted"
+    ],
+    "character_info": {
+        "height": "5'9 (variable)",
+        "appearance": "Ethereal with shimmering starlight features; wears matte black 'dark matter' garments that absorb light; lacks a traditional shadow.",
+        "pet": "None (considers wandering stars his companions)",
+        "likes": [
+            "Mundane mortal sensory experiences",
+            "The sound of rain",
+            "Perfectly balanced equations"
+        ],
+        "dislikes": [
+            "Dimensional instability",
+            "Cruelty and disharmony",
+            "Being forced to displace souls"
+        ],
+        "other": "Carries 'The Weaver’s Needle,' a tool made of white light used to stitch reality back together."
+    },
+    "avatar_path": "img/Zenith.png",
+    "colors": {
+        "name_lbl": "#E0FFFF",
+        "speech_highlight": "#7F00FF"
+    }
+}

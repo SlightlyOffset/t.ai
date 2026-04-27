@@ -6,18 +6,22 @@ Handles per-profile history storage, metadata (timestamps, mood), and history tr
 import json
 import re
 import os
+import threading
 from datetime import datetime
-from engines.utilities import sanitize_profile_name
+from engines.utilities import sanitize_profile_name, save_json_atomic
 
 class HistoryManager:
     """
     Manages loading, saving, and truncation of conversation history.
+    Thread-safe writes to prevent concurrent modification corruption.
     """
     REWIND_MEMORY_CORE_RESET_THRESHOLD = 15
 
     def __init__(self, history_dir: str = "history"):
         self.history_dir = history_dir
         self._ensure_history_dir()
+        self._write_locks = {}
+        self._lock_manager = threading.Lock()
 
     def _ensure_history_dir(self) -> None:
         """Ensures the history directory exists on the filesystem."""
@@ -28,6 +32,13 @@ class HistoryManager:
         """Generates a safe filename for the history JSON file."""
         safe_name = sanitize_profile_name(profile_name) or "session"
         return os.path.join(self.history_dir, f"{safe_name}_history.json")
+
+    def _get_profile_lock(self, profile_name: str) -> threading.Lock:
+        """Get or create a per-profile lock for thread-safe writes."""
+        with self._lock_manager:
+            if profile_name not in self._write_locks:
+                self._write_locks[profile_name] = threading.Lock()
+            return self._write_locks[profile_name]
 
     def has_history(self, profile_name: str) -> bool:
         """Checks if the history file exists for a given profile."""
@@ -43,7 +54,7 @@ class HistoryManager:
                      current_scene: str = "Unknown Location", memory_core: str = "",
                      last_summarized_index: int = 0) -> None:
         """
-        Saves history to a JSON file with metadata.
+        Saves history to a JSON file with metadata (thread-safe).
 
         Args:
             profile_name (str): The name of the character.
@@ -53,23 +64,24 @@ class HistoryManager:
             memory_core (str): The consolidated rolling summary.
             last_summarized_index (int): The index of the last message included in the summary.
         """
-        filename = self._get_filename(profile_name)
-        now = datetime.now()
-        current_time = now.strftime("%Y-%m-%d | %H:%M:%S")
+        lock = self._get_profile_lock(profile_name)
+        with lock:
+            filename = self._get_filename(profile_name)
+            now = datetime.now()
+            current_time = now.strftime("%Y-%m-%d | %H:%M:%S")
 
-        data_to_save = {
-            "metadata": {
-                "last_interaction": current_time,
-                "mood_score": mood_score,
-                "current_scene": current_scene,
-                "memory_core": memory_core,
-                "last_summarized_index": last_summarized_index
-            },
-            "history": history
-        }
+            data_to_save = {
+                "metadata": {
+                    "last_interaction": current_time,
+                    "mood_score": mood_score,
+                    "current_scene": current_scene,
+                    "memory_core": memory_core,
+                    "last_summarized_index": last_summarized_index
+                },
+                "history": history
+            }
 
-        with open(filename, "w", encoding="UTF-8") as f:
-            json.dump(data_to_save, f, ensure_ascii=False, indent=4)
+            save_json_atomic(filename, data_to_save)
 
     def get_full_data(self, profile_name: str) -> dict:
         """
@@ -186,14 +198,15 @@ class HistoryManager:
         return data.get("metadata", {}).get("last_summarized_index", 0)
 
     def update_memory_core(self, profile_name: str, summary: str, last_index: int) -> None:
-        """Updates the Memory Core and its last summarized index without losing history."""
-        data = self.get_full_data(profile_name)
-        data["metadata"]["memory_core"] = summary
-        data["metadata"]["last_summarized_index"] = last_index
+        """Updates the Memory Core and its last summarized index without losing history (thread-safe)."""
+        lock = self._get_profile_lock(profile_name)
+        with lock:
+            data = self.get_full_data(profile_name)
+            data["metadata"]["memory_core"] = summary
+            data["metadata"]["last_summarized_index"] = last_index
 
-        filename = self._get_filename(profile_name)
-        with open(filename, "w", encoding="UTF-8") as f:
-            json.dump(data, f, ensure_ascii=False, indent=4)
+            filename = self._get_filename(profile_name)
+            save_json_atomic(filename, data)
 
     def get_narrative_state(self, profile_name: str) -> dict:
         """Retrieves persisted narrative state for pipeline-based generation."""
@@ -201,16 +214,17 @@ class HistoryManager:
         return data.get("metadata", {}).get("narrative_state", {})
 
     def update_narrative_state(self, profile_name: str, narrative_state: dict, turn_metrics: dict | None = None) -> None:
-        """Persists narrative state and optional turn metrics without touching history messages."""
-        data = self.get_full_data(profile_name)
-        metadata = data.setdefault("metadata", {})
-        metadata["narrative_state"] = narrative_state or {}
-        if turn_metrics is not None:
-            metadata["last_turn_metrics"] = turn_metrics
+        """Persists narrative state and optional turn metrics without touching history messages (thread-safe)."""
+        lock = self._get_profile_lock(profile_name)
+        with lock:
+            data = self.get_full_data(profile_name)
+            metadata = data.setdefault("metadata", {})
+            metadata["narrative_state"] = narrative_state or {}
+            if turn_metrics is not None:
+                metadata["last_turn_metrics"] = turn_metrics
 
-        filename = self._get_filename(profile_name)
-        with open(filename, "w", encoding="UTF-8") as f:
-            json.dump(data, f, ensure_ascii=False, indent=4)
+            filename = self._get_filename(profile_name)
+            save_json_atomic(filename, data)
 
     def rewind_history(self, profile_name: str, keep_count: int) -> tuple[int, int]:
         """
@@ -245,9 +259,10 @@ class HistoryManager:
         metadata["last_interaction"] = datetime.now().strftime("%Y-%m-%d | %H:%M:%S")
         data["history"] = history[:keep_count]
 
-        filename = self._get_filename(profile_name)
-        with open(filename, "w", encoding="UTF-8") as f:
-            json.dump(data, f, ensure_ascii=False, indent=4)
+        lock = self._get_profile_lock(profile_name)
+        with lock:
+            filename = self._get_filename(profile_name)
+            save_json_atomic(filename, data)
 
         return original_count, keep_count
 
