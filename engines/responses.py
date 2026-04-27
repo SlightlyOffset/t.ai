@@ -237,9 +237,9 @@ def generate_summary(messages: list, model: str, remote_url: str = None, user_na
     ]
 
     try:
-        # Hybrid Offloading: Summarization is always local
-        utility_model = get_setting("local_utility_model", "llama3.2")
-        result = ollama.chat(model=utility_model, messages=summary_messages, stream=False)
+        # Hybrid Offloading: Summarization is always local, but respects caller-provided model
+        summarizer_model = model or get_setting("summarizer_model", get_setting("local_utility_model", "llama3.2"))
+        result = ollama.chat(model=summarizer_model, messages=summary_messages, stream=False)
         return result['message']['content'].strip()
     except Exception as e:
         return f"Error generating summary: {str(e)}"
@@ -277,9 +277,9 @@ def update_rolling_summary(existing_core: str, new_messages: list, model: str,
     ]
 
     try:
-        # Hybrid Offloading: Summarization is always local
-        utility_model = get_setting("local_utility_model", "llama3.2")
-        result = ollama.chat(model=utility_model, messages=summary_messages, stream=False)
+        # Hybrid Offloading: Summarization is always local, but respects caller-provided model
+        summarizer_model = model or get_setting("summarizer_model", get_setting("local_utility_model", "llama3.2"))
+        result = ollama.chat(model=summarizer_model, messages=summary_messages, stream=False)
         return result['message']['content'].strip()
     except Exception as e:
         return f"Error updating rolling summary: {str(e)}"
@@ -317,11 +317,18 @@ def _generate_candidate_replies(messages: list, model: str, remote_url: str | No
                 "n": candidate_count
             }
             response = requests.post(full_url, json=payload, stream=False, timeout=120)
+            response.raise_for_status()
             data = response.json()
             if isinstance(data, dict) and "candidates" in data:
-                return data["candidates"]
+                candidates = data["candidates"]
+                # Validate and coerce candidates to non-empty strings
+                if isinstance(candidates, list):
+                    candidates = [str(c).strip() for c in candidates if c]
+                    if candidates:
+                        return candidates
         except Exception as e:
-            print(f"Batch remote candidate generation failed: {e}. Falling back to sequential.")
+            if get_setting("debug_mode", False):
+                print(f"Batch remote candidate generation failed: {e}. Falling back to sequential.")
 
     def generate_task(idx):
         temperature = min(1.0, 0.75 + (0.08 * idx))
@@ -373,7 +380,6 @@ def _perform_post_processing(
     current_scene: str,
     rel_score: int,
     pipeline_flags: dict,
-    canonical_state: any,
     narrative_plan: any,
     memory_stack: any,
     selected_metrics: dict,
@@ -451,8 +457,9 @@ def _perform_post_processing(
             },
         )
     except Exception as e:
-        print(f"Background post-processing failed: {e}")
-        traceback.print_exc()
+        if get_setting("debug_mode", False):
+            print(f"Background post-processing failed: {e}")
+            traceback.print_exc()
 
 def get_respond_stream(user_input: str, profile: dict, should_obey: bool | None = None, profile_path: str = None, system_extra_info: str = None, history_profile_name: str = None, is_regeneration: bool = False):
     """
@@ -761,7 +768,6 @@ def get_respond_stream(user_input: str, profile: dict, should_obey: bool | None 
                 "current_scene": current_scene,
                 "rel_score": rel_score,
                 "pipeline_flags": pipeline_flags,
-                "canonical_state": canonical_state,
                 "narrative_plan": narrative_plan,
                 "memory_stack": memory_stack,
                 "selected_metrics": selected_metrics,
