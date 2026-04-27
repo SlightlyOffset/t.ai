@@ -63,9 +63,6 @@ TODO.md
 # GitHub App credentials
 gha-creds-*.json
 
-conductor/
-.github/
-
 # Test coverage reports
 .coverage
 
