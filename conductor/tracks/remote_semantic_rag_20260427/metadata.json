@@ -1,0 +1,8 @@
+{
+  "track_id": "remote_semantic_rag_20260427",
+  "title": "Remote Semantic RAG (Colab/Kaggle Offloading)",
+  "status": "planned",
+  "created_at": "2026-04-27",
+  "updated_at": "2026-04-27",
+  "description": "Offload lorebook indexing and semantic retrieval to the remote GPU bridge to improve character intelligence and world-info awareness without local CPU overhead."
+}
