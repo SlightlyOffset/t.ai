@@ -169,7 +169,7 @@ def get_sentiment_score(user_input: str, model: str, remote_url: str = None, pro
     """
     char_name = profile.get("name", "the character") if profile else "the character"
     utility_model = get_setting("local_utility_model", "llama3.2")
-    
+
     messages = [
         {
             "role": "system",
@@ -184,8 +184,8 @@ def get_sentiment_score(user_input: str, model: str, remote_url: str = None, pro
     try:
         # Hybrid Offloading: Utility tasks are always local
         result = ollama.chat(
-            model=utility_model, 
-            messages=messages, 
+            model=utility_model,
+            messages=messages,
             stream=False,
             options={"temperature": 0.1}
         )
@@ -379,6 +379,9 @@ def _perform_post_processing(
     full_reply: str,
     current_scene: str,
     rel_score: int,
+
+    memory_core: str,
+    last_summarized_index: int,
     pipeline_flags: dict,
     narrative_plan: any,
     memory_stack: any,
@@ -390,7 +393,7 @@ def _perform_post_processing(
     try:
         reply = full_reply.strip()
         new_scene = current_scene
-        
+
         # Parse for scene updates
         scene_match = re.search(r'\[SCENE:\s*(.*?)\]', reply)
         if scene_match:
@@ -421,7 +424,14 @@ def _perform_post_processing(
             full_history.append({'role': 'user', 'content': user_input})
             full_history.append({'role': 'assistant', 'content': reply})
 
-        memory_manager.save_history(history_profile_name, full_history, mood_score=rel_score, current_scene=new_scene)
+        memory_manager.save_history(
+            history_profile_name,
+            full_history,
+            mood_score=rel_score,
+            current_scene=new_scene,
+            memory_core=memory_core,
+            last_summarized_index=last_summarized_index
+        )
 
         # Update Narrative State
         if pipeline_flags["enabled"] and pipeline_flags["state"]:
@@ -489,6 +499,7 @@ def get_respond_stream(user_input: str, profile: dict, should_obey: bool | None 
     full_data = memory_manager.get_full_data(history_profile_name)
     current_scene = full_data.get("metadata", {}).get("current_scene", "Unknown Location")
     memory_core = full_data.get("metadata", {}).get("memory_core", "")
+    last_summarized_index = full_data.get("metadata", {}).get("last_summarized_index", 0)
 
     limit = get_setting("memory_limit", 15)
     history = memory_manager.load_history(history_profile_name, limit=limit)
@@ -767,6 +778,8 @@ def get_respond_stream(user_input: str, profile: dict, should_obey: bool | None 
                 "full_reply": full_reply,
                 "current_scene": current_scene,
                 "rel_score": rel_score,
+                "memory_core": memory_core,
+                "last_summarized_index": last_summarized_index,
                 "pipeline_flags": pipeline_flags,
                 "narrative_plan": narrative_plan,
                 "memory_stack": memory_stack,
