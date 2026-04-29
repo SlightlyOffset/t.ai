@@ -159,24 +159,45 @@ class TunnelManager:
             raise
     
     def _extract_cloudflare_url(self) -> Optional[str]:
-        """Extract Cloudflare URL from process output."""
+        """Extract Cloudflare URL from process output (reads stderr and stdout)."""
         if not self.process:
             return None
         
         try:
-            # Try reading from process output for a short time
-            for _ in range(10):  # Try for ~10 seconds
+            import select
+            
+            # cloudflared outputs the tunnel URL to stderr, not stdout
+            # We need to read both stderr and stdout
+            output_lines = []
+            
+            for attempt in range(15):  # Try for ~15 seconds
                 if self.process.poll() is not None:
-                    # Process ended, read all output
-                    stdout, stderr = self.process.communicate()
-                    combined = stdout + stderr
-                else:
-                    # Process still running, read available output
-                    combined = self.process.stdout.read() if self.process.stdout else ""
+                    # Process ended
+                    if self.process.stderr:
+                        remaining = self.process.stderr.read()
+                        if remaining:
+                            output_lines.append(remaining)
+                    if self.process.stdout:
+                        remaining = self.process.stdout.read()
+                        if remaining:
+                            output_lines.append(remaining)
+                    break
                 
-                # Look for .trycloudflare.com URL
+                # Try to read from stderr (non-blocking)
+                try:
+                    if self.process.stderr:
+                        line = self.process.stderr.readline()
+                        if line:
+                            output_lines.append(line)
+                            logger.debug(f"cloudflared: {line.strip()}")
+                except Exception:
+                    pass
+                
+                # Check accumulated output for URL
+                combined = ''.join(output_lines)
                 match = re.search(r'(https://[a-z0-9\-]+\.trycloudflare\.com)', combined)
                 if match:
+                    logger.info(f"Found tunnel URL: {match.group(1)}")
                     return match.group(1)
                 
                 time.sleep(1)
