@@ -59,7 +59,7 @@ This file tracks all major tracks for the project. Each track has its own detail
 
 ---
 
-- [ ] **Track: Cloudflare Bridge Tunneling**
+- [x] **Track: Cloudflare Bridge Tunneling**
 *Link: [./tracks/cloudflare_bridge_tunnel_20260427/](./tracks/cloudflare_bridge_tunnel_20260427/)*
 
 
