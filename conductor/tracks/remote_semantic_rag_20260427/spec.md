@@ -1,17 +1,22 @@
-# Specification: Remote Semantic RAG
+# Specification: Remote Semantic RAG (Optimized)
 
 ## Problem
-The current Lorebook system is based on exact keyword matching. It fails if the user uses synonyms or slightly different phrasing. Local RAG (on the user's CPU) is slow and adds dependency overhead to the TUI.
+The current Lorebook system is based on exact keyword matching. Standard RAG implementations require two network round-trips (1. Get Lore, 2. Get Chat), adding significant latency (300ms+).
 
-## Solution
-Leverage the T4 GPU on Colab/Kaggle to perform vector embeddings and similarity search.
+## Solution: Single-Trip Internal RAG
+Leverage the T4 GPU on Colab/Kaggle to perform vector retrieval **server-side** during the chat request. This eliminates the extra network round-trip.
 
 ### Architecture
-1. **Sync Phase:** Upon connection, the TUI sends the entire `lorebook.json` to a new `/sync_lore` endpoint on the bridge.
-2. **Indexing:** The bridge uses `sentence-transformers` (on GPU) to embed all lore entries.
-3. **Retrieval Phase:** Before generating a response, the TUI sends the last 3 messages to a `/query_lore` endpoint.
-4. **Injection:** The bridge returns the top 3 most relevant entries. The TUI injects these into the system prompt.
+1. **Sync Phase:** Upon connection, the TUI sends the entire `lorebook.json` to the `/sync_lore` endpoint.
+2. **Indexing:** The bridge embeds all lore entries using `sentence-transformers` and stores them in an in-memory vector index (FAISS or simple Torch tensors).
+3. **Optimized Request:** The TUI sends a normal chat request with a header or field: `"use_rag": true`.
+4. **Server-Side Injection:**
+    *   The Bridge receives the chat request.
+    *   **Internal Step:** It embeds the user's latest message.
+    *   **Internal Step:** It queries the local vector index for the Top 3 entries.
+    *   **Internal Step:** It prepends these entries to the System Prompt automatically.
+5. **Generation:** The LLM processes the enriched prompt and begins streaming immediately.
 
 ### Components
-- **Local:** `engines/lorebook.py` needs a new `RemoteLoreClient`.
-- **Remote:** `Standalone LLM Bridge` needs an embedding model (e.g., `all-MiniLM-L6-v2`) and a simple in-memory vector search.
+- **Local:** `engines/responses.py` simply toggles a flag; no longer needs to wait for a separate retrieval call.
+- **Remote:** `Standalone LLM Bridge` becomes "Context-Aware," managing both retrieval and generation in a single pipeline.
