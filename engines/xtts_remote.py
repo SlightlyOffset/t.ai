@@ -163,6 +163,16 @@ def generate_remote_xtts(text, filename, speaker_wav, language="en", user_name="
                 # Wrap the collected PCM in a WAV header and save
                 save_pcm_as_wav(all_pcm, filename)
                 return True
+            elif response.status_code == 404 and "not found" in response.text.lower():
+                # Cache De-sync detected: Server lost the speaker profile.
+                if get_setting("debug_mode", False):
+                    print(Fore.YELLOW + f"[XTTS REMOTE] Cache stale for '{speaker_id}'. Re-uploading..." + Fore.RESET)
+                if speaker_id in _UPLOADED_VOICES:
+                    _UPLOADED_VOICES.remove(speaker_id)
+                
+                # Recursively try again (it will trigger ensure_voice_on_bridge this time)
+                # We only allow one retry to prevent infinite loops if the server is truly broken
+                return generate_remote_xtts(text, filename, speaker_wav, language=language, user_name=user_name)
             else:
                 if not get_setting("suppress_errors", False):
                     print(Fore.RED + f"[XTTS REMOTE ERROR] {response.status_code}: {response.text}" + Fore.RESET)
