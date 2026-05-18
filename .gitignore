@@ -92,3 +92,9 @@ skills-lock.json
 
 # Marketing materials
 marketing/
+
+# Debug logs
+debug/
+
+# Any backup file
+*.bak
