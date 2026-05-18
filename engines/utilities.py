@@ -7,7 +7,6 @@ import os
 import re
 import wave
 import json
-import time
 from datetime import datetime
 from colorama import Fore, Style
 from engines.actions import APPS

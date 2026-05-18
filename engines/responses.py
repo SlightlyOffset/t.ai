@@ -351,7 +351,7 @@ def _call_llm_once(messages: list, model: str, remote_url: str = None, temperatu
         return content
     except Exception as e:
         log_debug("LLM_ERROR", {"error": str(e), "traceback": traceback.format_exc()})
-        return f"Error: {str(e)}"
+        return ""
 
 
 def _generate_candidate_replies(messages: list, model: str, remote_url: str | None = None, candidate_count: int = 1, user_name: str = "User", char_name: str = "Assistant") -> list[str]:
