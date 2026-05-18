@@ -26,9 +26,9 @@ def _get_speaker_id(speaker_wavs):
     path_string = "|".join(sorted(speaker_wavs))
     return hashlib.md5(path_string.encode()).hexdigest()[:12]
 
-def ensure_voice_on_bridge(bridge_url, speaker_id, speaker_wavs):
-    """Checks if the bridge has the speaker; uploads if missing."""
-    if speaker_id in _UPLOADED_VOICES:
+def ensure_voice_on_bridge(bridge_url, speaker_id, speaker_wavs, force=False):
+    """Checks if the bridge has the speaker; uploads if missing. Use force=True to skip the check."""
+    if speaker_id in _UPLOADED_VOICES and not force:
         return True
 
     # Common headers for ngrok-based bridges to bypass warning pages
@@ -48,24 +48,25 @@ def ensure_voice_on_bridge(bridge_url, speaker_id, speaker_wavs):
             print(Fore.RED + f"[XTTS BRIDGE CONN ERROR] Cannot reach bridge at {bridge_url}. Is it running? ({e})" + Fore.RESET)
             return False
 
-        # 2. Check if speaker exists
-        check_url = f"{bridge_url.rstrip('/')}/check_speaker/{speaker_id}"
-        if get_setting("debug_mode", False):
-            print(Fore.MAGENTA + f"[DEBUG] Checking speaker existence: {check_url}" + Fore.RESET)
+        # 2. Check if speaker exists (Skip if force=True)
+        if not force:
+            check_url = f"{bridge_url.rstrip('/')}/check_speaker/{speaker_id}"
+            if get_setting("debug_mode", False):
+                print(Fore.MAGENTA + f"[DEBUG] Checking speaker existence: {check_url}" + Fore.RESET)
+                
+            r = requests.get(check_url, headers=headers, timeout=10)
             
-        r = requests.get(check_url, headers=headers, timeout=10)
-        
-        if r.status_code == 200:
-            try:
-                data = r.json()
-                if data.get("exists"):
-                    _UPLOADED_VOICES.add(speaker_id)
-                    return True
-            except ValueError:
-                pass 
+            if r.status_code == 200:
+                try:
+                    data = r.json()
+                    if data.get("exists"):
+                        _UPLOADED_VOICES.add(speaker_id)
+                        return True
+                except ValueError:
+                    pass 
 
-        # 3. Upload if missing
-        print(Fore.CYAN + f"[XTTS REMOTE] Uploading voice profile '{speaker_id}' to bridge..." + Fore.RESET)
+        # 3. Upload if missing or forced
+        print(Fore.CYAN + f"[XTTS REMOTE] Syncing voice profile '{speaker_id}' to bridge..." + Fore.RESET)
         upload_url = f"{bridge_url.rstrip('/')}/upload_speaker"
 
         if not speaker_wavs:
@@ -115,7 +116,7 @@ def ensure_voice_on_bridge(bridge_url, speaker_id, speaker_wavs):
         print(Fore.RED + f"[XTTS BRIDGE CONN ERROR] {type(e).__name__}: {e}" + Fore.RESET)
         return False
 
-def generate_remote_xtts(text, filename, speaker_wav, language="en", user_name="User"):
+def generate_remote_xtts(text, filename, speaker_wav, language="en", user_name="User", force_reupload=False, retry_count=0):
     """
     Sends a generation request to the remote Google Colab bridge.
     Uses speaker caching to avoid redundant uploads.
@@ -136,7 +137,7 @@ def generate_remote_xtts(text, filename, speaker_wav, language="en", user_name="
         speaker_wav = [speaker_wav]
 
     # Ensure speaker is cached on the bridge
-    if not ensure_voice_on_bridge(bridge_url, speaker_id, speaker_wav):
+    if not ensure_voice_on_bridge(bridge_url, speaker_id, speaker_wav, force=force_reupload):
         return False
 
     try:
@@ -163,19 +164,29 @@ def generate_remote_xtts(text, filename, speaker_wav, language="en", user_name="
                 # Wrap the collected PCM in a WAV header and save
                 save_pcm_as_wav(all_pcm, filename)
                 return True
-            elif response.status_code == 404 and "not found" in response.text.lower():
-                # Cache De-sync detected: Server lost the speaker profile.
-                if get_setting("debug_mode", False):
-                    print(Fore.YELLOW + f"[XTTS REMOTE] Cache stale for '{speaker_id}'. Re-uploading..." + Fore.RESET)
+            elif response.status_code == 404 and retry_count < 1:
+                # 404 can mean many things, but usually it's a cache de-sync.
+                # We check the text body if possible, but the status code 404 is the primary signal.
+                err_detail = ""
+                try: 
+                    # If stream=True, reading .text might be tricky if it's already used or not buffered
+                    # But for errors, we usually want to know what happened.
+                    err_detail = response.text
+                except: pass
+
+                if get_setting("debug_mode", False) or "not found" in err_detail.lower():
+                    print(Fore.YELLOW + f"[XTTS REMOTE] Cache stale or Speaker '{speaker_id}' not found. Forcing re-sync..." + Fore.RESET)
+                
                 if speaker_id in _UPLOADED_VOICES:
                     _UPLOADED_VOICES.remove(speaker_id)
                 
-                # Recursively try again (it will trigger ensure_voice_on_bridge this time)
-                # We only allow one retry to prevent infinite loops if the server is truly broken
-                return generate_remote_xtts(text, filename, speaker_wav, language=language, user_name=user_name)
+                # Recursively try again with force_reupload=True
+                return generate_remote_xtts(text, filename, speaker_wav, language=language, user_name=user_name, force_reupload=True, retry_count=retry_count+1)
             else:
                 if not get_setting("suppress_errors", False):
-                    print(Fore.RED + f"[XTTS REMOTE ERROR] {response.status_code}: {response.text}" + Fore.RESET)
+                    # For stream=True, if it's an error, we read the content now
+                    err_text = response.text if response.text else "No error detail"
+                    print(Fore.RED + f"[XTTS REMOTE ERROR] {response.status_code}: {err_text}" + Fore.RESET)
                 return False
 
     except Exception as e:
