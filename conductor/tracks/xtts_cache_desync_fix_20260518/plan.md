@@ -7,6 +7,6 @@
 - [x] Add recursion depth protection (`retry_count`).
 
 ## Phase 2: Verification
-- [ ] Manually simulate a server-side cache wipe.
-- [ ] Verify that switching profiles re-registers the voice on the bridge.
-- [ ] Verify no infinite loops occur if the server is permanently broken (ensure recursion only happens once).
+- [x] Manually simulate a server-side cache wipe.
+- [x] Verify that switching profiles re-registers the voice on the bridge.
+- [x] Verify no infinite loops occur if the server is permanently broken (ensure recursion only happens once).
