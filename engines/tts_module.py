@@ -14,10 +14,11 @@ import wave
 
 from colorama import Fore
 import shutil
+import traceback
 from engines.config import get_setting
 from engines.xtts_local import XTTSWorker, is_xtts_supported
 from engines.audio_cache import get_cache_path, save_to_cache
-from engines.utilities import save_pcm_as_wav
+from engines.utilities import save_pcm_as_wav, log_debug
 
 # Attempt to import edge-tts
 try:
@@ -209,6 +210,8 @@ def generate_audio(text, filename, voice=None, engine="edge-tts", clone_ref=None
     if not cleaned_text:
         return False
 
+    log_debug("TTS_GEN_START", {"engine": engine, "text_len": len(cleaned_text), "voice": voice})
+
     if get_setting("debug_mode", False):
         print(Fore.MAGENTA + f"[DEBUG] Final TTS Text: '{cleaned_text}'" + Fore.RESET)
 
@@ -234,6 +237,7 @@ def generate_audio(text, filename, voice=None, engine="edge-tts", clone_ref=None
     if os.path.exists(cached_path):
         try:
             shutil.copy(cached_path, filename)
+            log_debug("TTS_CACHE_HIT", {"path": cached_path})
             return True
         except Exception as e:
             print(Fore.YELLOW + f"[TTS CACHE] Failed to copy cache: {e}" + Fore.RESET)
@@ -254,6 +258,7 @@ def generate_audio(text, filename, voice=None, engine="edge-tts", clone_ref=None
                         save_to_cache(cleaned_text, cache_voice, cache_key_engine, f.read())
                     xtts_success = True
             except Exception as e:
+                log_debug("TTS_GEN_ERROR", {"engine": "xtts_local", "error": str(e)})
                 if not get_setting("suppress_errors", False):
                     print(Fore.YELLOW + f"[XTTS LOCAL ERROR] {e}" + Fore.RESET)
 
@@ -270,6 +275,7 @@ def generate_audio(text, filename, voice=None, engine="edge-tts", clone_ref=None
                             save_to_cache(cleaned_text, cache_voice, cache_key_engine, f.read())
                         xtts_success = True
             except Exception as e:
+                log_debug("TTS_GEN_ERROR", {"engine": "xtts_remote", "error": str(e)})
                 if not get_setting("suppress_errors", False):
                     print(Fore.YELLOW + f"[XTTS REMOTE ERROR] {e}" + Fore.RESET)
 
@@ -279,6 +285,7 @@ def generate_audio(text, filename, voice=None, engine="edge-tts", clone_ref=None
                 if os.path.exists(xtts_filename):
                     if os.path.exists(filename): os.remove(filename)
                     os.rename(xtts_filename, filename)
+            log_debug("TTS_GEN_SUCCESS", {"engine": "xtts", "filename": filename})
             return True
 
         # Fallback to edge-tts if XTTS failed or not supported
@@ -289,6 +296,7 @@ def generate_audio(text, filename, voice=None, engine="edge-tts", clone_ref=None
     # 2. Attempt Edge-TTS
     if engine == "edge-tts":
         if not EDGE_AVAILABLE or not is_online():
+            log_debug("TTS_GEN_ERROR", {"engine": "edge-tts", "error": "Edge-TTS not available or offline"})
             return False
         try:
             if voice is None:
@@ -301,8 +309,10 @@ def generate_audio(text, filename, voice=None, engine="edge-tts", clone_ref=None
                 with open(filename, "rb") as f:
                     save_to_cache(cleaned_text, cache_voice, cache_key_engine, f.read())
 
+            log_debug("TTS_GEN_SUCCESS", {"engine": "edge-tts", "filename": filename})
             return True
         except Exception as e:
+            log_debug("TTS_GEN_ERROR", {"engine": "edge-tts", "error": str(e)})
             if not get_setting("suppress_errors", False):
                 print(Fore.RED + f"\n[TTS GEN ERROR] {e}")
             return False
@@ -312,6 +322,7 @@ def play_audio(filename):
     """Plays and deletes the audio file."""
     if not get_setting("tts_enabled", True):
         return
+    log_debug("TTS_PLAY_START", {"filename": filename})
     try:
         if os.name == "nt":
             play_audio_windows(filename)
@@ -319,7 +330,9 @@ def play_audio(filename):
             cmd = "xdg-open" if os.name == "posix" else "open"
             subprocess.run([cmd, filename])
             time.sleep(2)
+        log_debug("TTS_PLAY_SUCCESS", {})
     except Exception as e:
+        log_debug("TTS_PLAY_ERROR", {"error": str(e)})
         if not get_setting("suppress_errors", False):
             print(Fore.RED + f"\n[TTS PLAY ERROR] {e}")
     finally:

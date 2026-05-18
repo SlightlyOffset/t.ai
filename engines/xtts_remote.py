@@ -8,7 +8,7 @@ import os
 import hashlib
 from colorama import Fore
 from engines.config import get_setting
-from engines.utilities import save_pcm_as_wav, redact_pii
+from engines.utilities import save_pcm_as_wav, redact_pii, log_debug
 
 # In-memory cache to track which voices have been uploaded to the current session's bridge
 _UPLOADED_VOICES = set()
@@ -42,9 +42,11 @@ def ensure_voice_on_bridge(bridge_url, speaker_id, speaker_wavs, force=False):
         # 1. Pre-flight Check: Ensure bridge is reachable at all
         try:
             r_ping = requests.get(bridge_url.rstrip('/'), headers=headers, timeout=5)
+            log_debug("XTTS_PING", {"url": bridge_url, "status": r_ping.status_code})
             if r_ping.status_code >= 500:
                 print(Fore.YELLOW + f"[XTTS REMOTE] Warning: Bridge returned {r_ping.status_code}. It might still be starting up." + Fore.RESET)
         except Exception as e:
+            log_debug("XTTS_PING_FAIL", {"url": bridge_url, "error": str(e)})
             print(Fore.RED + f"[XTTS BRIDGE CONN ERROR] Cannot reach bridge at {bridge_url}. Is it running? ({e})" + Fore.RESET)
             return False
 
@@ -55,6 +57,7 @@ def ensure_voice_on_bridge(bridge_url, speaker_id, speaker_wavs, force=False):
                 print(Fore.MAGENTA + f"[DEBUG] Checking speaker existence: {check_url}" + Fore.RESET)
                 
             r = requests.get(check_url, headers=headers, timeout=10)
+            log_debug("XTTS_CHECK", {"url": check_url, "status": r.status_code, "response": r.text})
             
             if r.status_code == 200:
                 try:
@@ -95,6 +98,7 @@ def ensure_voice_on_bridge(bridge_url, speaker_id, speaker_wavs, force=False):
             
             # Use a conservative 60s timeout for the single-file POST
             resp = requests.post(upload_url, data=data, files=files, headers=headers, timeout=60)
+            log_debug("XTTS_UPLOAD", {"url": upload_url, "status": resp.status_code, "response": resp.text})
 
             if resp.status_code == 200:
                 print(Fore.GREEN + f"[XTTS REMOTE] Voice profile '{speaker_id}' registered successfully." + Fore.RESET)
@@ -108,11 +112,13 @@ def ensure_voice_on_bridge(bridge_url, speaker_id, speaker_wavs, force=False):
                 fh.close()
 
     except requests.exceptions.ConnectionError as ce:
+        log_debug("XTTS_CONN_ERROR", {"error": str(ce)})
         print(Fore.RED + f"[XTTS BRIDGE CONN ERROR] Connection failed: {ce}" + Fore.RESET)
         if "10054" in str(ce):
             print(Fore.YELLOW + "[TIP] Error 10054 detected. Trying again with fewer samples. If this persists, restart your Colab notebook." + Fore.RESET)
         return False
     except Exception as e:
+        log_debug("XTTS_ERROR", {"error": str(e)})
         print(Fore.RED + f"[XTTS BRIDGE CONN ERROR] {type(e).__name__}: {e}" + Fore.RESET)
         return False
 
@@ -163,6 +169,7 @@ def generate_remote_xtts(text, filename, speaker_wav, language="en", user_name="
 
                 # Wrap the collected PCM in a WAV header and save
                 save_pcm_as_wav(all_pcm, filename)
+                log_debug("XTTS_GEN_SUCCESS", {"speaker_id": speaker_id, "text_len": len(text)})
                 return True
             elif response.status_code == 404 and retry_count < 1:
                 # 404 can mean many things, but usually it's a cache de-sync.
@@ -173,6 +180,8 @@ def generate_remote_xtts(text, filename, speaker_wav, language="en", user_name="
                     # But for errors, we usually want to know what happened.
                     err_detail = response.text
                 except: pass
+
+                log_debug("XTTS_GEN_404", {"speaker_id": speaker_id, "response": err_detail, "retry": True})
 
                 if get_setting("debug_mode", False) or "not found" in err_detail.lower():
                     print(Fore.YELLOW + f"[XTTS REMOTE] Cache stale or Speaker '{speaker_id}' not found. Forcing re-sync..." + Fore.RESET)
@@ -186,10 +195,12 @@ def generate_remote_xtts(text, filename, speaker_wav, language="en", user_name="
                 if not get_setting("suppress_errors", False):
                     # For stream=True, if it's an error, we read the content now
                     err_text = response.text if response.text else "No error detail"
+                    log_debug("XTTS_GEN_FAIL", {"status": response.status_code, "response": err_text})
                     print(Fore.RED + f"[XTTS REMOTE ERROR] {response.status_code}: {err_text}" + Fore.RESET)
                 return False
 
     except Exception as e:
+        log_debug("XTTS_GEN_ERROR", {"error": str(e)})
         if not get_setting("suppress_errors", False):
             print(Fore.RED + f"[XTTS REMOTE ERROR] {e}" + Fore.RESET)
         return False

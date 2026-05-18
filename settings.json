@@ -1,9 +1,9 @@
 {
-    "remote_llm_url": null,
-    "remote_tts_url": null,
+    "remote_llm_url": "https://knight-wales-cities-hindu.trycloudflare.com/",
+    "remote_tts_url": "https://comics-wells-necessity-concerns.trycloudflare.com/",
     "execute_command": false,
     "show_tts_engine": true,
-    "tts_enabled": false,
+    "tts_enabled": true,
     "character_speak": true,
     "default_tts_voice": "en-GB-SoniaNeural",
     "default_tts_engine": "edge",
@@ -16,13 +16,13 @@
     "memory_limit": 10,
     "suppress_errors": true,
     "current_user_profile": "Manganese.json",
-    "current_character_profile": "Astgenne.json",
-    "debug_mode": false,
+    "current_character_profile": "Rebecca.json",
+    "debug_mode": true,
     "clear_on_start": false,
     "auto_recap_on_start": true,
     "interaction_mode": "rp",
     "repetition_penalty": 1.15,
-    "overhaul_pipeline_enabled": true,
+    "overhaul_pipeline_enabled": false,
     "overhaul_instrumentation_enabled": true,
     "overhaul_state_enabled": true,
     "overhaul_memory_enabled": true,
@@ -31,5 +31,6 @@
     "overhaul_critic_enabled": false,
     "overhaul_candidate_count": 2,
     "overhaul_style_profile": "balanced",
-    "image_protocol": "auto"
+    "image_protocol": "auto",
+    "privacy_mode": false
 }
