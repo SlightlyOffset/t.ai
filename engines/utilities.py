@@ -7,8 +7,40 @@ import os
 import re
 import wave
 import json
+from datetime import datetime
 from colorama import Fore, Style
 from engines.actions import APPS
+from engines.config import get_setting
+
+def log_debug(category: str, detail: dict):
+    """
+    Logs detailed information to the debug folder if debug_mode is enabled.
+    """
+    if not get_setting("debug_mode", False):
+        return
+
+    debug_dir = "debug"
+    if not os.path.exists(debug_dir):
+        try:
+            os.makedirs(debug_dir)
+        except OSError:
+            return
+
+    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    file_timestamp = datetime.now().strftime("%Y%m%d")
+    log_file = os.path.join(debug_dir, f"debug_{file_timestamp}.log")
+
+    log_entry = {
+        "timestamp": timestamp,
+        "category": category,
+        "detail": detail
+    }
+
+    try:
+        with open(log_file, "a", encoding="utf-8") as f:
+            f.write(json.dumps(log_entry, ensure_ascii=False) + "\n")
+    except OSError:
+        pass
 
 def sanitize_profile_name(profile_name: str) -> str:
     """

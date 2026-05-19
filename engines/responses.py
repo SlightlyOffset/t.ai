@@ -29,7 +29,7 @@ from engines.narrative_pipeline import (
 )
 from engines.prompts import build_system_prompt
 from engines.lorebook import load_lorebook, scan_for_lore, sync_lore_to_remote
-from engines.utilities import redact_pii
+from engines.utilities import redact_pii, log_debug
 
 MAX_CANDIDATE_WORKERS = 4
 SIM_STREAM_CHUNK_SIZE = 32
@@ -196,6 +196,7 @@ def get_sentiment_score(user_input: str, model: str, remote_url: str = None, pro
         {"role": "user", "content": f"[USER_MSG]\n{user_input.replace('[USER_MSG]', '').replace('[/USER_MSG]', '')}\n[/USER_MSG]"}
     ]
     try:
+        log_debug("SENTIMENT_START", {"model": utility_model, "input": user_input[:100]})
         # Hybrid Offloading: Utility tasks are always local
         result = ollama.chat(
             model=utility_model,
@@ -204,13 +205,15 @@ def get_sentiment_score(user_input: str, model: str, remote_url: str = None, pro
             options={"temperature": 0.1}
         )
         text = result['message']['content']
+        log_debug("SENTIMENT_RESPONSE", {"text": text})
 
         match = re.search(r'"rel":\s*([+-]?\d+)', text)
         if match:
-            return max(-5, min(5, int(match.group(1))))
+            score = max(-5, min(5, int(match.group(1))))
+            log_debug("SENTIMENT_RESULT", {"score": score})
+            return score
     except Exception as e:
-        if get_setting("debug_mode", False):
-            print(f"Local sentiment scoring failed: {e}")
+        log_debug("SENTIMENT_ERROR", {"error": str(e)})
     return 0
 
 def generate_summary(messages: list, model: str, remote_url: str = None, user_name: str = "User", char_name: str = "Assistant") -> str:
@@ -255,9 +258,13 @@ def generate_summary(messages: list, model: str, remote_url: str = None, user_na
     try:
         # Hybrid Offloading: Summarization is always local, but respects caller-provided model
         summarizer_model = model or get_setting("summarizer_model", get_setting("local_utility_model", "llama3.2"))
+        log_debug("SUMMARY_START", {"model": summarizer_model, "message_count": len(messages)})
         result = ollama.chat(model=summarizer_model, messages=summary_messages, stream=False)
-        return result['message']['content'].strip()
+        content = result['message']['content'].strip()
+        log_debug("SUMMARY_SUCCESS", {"content_length": len(content)})
+        return content
     except Exception as e:
+        log_debug("SUMMARY_ERROR", {"error": str(e), "traceback": traceback.format_exc()})
         return f"Error generating summary: {str(e)}"
 
 def update_rolling_summary(existing_core: str, new_messages: list, model: str,
@@ -297,40 +304,54 @@ def update_rolling_summary(existing_core: str, new_messages: list, model: str,
     try:
         # Hybrid Offloading: Summarization is always local, but respects caller-provided model
         summarizer_model = model or get_setting("summarizer_model", get_setting("local_utility_model", "llama3.2"))
+        log_debug("ROLLING_SUMMARY_START", {"model": summarizer_model, "new_message_count": len(new_messages)})
         result = ollama.chat(model=summarizer_model, messages=summary_messages, stream=False)
-        return result['message']['content'].strip()
+        content = result['message']['content'].strip()
+        log_debug("ROLLING_SUMMARY_SUCCESS", {"content_length": len(content)})
+        return content
     except Exception as e:
+        log_debug("ROLLING_SUMMARY_ERROR", {"error": str(e), "traceback": traceback.format_exc()})
         return f"Error updating rolling summary: {str(e)}"
 
 
 def _call_llm_once(messages: list, model: str, remote_url: str = None, temperature: float = 0.8, max_tokens: int = 1024, user_name: str = "User", char_name: str = "Assistant") -> str:
     """Single-turn non-streaming helper used by candidate/reranker pipeline stages."""
     repetition_penalty = _get_repetition_penalty()
-    if remote_url:
-        # Redact PII for remote requests if Privacy Mode is active (VULN-004)
-        if get_setting("privacy_mode", False):
-            messages = [
-                {**msg, "content": redact_pii(msg["content"], user_name=user_name, char_name=char_name)} 
-                for msg in messages
-            ]
+    try:
+        if remote_url:
+            log_debug("LLM_REMOTE_START", {"model": model, "temp": temperature, "max_tokens": max_tokens})
+            # Redact PII for remote requests if Privacy Mode is active (VULN-004)
+            if get_setting("privacy_mode", False):
+                messages = [
+                    {**msg, "content": redact_pii(msg["content"], user_name=user_name, char_name=char_name)} 
+                    for msg in messages
+                ]
 
-        full_url = f"{remote_url.rstrip('/')}/chat"
-        payload = {
-            "messages": messages,
-            "temperature": temperature,
-            "max_tokens": max_tokens,
-            "repetition_penalty": repetition_penalty,
-        }
-        response = requests.post(full_url, json=payload, stream=False, timeout=90)
-        return _extract_remote_message_content(response)
+            full_url = f"{remote_url.rstrip('/')}/chat"
+            payload = {
+                "messages": messages,
+                "temperature": temperature,
+                "max_tokens": max_tokens,
+                "repetition_penalty": repetition_penalty,
+            }
+            response = requests.post(full_url, json=payload, stream=False, timeout=90)
+            content = _extract_remote_message_content(response).strip()
+            log_debug("LLM_SUCCESS", {"len": len(content)})
+            return content
 
-    result = ollama.chat(
-        model=model,
-        messages=messages,
-        stream=False,
-        options={"temperature": temperature, "repeat_penalty": repetition_penalty},
-    )
-    return result["message"]["content"].strip()
+        log_debug("LLM_LOCAL_START", {"model": model, "temp": temperature})
+        result = ollama.chat(
+            model=model,
+            messages=messages,
+            stream=False,
+            options={"temperature": temperature, "repeat_penalty": repetition_penalty},
+        )
+        content = result["message"]["content"].strip()
+        log_debug("LLM_SUCCESS", {"len": len(content)})
+        return content
+    except Exception as e:
+        log_debug("LLM_ERROR", {"error": str(e), "traceback": traceback.format_exc()})
+        return ""
 
 
 def _generate_candidate_replies(messages: list, model: str, remote_url: str | None = None, candidate_count: int = 1, user_name: str = "User", char_name: str = "Assistant") -> list[str]:
@@ -677,6 +698,7 @@ def get_respond_stream(user_input: str, profile: dict, should_obey: bool | None 
     critic_applied = False
 
     try:
+        log_debug("LLM_STREAM_START", {"mode": interaction_mode, "remote": bool(remote_url)})
         # Only use the non-streaming candidate/critic pipeline if multiple candidates are requested or critic is enabled.
         # If candidates=True but count=1 (and no critic), we prefer real streaming for better UX.
         use_pipeline_branch = pipeline_flags["enabled"] and (
@@ -815,6 +837,8 @@ def get_respond_stream(user_input: str, profile: dict, should_obey: bool | None 
                 full_reply += content
                 yield content
 
+        log_debug("LLM_STREAM_SUCCESS", {"len": len(full_reply)})
+
         # Spawn background post-processing thread (Hybrid + Async)
         if pipeline_flags["enabled"] and not selected_metrics and full_reply:
             if canonical_state is None:
@@ -849,6 +873,7 @@ def get_respond_stream(user_input: str, profile: dict, should_obey: bool | None 
         post_process_thread.start()
 
     except Exception as e:
+        log_debug("LLM_STREAM_ERROR", {"error": str(e), "traceback": traceback.format_exc()})
         if get_setting("debug_mode", False):
             yield f"\n[BRAIN ERROR] {traceback.format_exc()}"
         else:

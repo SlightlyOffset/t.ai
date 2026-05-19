@@ -124,3 +124,8 @@ This file tracks all major tracks for the project. Each track has its own detail
 
 - [x] **Track: Remediation of VULN-005 (Info Exposure in Settings CLI)**
 *Link: [./archive/vuln_005_info_exposure_20260513/](./archive/vuln_005_info_exposure_20260513/)*
+
+---
+
+- [x] **Track: XTTS Remote Cache De-sync Fix**
+*Link: [./tracks/xtts_cache_desync_fix_20260518/](./tracks/xtts_cache_desync_fix_20260518/)*

@@ -31,5 +31,6 @@
     "overhaul_critic_enabled": false,
     "overhaul_candidate_count": 2,
     "overhaul_style_profile": "balanced",
-    "image_protocol": "auto"
+    "image_protocol": "auto",
+    "privacy_mode": false
 }

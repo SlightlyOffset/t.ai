@@ -5,7 +5,9 @@ Optimized for NVIDIA GPUs with 6GB+ VRAM (e.g., RTX 3050).
 
 import os
 import gc
+import traceback
 from colorama import Fore
+from engines.utilities import log_debug
 
 try:
     from TTS.api import TTS
@@ -33,13 +35,16 @@ class XTTSWorker:
     def load_model(self):
         """Loads the model to GPU memory if not already loaded."""
         if self._model is None and XTTS_AVAILABLE:
+            log_debug("XTTS_LOAD_START", {})
             try:
                 from engines.config import get_setting
                 print(Fore.CYAN + "[XTTS] Loading model to GPU..." + Fore.RESET)
                 model_name = "tts_models/multilingual/multi-dataset/xtts_v2"
                 self._model = TTS(model_name).to("cuda")
                 print(Fore.GREEN + "[XTTS] Model loaded successfully." + Fore.RESET)
+                log_debug("XTTS_LOAD_SUCCESS", {})
             except Exception as e:
+                log_debug("XTTS_LOAD_ERROR", {"error": str(e), "traceback": traceback.format_exc()})
                 from engines.config import get_setting
                 if not get_setting("suppress_errors", False):
                     print(Fore.RED + f"[XTTS ERROR] Failed to load model: {e}" + Fore.RESET)
@@ -70,6 +75,7 @@ class XTTSWorker:
         if isinstance(speaker_wav, str):
             speaker_wav = [speaker_wav]
 
+        log_debug("XTTS_LOCAL_GEN_START", {"text_len": len(text)})
         try:
             self._model.tts_to_file(
                 text=text,
@@ -77,8 +83,10 @@ class XTTSWorker:
                 language=language,
                 file_path=output_path
             )
+            log_debug("XTTS_LOCAL_GEN_SUCCESS", {"path": output_path})
             return True
         except Exception as e:
+            log_debug("XTTS_LOCAL_GEN_ERROR", {"error": str(e), "traceback": traceback.format_exc()})
             from engines.config import get_setting
             if not get_setting("suppress_errors", False):
                 print(Fore.RED + f"[XTTS GEN ERROR] {e}" + Fore.RESET)
