@@ -257,6 +257,7 @@ class TaiMenu(App):
             return
 
         user_text = result.get("user_text")
+        user_text = self._resolve_regeneration_text(user_text)
         if user_text:
             try:
                 ai_bubble = self.query(".ai_bubble").last()
@@ -299,6 +300,26 @@ class TaiMenu(App):
             )
         except Exception:
             pass
+
+    def get_last_user_message_from_ui(self) -> str | None:
+        """Retrieve the raw content of the last user bubble from the UI."""
+        try:
+            user_bubbles = self.query(".user_bubble")
+            if user_bubbles:
+                last_bubble = user_bubbles.last()
+                if hasattr(last_bubble, "raw_text"):
+                    return last_bubble.raw_text
+        except Exception:
+            pass
+        return None
+
+    def _resolve_regeneration_text(self, engine_text: str | None) -> str | None:
+        """Resolve the text to use for regeneration, falling back to the UI's last user message if needed."""
+        ui_text = self.get_last_user_message_from_ui()
+        if ui_text:
+            if not engine_text or engine_text != ui_text:
+                return ui_text
+        return engine_text
 
     def action_open_profile_select(self) -> None:
         """Open the profile selection screen."""
@@ -668,6 +689,7 @@ class TaiMenu(App):
         self.char_name_lbl_color = session_state["char_name_lbl_color"]
         self.user_name_lbl_color = session_state["user_name_lbl_color"]
         self.history_profile_name = session_state["history_profile_name"]
+        memory_manager.clear_pending_user_message(self.history_profile_name)
         update_setting("current_character_profile", os.path.basename(self.char_path))
 
         if self.user_path:
@@ -742,7 +764,7 @@ class TaiMenu(App):
         else:
             self.remote_status = ""
 
-    def add_message(self, text, role="user", msg_data=None, message_number: int | None = None):
+    def add_message(self, text, role="user", msg_data=None, message_number: int | None = None, raw_text: str | None = None):
         container = self.query_one("#chat_list")
         if role == "system":
             container.mount(Static(text, markup=True, classes="system_msg"))
@@ -766,6 +788,8 @@ class TaiMenu(App):
                     indicator = f"\n\n[dim]< {idx + 1}/{len(alternatives)} >[/dim]"
 
             bubble = Static(f"{header}\n{text}{indicator}", markup=True, classes=f"message {bubble_class}")
+            if role == "user":
+                bubble.raw_text = raw_text or (msg_data.get("content") if msg_data else text)
             row = Horizontal(bubble, classes=f"message_row {row_class}")
 
             container.mount(row)
@@ -795,7 +819,7 @@ class TaiMenu(App):
         # Format user message for display
         display_message = self.format_rp(message, role="user")
         user_message_number = get_user_message_number(message, self.history_profile_name)
-        self.add_message(display_message, role="user", message_number=user_message_number)
+        self.add_message(display_message, role="user", message_number=user_message_number, raw_text=message)
 
         # Handle commands (original message)
         if message.startswith("//"):
@@ -822,8 +846,10 @@ class TaiMenu(App):
                     self.query_one("#chat_list").children[-1].remove()
                 except Exception:
                     pass
-                if command_action.get("user_text"):
-                    self.stream_response(command_action["user_text"], is_regeneration=True)
+                user_text = command_action.get("user_text")
+                user_text = self._resolve_regeneration_text(user_text)
+                if user_text:
+                    self.stream_response(user_text, is_regeneration=True)
                 return
 
             if command_action["type"] == "rewind":
@@ -840,6 +866,9 @@ class TaiMenu(App):
                 return
 
         # Trigger AI response
+        if not message.startswith("//"):
+            memory_manager.set_pending_user_message(self.history_profile_name, message)
+
         assistant_message_number = (user_message_number + 1) if user_message_number is not None else None
         self.stream_response(message, message_number=assistant_message_number)
 

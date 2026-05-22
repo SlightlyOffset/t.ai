@@ -34,5 +34,42 @@ class TestMenu(unittest.TestCase):
         self.assertEqual(app.char_path, "profiles/test.json")
         self.assertEqual(app.user_path, "user_profiles/test.json")
 
+    @patch('menu.TaiMenu.query')
+    def test_get_last_user_message_from_ui(self, mock_query):
+        """Test retrieving the last user message from UI bubbles."""
+        mock_bubble = MagicMock()
+        mock_bubble.raw_text = "Hello companion"
+        mock_query.return_value.last.return_value = mock_bubble
+        
+        app = MagicMock(spec=TaiMenu)
+        app.query = mock_query
+        
+        result = TaiMenu.get_last_user_message_from_ui(app)
+        self.assertEqual(result, "Hello companion")
+        mock_query.assert_called_once_with(".user_bubble")
+
+    @patch('menu.TaiMenu.get_last_user_message_from_ui')
+    def test_resolve_regeneration_text_fallback(self, mock_get_last):
+        """Test resolution of regeneration text falling back to UI when engine text differs or is missing."""
+        app = MagicMock(spec=TaiMenu)
+        app._resolve_regeneration_text = lambda et: TaiMenu._resolve_regeneration_text(app, et)
+        app.get_last_user_message_from_ui = mock_get_last
+        
+        # Case 1: Engine text matches UI text
+        mock_get_last.return_value = "Hello"
+        self.assertEqual(app._resolve_regeneration_text("Hello"), "Hello")
+        
+        # Case 2: Engine text differs from UI text (mismatch / desync)
+        mock_get_last.return_value = "Hello"
+        self.assertEqual(app._resolve_regeneration_text("Previous"), "Hello")
+        
+        # Case 3: Engine text is None
+        mock_get_last.return_value = "Hello"
+        self.assertEqual(app._resolve_regeneration_text(None), "Hello")
+        
+        # Case 4: No UI text, fallback to engine text
+        mock_get_last.return_value = None
+        self.assertEqual(app._resolve_regeneration_text("Previous"), "Previous")
+
 if __name__ == "__main__":
     unittest.main()
