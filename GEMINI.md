@@ -48,3 +48,9 @@ The codebase is strictly divided into two layers:
 - `/lorebooks`: World-info triggers.
 - `/tcss`: Stylesheets for the Textual UI.
 - `/colab_bridge`: Notebooks for offloading inference to GPU-enabled cloud environments.
+
+## Known Bugs
+- **Regeneration Desync on Generation Failure:**
+  - **Symptom:** When regenerating an AI message (via `Alt+Right` or `//regen`), the companion occasionally replies to a past user message instead of the most recent one.
+  - **Root Cause:** If the LLM generation fails (e.g. OOM, API timeout, or network error), the user's message is not appended to the persistent history file (`/history/*.json`) to avoid a trailing unanswered user message. When a regeneration is triggered, the system fetches the last user prompt from the persistent history, which defaults to the prompt from the *previous successful* turn.
+  - **Resolution Strategy:** The regeneration flow should fallback to retrieving the last user message from the UI state/bubble list if the persistent history doesn't match the UI's last user input, or persist the user's message to a pending state/history buffer.
