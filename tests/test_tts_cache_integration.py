@@ -40,7 +40,13 @@ class TestTTSCacheIntegration(unittest.TestCase):
     def test_cache_miss_triggers_generation_and_save(self, mock_is_online, mock_async_run, mock_exists, mock_get_cache_path, mock_save_to_cache, mock_get_setting):
         mock_get_setting.return_value = True # tts_enabled
         mock_is_online.return_value = True
-        mock_exists.side_effect = [False, True] # 1st: cache check, 2nd: generated file check
+        
+        def mock_exists_side_effect(path):
+            if "settings.json" in str(path): return True
+            if "hashed_file.wav" in str(path): return False
+            if "output.mp3" in str(path): return True
+            return False
+        mock_exists.side_effect = mock_exists_side_effect
         mock_get_cache_path.return_value = "cache/hashed_file.wav"
         
         # We mock open() to simulate reading the generated file for caching

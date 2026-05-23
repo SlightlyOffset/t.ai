@@ -3,45 +3,6 @@ from unittest.mock import MagicMock, patch
 import os
 import sys
 
-# Mock dependencies
-sys.modules['textual'] = MagicMock()
-sys.modules['textual.app'] = MagicMock()
-sys.modules['textual.widgets'] = MagicMock()
-sys.modules['textual_image'] = MagicMock()
-sys.modules['textual_image.widget'] = MagicMock()
-sys.modules['textual.containers'] = MagicMock()
-sys.modules['textual.reactive'] = MagicMock()
-sys.modules['textual.message'] = MagicMock()
-
-from unittest.mock import MagicMock, patch
-import os
-import sys
-
-# Define a dummy base class for TaiMenu if textual is not present
-class MockApp:
-    def __init__(self, *args, **kwargs):
-        pass
-    def call_from_thread(self, func, *args, **kwargs):
-        pass
-    def query_one(self, *args, **kwargs):
-        return MagicMock()
-    def mount(self, *args, **kwargs):
-        pass
-    def scroll_end(self, *args, **kwargs):
-        pass
-
-# Mock textual dependencies more surgically
-mock_textual = MagicMock()
-mock_textual.app.App = MockApp
-sys.modules['textual'] = mock_textual
-sys.modules['textual.app'] = mock_textual.app
-sys.modules['textual.widgets'] = MagicMock()
-sys.modules['textual_image'] = MagicMock()
-sys.modules['textual_image.widget'] = MagicMock()
-sys.modules['textual.containers'] = MagicMock()
-sys.modules['textual.reactive'] = MagicMock()
-sys.modules['textual.message'] = MagicMock()
-
 import menu
 from menu import TaiMenu
 
@@ -57,6 +18,7 @@ class TestMenuRecap(unittest.TestCase):
         app = TaiMenu(char_path=None, user_path=None)
         app.history_profile_name = "test"
         app.summarize_and_display = MagicMock()
+        app.add_message = MagicMock()
 
         # Call run_recap
         app.run_recap()
