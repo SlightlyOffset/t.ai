@@ -61,6 +61,7 @@ TODO.md
 
 # gemini-cli settings
 .gemini/
+.antigravitycli
 
 # GitHub App credentials
 gha-creds-*.json
@@ -98,3 +99,6 @@ debug/
 
 # Any backup file
 *.bak
+
+# notes
+notes/

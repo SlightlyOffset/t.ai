@@ -506,6 +506,7 @@ def _perform_post_processing(
             memory_core=memory_core,
             last_summarized_index=last_summarized_index
         )
+        memory_manager.clear_pending_user_message(history_profile_name)
 
         # Update Narrative State
         if pipeline_flags["enabled"] and pipeline_flags["state"]:
@@ -583,6 +584,16 @@ def get_respond_stream(user_input: str, profile: dict, should_obey: bool | None 
     limit = get_setting("memory_limit", 15)
     history = memory_manager.load_history(history_profile_name, limit=limit)
     prompt_history = list(history) if history else []
+
+    # Check if we are regenerating an existing assistant message that is already in persistent history.
+    # If the user input does not match the last user turn in history, this is actually a first-time generation
+    # for a failed turn, so we treat it as is_regeneration = False for history saving and prompting.
+    is_regenerating_existing = False
+    if is_regeneration:
+        if len(prompt_history) >= 2 and prompt_history[-1].get("role") == "assistant" and prompt_history[-2].get("role") == "user" and prompt_history[-2].get("content") == user_input:
+            is_regenerating_existing = True
+        if not is_regenerating_existing:
+            is_regeneration = False
 
     # 1. Lorebook Scanning
     # Skip local scanning if using remote RAG (server handles it internally)

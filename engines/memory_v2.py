@@ -22,6 +22,8 @@ class HistoryManager:
         self._ensure_history_dir()
         self._write_locks = {}
         self._lock_manager = threading.Lock()
+        self._pending_user_messages = {}
+        self._pending_lock = threading.Lock()
 
     def _ensure_history_dir(self) -> None:
         """Ensures the history directory exists on the filesystem."""
@@ -44,6 +46,21 @@ class HistoryManager:
         """Checks if the history file exists for a given profile."""
         filename = self._get_filename(profile_name)
         return os.path.exists(filename)
+
+    def set_pending_user_message(self, profile_name: str, message: str) -> None:
+        """Sets the pending user message that has not been answered yet."""
+        with self._pending_lock:
+            self._pending_user_messages[profile_name] = message
+
+    def get_pending_user_message(self, profile_name: str) -> str | None:
+        """Gets the pending user message for a profile, if any."""
+        with self._pending_lock:
+            return self._pending_user_messages.get(profile_name)
+
+    def clear_pending_user_message(self, profile_name: str) -> None:
+        """Clears the pending user message for a profile."""
+        with self._pending_lock:
+            self._pending_user_messages.pop(profile_name, None)
 
     def get_history_length(self, profile_name: str) -> int:
         """Returns the number of messages in the history."""

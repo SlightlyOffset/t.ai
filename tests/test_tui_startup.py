@@ -50,12 +50,13 @@ class TestTUIStartup(unittest.TestCase):
         self.assertNotIn('pick_profile()', main_block, "pick_profile() still called in __main__ block")
         self.assertNotIn('pick_user_profile()', main_block, "pick_user_profile() still called in __main__ block")
 
+    @patch('engines.profile_state.get_setting')
     @patch('menu.get_setting')
     @patch('menu.TaiMenu.start_tts_worker')
     @patch('menu.TaiMenu.update_sidebar')
     @patch('menu.TaiMenu.query_one')
     @patch('menu.TaiMenu.add_message')
-    def test_load_initial_state_from_settings(self, mock_msg, mock_query, mock_sidebar, mock_tts, mock_get_setting):
+    def test_load_initial_state_from_settings(self, mock_msg, mock_query, mock_sidebar, mock_tts, mock_get_setting_menu, mock_get_setting_profile):
         """
         Test that load_initial_state attempts to load from settings if paths are None.
         """
@@ -69,7 +70,8 @@ class TestTUIStartup(unittest.TestCase):
             if key == "current_user_profile":
                 return "Manganese.json"
             return default
-        mock_get_setting.side_effect = side_effect
+        mock_get_setting_menu.side_effect = side_effect
+        mock_get_setting_profile.side_effect = side_effect
         
         app = TaiMenu(char_path=None, user_path=None)
         # We need to mock open because it will try to open profiles/Astgenne.json
@@ -80,13 +82,14 @@ class TestTUIStartup(unittest.TestCase):
         self.assertEqual(app.char_path, os.path.join("profiles", "Astgenne.json"))
         self.assertEqual(app.user_path, os.path.join("user_profiles", "Manganese.json"))
 
+    @patch('engines.profile_state.get_setting')
     @patch('menu.get_setting')
     @patch('menu.TaiMenu.start_tts_worker')
     @patch('menu.TaiMenu.update_sidebar')
     @patch('menu.TaiMenu.query_one')
     @patch('menu.TaiMenu.add_message')
     @patch('menu.TaiMenu.push_screen')
-    def test_push_profile_select_if_loading_fails(self, mock_push, mock_msg, mock_query, mock_sidebar, mock_tts, mock_get_setting):
+    def test_push_profile_select_if_loading_fails(self, mock_push, mock_msg, mock_query, mock_sidebar, mock_tts, mock_get_setting_menu, mock_get_setting_profile):
         """
         Test that push_screen(ProfileSelect()) is called if load_initial_state fails to find paths.
         """
@@ -94,7 +97,8 @@ class TestTUIStartup(unittest.TestCase):
         from menu import TaiMenu
         
         # Mock get_setting to return None
-        mock_get_setting.return_value = None
+        mock_get_setting_menu.return_value = None
+        mock_get_setting_profile.return_value = None
         
         app = TaiMenu(char_path=None, user_path=None)
         with patch('os.path.exists', return_value=False):
@@ -106,7 +110,9 @@ class TestTUIStartup(unittest.TestCase):
     @patch('menu.TaiMenu.load_initial_state')
     @patch('menu.TaiMenu.populate_models')
     @patch('menu.TaiMenu.populate_voices')
-    def test_on_profile_selected_updates_paths(self, mock_voices, mock_models, mock_load):
+    @patch('menu.TaiMenu.populate_tts_engines')
+    @patch('menu.TaiMenu.populate_image_protocols')
+    def test_on_profile_selected_updates_paths(self, mock_img_proto, mock_tts_engines, mock_voices, mock_models, mock_load):
         """
         Test that on_profile_selected correctly updates character and user paths.
         """
@@ -140,7 +146,9 @@ class TestTUIStartup(unittest.TestCase):
     @patch('menu.TaiMenu.load_initial_state')
     @patch('menu.TaiMenu.populate_models')
     @patch('menu.TaiMenu.populate_voices')
-    def test_switch_profile_updates_and_reinitializes(self, mock_voices, mock_models, mock_load):
+    @patch('menu.TaiMenu.populate_tts_engines')
+    @patch('menu.TaiMenu.populate_image_protocols')
+    def test_switch_profile_updates_and_reinitializes(self, mock_img_proto, mock_tts_engines, mock_voices, mock_models, mock_load):
         """
         Test that switch_profile updates paths and calls re-initialization methods.
         """

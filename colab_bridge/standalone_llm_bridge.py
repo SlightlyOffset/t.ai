@@ -286,17 +286,18 @@ class LLMEngine:
 
             if device_id is not None:
                 model_kwargs["device_map"] = f"cuda:{device_id}"
-                model_kwargs["dtype"] = torch.float32
+                model_kwargs["torch_dtype"] = torch.float16
                 model_kwargs["low_cpu_mem_usage"] = True
+                model_kwargs["attn_implementation"] = "sdpa"
                 model_kwargs["quantization_config"] = BitsAndBytesConfig(
                     load_in_4bit=True,
                     bnb_4bit_use_double_quant=True,
                     bnb_4bit_quant_type="nf4",
-                    bnb_4bit_compute_dtype=torch.float32,
+                    bnb_4bit_compute_dtype=torch.float16,
                 )
             else:
                 model_kwargs["device_map"] = "cpu"
-                model_kwargs["dtype"] = torch.float32
+                model_kwargs["torch_dtype"] = torch.float32
 
             try:
                 model = AutoModelForCausalLM.from_pretrained(self.model_id, **model_kwargs)
@@ -426,6 +427,8 @@ class LLMEngine:
                     num_return_sequences=1,
                 )
             result = tokenizer.decode(output_tokens[0][input_len:], skip_special_tokens=True).strip()
+            if torch and device_id is not None and torch.cuda.is_available():
+                torch.cuda.empty_cache()
             return result
 
     def _pick_stream_worker(self) -> dict:
@@ -585,6 +588,8 @@ class LLMEngine:
                 # This prevents subsequent requests from colliding with a dangling thread.
                 if generation_thread is not None and generation_thread.is_alive():
                     generation_thread.join()
+                if torch and device_id is not None and torch.cuda.is_available():
+                    torch.cuda.empty_cache()
 
 
 
