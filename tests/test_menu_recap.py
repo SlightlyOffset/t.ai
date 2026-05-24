@@ -3,12 +3,12 @@ from unittest.mock import MagicMock, patch
 import os
 import sys
 
-import menu
-from menu import TaiMenu
+import ui.menu as menu
+from ui.menu import TaiMenu
 
 class TestMenuRecap(unittest.TestCase):
-    @patch('menu.memory_manager')
-    @patch('menu.get_setting')
+    @patch('ui.menu.memory_manager')
+    @patch('ui.menu.get_setting')
     def test_run_recap_long_history_logic(self, mock_get_setting, mock_memory_manager):        
         # Mock long history (20 messages)
         history = [{"role": "user", "content": f"msg {i}"} for i in range(20)]
@@ -30,8 +30,8 @@ class TestMenuRecap(unittest.TestCase):
         self.assertEqual(len(recent), 5)
         self.assertEqual(recent_start, 16)
 
-    @patch('menu.memory_manager')
-    @patch('menu.get_setting')
+    @patch('ui.menu.memory_manager')
+    @patch('ui.menu.get_setting')
     def test_run_recap_short_history_logic(self, mock_get_setting, mock_memory_manager):       
         # Mock short history
         history = [{"role": "user", "content": "Hi"}]

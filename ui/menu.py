@@ -48,7 +48,7 @@ from engines.memory_v2 import memory_manager
 from engines.lorebook import sync_lore_to_remote, load_lorebook
 
 # Ensure the project root is in sys.path
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 def format_rp(text: str) -> str:
     """Legacy compatibility helper used by older tests/imports."""
@@ -312,7 +312,7 @@ class TaiMenu(App):
 
     def action_open_profile_select(self) -> None:
         """Open the profile selection screen."""
-        from ProfileSelectScreen import ProfileSelect
+        from ui.ProfileSelectScreen import ProfileSelect
         self.push_screen(ProfileSelect(), callback=self.on_profile_selected)
 
     def compose(self) -> ComposeResult:
@@ -383,7 +383,7 @@ class TaiMenu(App):
         self.load_initial_state()
 
         if not self.char_path:
-            from ProfileSelectScreen import ProfileSelect
+            from ui.ProfileSelectScreen import ProfileSelect
             self.push_screen(ProfileSelect(), callback=self.on_profile_selected)
             return
 
