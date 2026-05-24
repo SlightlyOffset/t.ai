@@ -72,7 +72,7 @@ def main():
     # 2. Launch the Application loop
     while True:
         try:
-            from menu import TaiMenu
+            from ui.menu import TaiMenu
             from engines.app_commands import RestartRequested
             from engines.config import get_setting
             from engines.utilities import set_terminal_appearance

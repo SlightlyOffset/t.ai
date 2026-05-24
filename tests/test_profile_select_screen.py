@@ -13,7 +13,7 @@ class TestProfileSelectScreen(unittest.TestCase):
         """
         Test that character profiles are loaded into OptionList.
         """
-        from ProfileSelectScreen import ProfileSelect
+        from ui.ProfileSelectScreen import ProfileSelect
         
         mock_exists.return_value = True
         mock_listdir.return_value = ["Eira.json", "Astgenne.json"]
@@ -40,7 +40,7 @@ class TestProfileSelectScreen(unittest.TestCase):
         """
         Test that user profiles are loaded into OptionList.
         """
-        from ProfileSelectScreen import ProfileSelect
+        from ui.ProfileSelectScreen import ProfileSelect
         
         mock_exists.return_value = True
         mock_listdir.return_value = ["Manganese.json"]

@@ -7,15 +7,15 @@ import os
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 class TestTUIStartup(unittest.TestCase):
-    @patch('menu.pick_profile')
-    @patch('menu.pick_user_profile')
-    @patch('menu.TaiMenu.run')
+    @patch('ui.menu.pick_profile')
+    @patch('ui.menu.pick_user_profile')
+    @patch('ui.menu.TaiMenu.run')
     def test_main_does_not_call_blocking_picks(self, mock_run, mock_pick_user, mock_pick_char):
         """
         Test that running menu.py does not call the blocking pick_profile and pick_user_profile functions.
         This test will fail if they are still present in the __main__ block and called.
         """
-        import menu
+        import ui.menu as menu
         
         # We need to trigger the __main__ logic. 
         # Since it's protected by if __name__ == "__main__", we can't just import it.
@@ -38,7 +38,7 @@ class TestTUIStartup(unittest.TestCase):
         """
         Static analysis check to ensure pick_profile and pick_user_profile are not in the __main__ block.
         """
-        with open('menu.py', 'r', encoding='utf-8') as f:
+        with open('ui/menu.py', 'r', encoding='utf-8') as f:
             content = f.read()
         
         # Find the __main__ block
@@ -51,17 +51,17 @@ class TestTUIStartup(unittest.TestCase):
         self.assertNotIn('pick_user_profile()', main_block, "pick_user_profile() still called in __main__ block")
 
     @patch('engines.profile_state.get_setting')
-    @patch('menu.get_setting')
-    @patch('menu.TaiMenu.start_tts_worker')
-    @patch('menu.TaiMenu.update_sidebar')
-    @patch('menu.TaiMenu.query_one')
-    @patch('menu.TaiMenu.add_message')
+    @patch('ui.menu.get_setting')
+    @patch('ui.menu.TaiMenu.start_tts_worker')
+    @patch('ui.menu.TaiMenu.update_sidebar')
+    @patch('ui.menu.TaiMenu.query_one')
+    @patch('ui.menu.TaiMenu.add_message')
     def test_load_initial_state_from_settings(self, mock_msg, mock_query, mock_sidebar, mock_tts, mock_get_setting_menu, mock_get_setting_profile):
         """
         Test that load_initial_state attempts to load from settings if paths are None.
         """
-        import menu
-        from menu import TaiMenu
+        import ui.menu as menu
+        from ui.menu import TaiMenu
         
         # Mock get_setting to return a valid profile filename
         def side_effect(key, default=None):
@@ -83,18 +83,18 @@ class TestTUIStartup(unittest.TestCase):
         self.assertEqual(app.user_path, os.path.join("user_profiles", "Manganese.json"))
 
     @patch('engines.profile_state.get_setting')
-    @patch('menu.get_setting')
-    @patch('menu.TaiMenu.start_tts_worker')
-    @patch('menu.TaiMenu.update_sidebar')
-    @patch('menu.TaiMenu.query_one')
-    @patch('menu.TaiMenu.add_message')
-    @patch('menu.TaiMenu.push_screen')
+    @patch('ui.menu.get_setting')
+    @patch('ui.menu.TaiMenu.start_tts_worker')
+    @patch('ui.menu.TaiMenu.update_sidebar')
+    @patch('ui.menu.TaiMenu.query_one')
+    @patch('ui.menu.TaiMenu.add_message')
+    @patch('ui.menu.TaiMenu.push_screen')
     def test_push_profile_select_if_loading_fails(self, mock_push, mock_msg, mock_query, mock_sidebar, mock_tts, mock_get_setting_menu, mock_get_setting_profile):
         """
         Test that push_screen(ProfileSelect()) is called if load_initial_state fails to find paths.
         """
-        import menu
-        from menu import TaiMenu
+        import ui.menu as menu
+        from ui.menu import TaiMenu
         
         # Mock get_setting to return None
         mock_get_setting_menu.return_value = None
@@ -107,16 +107,16 @@ class TestTUIStartup(unittest.TestCase):
         # We expect push_screen to be called once
         self.assertTrue(mock_push.called)
 
-    @patch('menu.TaiMenu.load_initial_state')
-    @patch('menu.TaiMenu.populate_models')
-    @patch('menu.TaiMenu.populate_voices')
-    @patch('menu.TaiMenu.populate_tts_engines')
-    @patch('menu.TaiMenu.populate_image_protocols')
+    @patch('ui.menu.TaiMenu.load_initial_state')
+    @patch('ui.menu.TaiMenu.populate_models')
+    @patch('ui.menu.TaiMenu.populate_voices')
+    @patch('ui.menu.TaiMenu.populate_tts_engines')
+    @patch('ui.menu.TaiMenu.populate_image_protocols')
     def test_on_profile_selected_updates_paths(self, mock_img_proto, mock_tts_engines, mock_voices, mock_models, mock_load):
         """
         Test that on_profile_selected correctly updates character and user paths.
         """
-        from menu import TaiMenu
+        from ui.menu import TaiMenu
         app = TaiMenu(char_path=None, user_path=None)
         
         result = {
@@ -124,38 +124,38 @@ class TestTUIStartup(unittest.TestCase):
             "user": "Manganese.json"
         }
         
-        with patch('menu.TaiMenu.start_tts_worker'):
+        with patch('ui.menu.TaiMenu.start_tts_worker'):
             app.on_profile_selected(result)
         
         self.assertEqual(app.char_path, os.path.join("profiles", "Eira.json"))
         self.assertEqual(app.user_path, os.path.join("user_profiles", "Manganese.json"))
 
-    @patch('menu.TaiMenu.push_screen')
+    @patch('ui.menu.TaiMenu.push_screen')
     def test_action_open_profile_select_calls_push_screen(self, mock_push):
         """
         Test that action_open_profile_select (triggered by ctrl+o) calls push_screen with ProfileSelect.
         """
-        from menu import TaiMenu
+        from ui.menu import TaiMenu
         app = TaiMenu(char_path="some_path", user_path="some_user_path")
         
-        with patch('menu.TaiMenu.start_tts_worker'):
+        with patch('ui.menu.TaiMenu.start_tts_worker'):
             app.action_open_profile_select()
         
         self.assertTrue(mock_push.called)
 
-    @patch('menu.TaiMenu.load_initial_state')
-    @patch('menu.TaiMenu.populate_models')
-    @patch('menu.TaiMenu.populate_voices')
-    @patch('menu.TaiMenu.populate_tts_engines')
-    @patch('menu.TaiMenu.populate_image_protocols')
+    @patch('ui.menu.TaiMenu.load_initial_state')
+    @patch('ui.menu.TaiMenu.populate_models')
+    @patch('ui.menu.TaiMenu.populate_voices')
+    @patch('ui.menu.TaiMenu.populate_tts_engines')
+    @patch('ui.menu.TaiMenu.populate_image_protocols')
     def test_switch_profile_updates_and_reinitializes(self, mock_img_proto, mock_tts_engines, mock_voices, mock_models, mock_load):
         """
         Test that switch_profile updates paths and calls re-initialization methods.
         """
-        from menu import TaiMenu
+        from ui.menu import TaiMenu
         app = TaiMenu(char_path="old_char.json", user_path="old_user.json")
         
-        with patch('menu.TaiMenu.start_tts_worker'):
+        with patch('ui.menu.TaiMenu.start_tts_worker'):
             app.switch_profile("new_char.json", "new_user.json")
         
         self.assertEqual(app.char_path, "new_char.json")
