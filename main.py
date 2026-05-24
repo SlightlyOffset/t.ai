@@ -46,7 +46,7 @@ def check_dependencies():
         "textual_image": "textual-image",
         "dotenv": "python-dotenv"
     }
-    
+
     missing_libs = []
     for module, pip_name in required_libraries.items():
         try:
@@ -72,22 +72,23 @@ def main():
     # 2. Launch the Application loop
     while True:
         try:
-            from menu import TaiMenu, set_terminal_appearance
+            from menu import TaiMenu
             from engines.app_commands import RestartRequested
             from engines.config import get_setting
-            
+            from engines.utilities import set_terminal_appearance
+
             if get_setting("clear_on_start", True):
                 print("\033[H\033[J", end="")
-            
+
             print(f"Running on: {platform.system()} {platform.release()}")
             set_terminal_appearance(title="t.ai")
-            
+
             app = TaiMenu(char_path=None, user_path=None)
             app.run()
-            
+
             # If app.run() returns normally, break the loop
             break
-            
+
         except RestartRequested:
             # Clear screen and restart
             print("\033[H\033[J", end="")
