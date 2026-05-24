@@ -50,17 +50,6 @@ from engines.lorebook import sync_lore_to_remote, load_lorebook
 # Ensure the project root is in sys.path
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-def set_terminal_appearance(title: str = None):
-    """
-    Sets the tab title in Windows Terminal.
-    """
-    # Handle Title (Standard ANSI)
-    if title:
-        sys.stdout.write(f"\033]0;{title}\007")
-
-    sys.stdout.flush()
-
-
 def format_rp(text: str) -> str:
     """Legacy compatibility helper used by older tests/imports."""
     if not text:

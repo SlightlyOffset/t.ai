@@ -3,6 +3,7 @@ Helper utilities for terminal UI and file selection.
 Provides selection menus for profiles and history files.
 """
 
+import sys
 import os
 import re
 import wave
@@ -53,12 +54,12 @@ def sanitize_profile_name(profile_name: str) -> str:
 def save_json_atomic(file_path, data, indent=4):
     """
     Saves a dictionary to a JSON file atomically to prevent corruption.
-    
+
     Args:
         file_path (str): The destination file path.
         data (dict): The data to save.
         indent (int): JSON indentation level.
-        
+
     Returns:
         bool: True if successful, False otherwise.
     """
@@ -67,11 +68,11 @@ def save_json_atomic(file_path, data, indent=4):
         # 1. Serialize to string first to catch TypeErrors (non-serializable objects)
         # before we even touch the file system.
         json_data = json.dumps(data, indent=indent, ensure_ascii=False)
-        
+
         # 2. Write to a temporary file.
         with open(temp_file, "w", encoding="utf-8") as f:
             f.write(json_data)
-        
+
         # 3. Atomic rename (overwrites existing file).
         os.replace(temp_file, file_path)
         return True
@@ -249,12 +250,12 @@ def replace_placeholders(text, user_name="User", char_name="Assistant"):
 def redact_pii(text: str, user_name: str = None, char_name: str = None) -> str:
     """
     Redacts common PII from text.
-    
+
     Args:
         text (str): The text to sanitize.
         user_name (str, optional): The user's name to redact.
         char_name (str, optional): The character's name to redact.
-        
+
     Returns:
         str: The sanitized text.
     """
@@ -263,7 +264,7 @@ def redact_pii(text: str, user_name: str = None, char_name: str = None) -> str:
 
     # Redact Emails
     text = re.sub(r"[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}", "[EMAIL]", text)
-    
+
     # Redact IPv4 Addresses
     text = re.sub(r"\b\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}\b", "[IP_ADDR]", text)
 
@@ -272,9 +273,19 @@ def redact_pii(text: str, user_name: str = None, char_name: str = None) -> str:
         # Case insensitive replacement for whole words only
         pattern = re.compile(fr"\b{re.escape(user_name)}\b", re.IGNORECASE)
         text = pattern.sub("[USER]", text)
-        
+
     if char_name:
         pattern = re.compile(fr"\b{re.escape(char_name)}\b", re.IGNORECASE)
         text = pattern.sub("[CHARACTER]", text)
 
     return text
+
+def set_terminal_appearance(title: str = None):
+    """
+    Sets the tab title in Windows Terminal.
+    """
+    # Handle Title (Standard ANSI)
+    if title:
+        sys.stdout.write(f"\033]0;{title}\007")
+
+    sys.stdout.flush()
