@@ -783,12 +783,23 @@ def create_app(
         vram_allocated = None
         vram_reserved = None
         vram_total = None
+        gpus = []
         if torch and torch.cuda.is_available():
             try:
-                # Primary GPU device
-                vram_allocated = torch.cuda.memory_allocated(0) / (1024 ** 3)
-                vram_reserved = torch.cuda.memory_reserved(0) / (1024 ** 3)
-                vram_total = torch.cuda.get_device_properties(0).total_memory / (1024 ** 3)
+                for i in range(torch.cuda.device_count()):
+                    alloc = torch.cuda.memory_allocated(i) / (1024 ** 3)
+                    res = torch.cuda.memory_reserved(i) / (1024 ** 3)
+                    tot = torch.cuda.get_device_properties(i).total_memory / (1024 ** 3)
+                    gpus.append({
+                        "id": i,
+                        "allocated_gib": alloc,
+                        "reserved_gib": res,
+                        "total_gib": tot
+                    })
+                if gpus:
+                    vram_allocated = gpus[0]["allocated_gib"]
+                    vram_reserved = gpus[0]["reserved_gib"]
+                    vram_total = gpus[0]["total_gib"]
             except Exception:
                 pass
         return {
@@ -804,6 +815,7 @@ def create_app(
             "vram_allocated_gib": vram_allocated,
             "vram_reserved_gib": vram_reserved,
             "vram_total_gib": vram_total,
+            "gpus": gpus,
         }
 
     @app.post("/sync_lore")

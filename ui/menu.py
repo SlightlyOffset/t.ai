@@ -393,7 +393,7 @@ class TaiMenu(App):
         self.populate_image_protocols()
 
         # Start usage metrics update loop
-        self.set_interval(4.0, self.update_usage_metrics)
+        self.set_interval(2.0, self.update_usage_metrics)
 
     def on_profile_selected(self, result: dict) -> None:
         """Callback handled when ProfileSelect screen is dismissed."""
@@ -999,7 +999,7 @@ class TaiMenu(App):
             return 0.0, 0.0
 
         import ctypes
-        
+
         # Memory Info
         class MEMORYSTATUSEX(ctypes.Structure):
             _fields_ = [
@@ -1038,11 +1038,11 @@ class TaiMenu(App):
             kernel2 = FILETIME()
             user2 = FILETIME()
             ctypes.windll.kernel32.GetSystemTimes(ctypes.byref(idle2), ctypes.byref(kernel2), ctypes.byref(user2))
-            
+
             idle_diff = to_int(idle2) - to_int(idle1)
             kernel_diff = to_int(kernel2) - to_int(kernel1)
             user_diff = to_int(user2) - to_int(user1)
-            
+
             sys_diff = kernel_diff + user_diff
             if sys_diff > 0:
                 cpu = ((sys_diff - idle_diff) * 100.0) / sys_diff
@@ -1057,7 +1057,7 @@ class TaiMenu(App):
     def update_usage_metrics(self) -> None:
         """Background worker to query system resources and remote bridge status periodically."""
         cpu, ram = self._get_local_metrics()
-        
+
         # Check remote bridge status
         remote_url = get_setting("remote_llm_url")
         vram_info = ""
@@ -1067,10 +1067,14 @@ class TaiMenu(App):
                 resp = requests.get(f"{remote_url.rstrip('/')}/health", timeout=1.5)
                 if resp.status_code == 200:
                     data = resp.json()
-                    vram_allocated = data.get("vram_allocated_gib")
-                    vram_total = data.get("vram_total_gib")
-                    if vram_allocated is not None and vram_total is not None:
-                        vram_info = f" | Bridge VRAM: {vram_allocated:.1f}/{vram_total:.1f} GB"
+                    gpus = data.get("gpus", [])
+                    if gpus:
+                        if len(gpus) > 1:
+                            vram_strings = [f"GPU{g['id']}: {g['allocated_gib']:.1f}/{g['total_gib']:.1f} GB" for g in gpus]
+                            vram_info = " | Bridge VRAM: " + " | ".join(vram_strings)
+                        else:
+                            g = gpus[0]
+                            vram_info = f" | Bridge VRAM: {g['allocated_gib']:.1f}/{g['total_gib']:.1f} GB"
                     else:
                         vram_info = " | Bridge: Online"
                 else:
@@ -1091,18 +1095,18 @@ class TaiMenu(App):
         """Resolves active session history length and triggers manual summarization."""
         history_len = memory_manager.get_history_length(self.history_profile_name)
         last_index = memory_manager.get_last_summarized_index(self.history_profile_name)
-        
+
         # We need at least 5 messages in history, and we want to keep at least 3 messages active
         min_active_context = 3
         if history_len <= 4:
             self.add_message("[SYSTEM] Conversation history is too short to compress.", role="command")
             return
-            
+
         to_summarize_count = history_len - min_active_context
         if to_summarize_count <= last_index:
             self.add_message("[SYSTEM] No new messages to compress since the last summarization.", role="command")
             return
-            
+
         full_history = memory_manager.load_history(self.history_profile_name)
         new_messages_to_sum = full_history[last_index:to_summarize_count]
         self.perform_manual_compression(new_messages_to_sum, to_summarize_count)
