@@ -512,6 +512,11 @@ def app_commands(ops: str, suppress_output: bool = False):
                 raise
             _log("[SYSTEM] Regeneration is only supported in TUI mode.", Fore.RED)
             return True
+        except CompressRequested:
+            if suppress_output:
+                raise
+            _log("[SYSTEM] Compression is only supported in TUI mode.", Fore.RED)
+            return True
         except RewindRequested:
             if suppress_output:
                 raise
