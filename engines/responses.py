@@ -703,6 +703,10 @@ def get_respond_stream(user_input: str, profile: dict, should_obey: bool | None 
         messages.extend(prompt_history)
         messages.append({'role': 'user', 'content': user_input})
 
+    # Sanitize: strip non-essential keys (e.g. alternatives, selected_index) from
+    # history messages so they don't bloat the remote payload or local context.
+    messages = [{"role": m["role"], "content": m["content"]} for m in messages]
+
     full_reply = ""
     selected_metrics = {}
     candidate_metrics = []

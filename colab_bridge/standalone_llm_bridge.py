@@ -405,9 +405,10 @@ class LLMEngine:
                     keep_len = 128
                     max_tokens = max_pos - keep_len - 10
 
-                inputs.input_ids = inputs.input_ids[:, -keep_len:]
-                if "attention_mask" in inputs:
-                    inputs.attention_mask = inputs.attention_mask[:, -keep_len:]
+                # Truncate all tensor keys uniformly to avoid shape mismatches
+                for key in list(inputs.keys()):
+                    if hasattr(inputs[key], "shape") and inputs[key].shape[-1] == input_len:
+                        inputs[key] = inputs[key][:, -keep_len:]
                 input_len = inputs.input_ids.shape[1]
                 logger.info(f"Worker {worker['worker_id']} truncated context to {input_len} tokens")
 
@@ -539,9 +540,10 @@ class LLMEngine:
                         keep_len = 128
                         max_tokens = max_pos - keep_len - 10
                     
-                    inputs.input_ids = inputs.input_ids[:, -keep_len:]
-                    if "attention_mask" in inputs:
-                        inputs.attention_mask = inputs.attention_mask[:, -keep_len:]
+                    # Truncate all tensor keys uniformly to avoid shape mismatches
+                    for key in list(inputs.keys()):
+                        if hasattr(inputs[key], "shape") and inputs[key].shape[-1] == input_len:
+                            inputs[key] = inputs[key][:, -keep_len:]
                     logger.info(f"Worker {worker_id} truncated stream context to {inputs.input_ids.shape[1]} tokens")
 
                 streamer = TextIteratorStreamer(

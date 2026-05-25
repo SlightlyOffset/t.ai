@@ -61,6 +61,11 @@ def build_canonical_state(profile: dict, metadata: dict, user_input: str) -> dic
     }
 
 
+def _strip_msg(msg: dict) -> dict:
+    """Return a message dict containing only role and content to avoid serializing bloat (e.g. alternatives)."""
+    return {"role": msg.get("role", ""), "content": msg.get("content", "")}
+
+
 def retrieve_memory_stack(full_history: list, user_input: str, short_limit: int = 12, episodic_limit: int = 6, semantic_limit: int = 6) -> dict:
     history = full_history or []
     short_term = history[-short_limit:]
@@ -90,9 +95,9 @@ def retrieve_memory_stack(full_history: list, user_input: str, short_limit: int 
         contradictions.append("User may be correcting prior context; verify continuity.")
 
     return {
-        "short_term": short_term,
-        "episodic": episodic,
-        "semantic": semantic_retrieval,
+        "short_term": [_strip_msg(m) for m in short_term],
+        "episodic": [_strip_msg(m) for m in episodic],
+        "semantic": [_strip_msg(m) for m in semantic_retrieval],
         "continuity_flags": contradictions,
     }
 
