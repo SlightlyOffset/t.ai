@@ -42,8 +42,8 @@
     "relationship_score": 0, // int 0-100, how much the user likes this character
     "colors": {
         "text": "", // the color for the character's text, should be a valid color from colorama.Fore
-        "label": "" // the style for the character's labels (like name and timestamps), should be a valid style from colorama.Style
-        "name_lbl": "" // color name or hex of the color for newer tui highlighting
+        "label": "", // the style for the character's labels (like name and timestamps), should be a valid style from colorama.Style
+        "name_lbl": "", // color name or hex of the color for newer tui highlighting
         "speech_highlight": "" // color name or hex of the color for newer tui highlighting
     }
 }
