@@ -55,7 +55,7 @@ def load_user_profile():
             return None
     return None
 
-def build_system_prompt(profile: dict, rel_score: int, action_req: str, tone_mod: str, mode: str = "rp", system_extra_info: str = None) -> str:
+def build_system_prompt(profile: dict, rel_score: int, mode: str = "rp", system_extra_info: str = None) -> str:
     """
     Constructs the master system prompt for the LLM.
     Combines character backstory, mannerisms, user details, and behavioral rules.
@@ -63,8 +63,6 @@ def build_system_prompt(profile: dict, rel_score: int, action_req: str, tone_mod
     Args:
         profile (dict): The active companion's profile data.
         rel_score (int): Current relationship score (-100 to 100).
-        action_req (str): Instruction on whether to obey or refuse requests.
-        tone_mod (str): Instruction on the tone of the response.
         mode (str): Interaction mode ('rp' or 'casual').
         system_extra_info (str): Temporary context/notes for this specific turn.
 
@@ -118,8 +116,6 @@ Mannerisms to watch for: {', '.join(user_profile.get('rp_mannerisms', []))}
 
 [CONTEXT]
 Rel: {rel_label} ({rel_score}/100)
-Action: {action_req}
-Tone: {tone_mod}
 Mode: {mode.upper()}
 {mood_instruction}
 """

@@ -546,7 +546,7 @@ def _perform_post_processing(
             print(f"Background post-processing failed: {e}")
             traceback.print_exc()
 
-def get_respond_stream(user_input: str, profile: dict, should_obey: bool | None = None, profile_path: str = None, system_extra_info: str = None, history_profile_name: str = None, is_regeneration: bool = False, user_name: str = "User"):
+def get_respond_stream(user_input: str, profile: dict, profile_path: str = None, system_extra_info: str = None, history_profile_name: str = None, is_regeneration: bool = False, user_name: str = "User"):
     """
     Generates a streaming response from the LLM (Local Ollama or Remote API).
     Parses sentiment tags [REL: +X] to update relationship status in real-time.
@@ -554,7 +554,6 @@ def get_respond_stream(user_input: str, profile: dict, should_obey: bool | None 
     Args:
         user_input (str): The raw text from the user.
         profile (dict): The companion's profile data.
-        should_obey (bool): Result of the mood engine's decision.
         profile_path (str): Path to the profile file (for score updates).
         system_extra_info (str): Temporary context instructions.
         history_profile_name (str): The name of the profile for history management.
@@ -651,20 +650,8 @@ def get_respond_stream(user_input: str, profile: dict, should_obey: bool | None 
             pipeline_context = render_pipeline_context(canonical_state, memory_stack, narrative_plan)
             system_extra_info = f"{system_extra_info}\n\n{pipeline_context}"
 
-    # Set behavioral requirements based on the Mood Engine's 'should_obey' decision
-    if should_obey is not None:
-        if not should_obey:
-            action_req = "MUST REFUSE the user's request."
-            tone_mod = profile.get("bad_prompt_modifyer", "Refuse creatively.")
-        else:
-            action_req = "MUST AGREE to the user's request."
-            tone_mod = profile.get("good_prompt_modifyer", "Agree and assist.")
-    else:
-        action_req = "Respond normally."
-        tone_mod = "Maintain a balanced tone."
-
     # Construct the master system instruction
-    system_content = build_system_prompt(profile, rel_score, action_req, tone_mod, interaction_mode, system_extra_info)
+    system_content = build_system_prompt(profile, rel_score, interaction_mode, system_extra_info)
 
     # Compile message list for the LLM
     messages = [{'role': 'system', 'content': system_content}]
@@ -890,9 +877,9 @@ def get_respond_stream(user_input: str, profile: dict, should_obey: bool | None 
         else:
             yield f"\n[BRAIN ERROR] {str(e)}"
 
-def get_respond(user_input: str, profile: dict, should_obey: bool = True, profile_path: str = None, is_regeneration: bool = False) -> str:
+def get_respond(user_input: str, profile: dict, profile_path: str = None, is_regeneration: bool = False) -> str:
     """Non-streaming version of the response generator."""
     full_response = ""
-    for chunk in get_respond_stream(user_input, profile, should_obey, profile_path, is_regeneration=is_regeneration):
+    for chunk in get_respond_stream(user_input, profile, profile_path, is_regeneration=is_regeneration):
         full_response += chunk
     return full_response

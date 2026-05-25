@@ -31,11 +31,7 @@
     "starter_messages": [ // a list of messages that the character can use to start a conversation with the user], should be in-character and reflect the character's personality and backstory
         ""
     ],
-    "bad_weight": 0, // int 0-10, how much the character should behave in bad ways
-    "good_weight": 0,   // int 0-10, how much the character should behave in good ways
     "system_prompt": "", // the main prompt that defines the character's behavior and personality
-    "good_prompt_modifyer": "", // a prompt that is added to the system prompt when the character is behaving in a good way, to encourage more good behavior
-    "bad_prompt_modifyer": "", // a prompt that is added to the system prompt when the character is behaving in a bad way, to encourage more bad behavior
     "preferred_edge_voice": "", // the name of the preferred TTS voice for this character, should be a valid voice from edge-tts
     "avatar_path": "", // the path to the character's avatar image, e.g. "img/MyChar.png"
     "lorebook_path": "", // the path to the character's lorebook, e.g. "lorebooks/arknights.json"
