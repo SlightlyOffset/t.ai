@@ -47,6 +47,10 @@ class RegenerateRequested(Exception):
     """Exception raised to signal the TUI to regenerate the last AI message."""
     pass
 
+class CompressRequested(Exception):
+    """Exception raised to signal the TUI to manually compress conversation context."""
+    pass
+
 class RewindRequested(Exception):
     """Exception raised to signal the TUI to rewind history to a message index."""
     def __init__(self, message_number: int):
@@ -313,6 +317,13 @@ def app_commands(ops: str, suppress_output: bool = False):
         else:
             _log("[SYSTEM] Regeneration is only supported in TUI mode.", Fore.RED)
 
+    def _compress():
+        """Manually triggers summarization/compression of conversation history."""
+        if suppress_output:
+            raise CompressRequested()
+        else:
+            _log("[SYSTEM] Compression is only supported in TUI mode.", Fore.RED)
+
     def _rewind(args):
         """Rewinds conversation to a specific message number. Usage: //rewind <message_number>"""
         if not args or not args.strip():
@@ -468,6 +479,7 @@ def app_commands(ops: str, suppress_output: bool = False):
         "//regen": _regen,
         "//regenerate": _regen,
         "//rewind": _rewind,
+        "//compress": _compress,
     }
 
     pattern = re.match(r'^/+', ops.strip().lower())

@@ -780,6 +780,17 @@ def create_app(
     @app.get("/health")
     async def health_check():
         """Health check endpoint."""
+        vram_allocated = None
+        vram_reserved = None
+        vram_total = None
+        if torch and torch.cuda.is_available():
+            try:
+                # Primary GPU device
+                vram_allocated = torch.cuda.memory_allocated(0) / (1024 ** 3)
+                vram_reserved = torch.cuda.memory_reserved(0) / (1024 ** 3)
+                vram_total = torch.cuda.get_device_properties(0).total_memory / (1024 ** 3)
+            except Exception:
+                pass
         return {
             "status": "healthy",
             "tunnel_type": tunnel_manager.tunnel_type if tunnel_manager else "none",
@@ -790,6 +801,9 @@ def create_app(
             "llm_model": llm_engine.model_id if llm_engine else None,
             "llm_workers": len(llm_engine.workers) if llm_engine else 0,
             "llm_multi_gpu": bool(llm_engine and llm_engine.multi_gpu),
+            "vram_allocated_gib": vram_allocated,
+            "vram_reserved_gib": vram_reserved,
+            "vram_total_gib": vram_total,
         }
 
     @app.post("/sync_lore")

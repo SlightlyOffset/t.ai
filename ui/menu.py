@@ -392,6 +392,9 @@ class TaiMenu(App):
         self.populate_tts_engines()
         self.populate_image_protocols()
 
+        # Start usage metrics update loop
+        self.set_interval(4.0, self.update_usage_metrics)
+
     def on_profile_selected(self, result: dict) -> None:
         """Callback handled when ProfileSelect screen is dismissed."""
         if result:
@@ -850,6 +853,11 @@ class TaiMenu(App):
                 )
                 return
 
+            if command_action["type"] == "compress":
+                self.add_message("[SYSTEM] Starting manual history compression...", role="command")
+                self.run_manual_compression()
+                return
+
             if command_action["type"] == "command_noop":
                 self.add_message("[SYSTEM] Recognized command pattern but no action taken: Non-existent command.", role="command")
                 return
@@ -984,6 +992,144 @@ class TaiMenu(App):
         # Persist the update
         memory_manager.update_memory_core(self.history_profile_name, new_core, new_index)
         self.log(f"Memory Core updated to index {new_index}")
+
+    def _get_local_metrics(self) -> tuple[float, float]:
+        """Fetch local CPU and RAM usage on Windows using ctypes, or return fallback values."""
+        if sys.platform != "win32":
+            return 0.0, 0.0
+
+        import ctypes
+        
+        # Memory Info
+        class MEMORYSTATUSEX(ctypes.Structure):
+            _fields_ = [
+                ('dwLength', ctypes.c_ulong),
+                ('dwMemoryLoad', ctypes.c_ulong),
+                ('ullTotalPhys', ctypes.c_uint64),
+                ('ullAvailPhys', ctypes.c_uint64),
+                ('ullTotalPageFile', ctypes.c_uint64),
+                ('ullAvailPageFile', ctypes.c_uint64),
+                ('ullTotalVirtual', ctypes.c_uint64),
+                ('ullAvailVirtual', ctypes.c_uint64),
+                ('ullAvailExtendedVirtual', ctypes.c_uint64),
+            ]
+        stat = MEMORYSTATUSEX()
+        stat.dwLength = ctypes.sizeof(stat)
+        try:
+            ctypes.windll.kernel32.GlobalMemoryStatusEx(ctypes.byref(stat))
+            ram = float(stat.dwMemoryLoad)
+        except Exception:
+            ram = 0.0
+
+        # CPU Info (calculates delta between two snapshots)
+        class FILETIME(ctypes.Structure):
+            _fields_ = [('dwLowDateTime', ctypes.c_ulong), ('dwHighDateTime', ctypes.c_ulong)]
+
+        def to_int(ft):
+            return (ft.dwHighDateTime << 32) + ft.dwLowDateTime
+
+        idle1 = FILETIME()
+        kernel1 = FILETIME()
+        user1 = FILETIME()
+        try:
+            ctypes.windll.kernel32.GetSystemTimes(ctypes.byref(idle1), ctypes.byref(kernel1), ctypes.byref(user1))
+            time.sleep(0.05)
+            idle2 = FILETIME()
+            kernel2 = FILETIME()
+            user2 = FILETIME()
+            ctypes.windll.kernel32.GetSystemTimes(ctypes.byref(idle2), ctypes.byref(kernel2), ctypes.byref(user2))
+            
+            idle_diff = to_int(idle2) - to_int(idle1)
+            kernel_diff = to_int(kernel2) - to_int(kernel1)
+            user_diff = to_int(user2) - to_int(user1)
+            
+            sys_diff = kernel_diff + user_diff
+            if sys_diff > 0:
+                cpu = ((sys_diff - idle_diff) * 100.0) / sys_diff
+            else:
+                cpu = 0.0
+        except Exception:
+            cpu = 0.0
+
+        return cpu, ram
+
+    @work(thread=True)
+    def update_usage_metrics(self) -> None:
+        """Background worker to query system resources and remote bridge status periodically."""
+        cpu, ram = self._get_local_metrics()
+        
+        # Check remote bridge status
+        remote_url = get_setting("remote_llm_url")
+        vram_info = ""
+        if remote_url:
+            import requests
+            try:
+                resp = requests.get(f"{remote_url.rstrip('/')}/health", timeout=1.5)
+                if resp.status_code == 200:
+                    data = resp.json()
+                    vram_allocated = data.get("vram_allocated_gib")
+                    vram_total = data.get("vram_total_gib")
+                    if vram_allocated is not None and vram_total is not None:
+                        vram_info = f" | Bridge VRAM: {vram_allocated:.1f}/{vram_total:.1f} GB"
+                    else:
+                        vram_info = " | Bridge: Online"
+                else:
+                    vram_info = " | Bridge: Error"
+            except Exception:
+                vram_info = " | Bridge: Offline"
+
+        metric_str = f"CPU: {cpu:.0f}% | RAM: {ram:.0f}%{vram_info}"
+
+        def apply_update():
+            # Update the title bar of the terminal dynamically
+            self.title = "t.ai"
+            self.sub_title = metric_str
+
+        self.app.call_from_thread(apply_update)
+
+    def run_manual_compression(self) -> None:
+        """Resolves active session history length and triggers manual summarization."""
+        history_len = memory_manager.get_history_length(self.history_profile_name)
+        last_index = memory_manager.get_last_summarized_index(self.history_profile_name)
+        
+        # We need at least 5 messages in history, and we want to keep at least 3 messages active
+        min_active_context = 3
+        if history_len <= 4:
+            self.add_message("[SYSTEM] Conversation history is too short to compress.", role="command")
+            return
+            
+        to_summarize_count = history_len - min_active_context
+        if to_summarize_count <= last_index:
+            self.add_message("[SYSTEM] No new messages to compress since the last summarization.", role="command")
+            return
+            
+        full_history = memory_manager.load_history(self.history_profile_name)
+        new_messages_to_sum = full_history[last_index:to_summarize_count]
+        self.perform_manual_compression(new_messages_to_sum, to_summarize_count)
+
+    @work(thread=True)
+    def perform_manual_compression(self, new_messages: list, new_index: int) -> None:
+        """Background worker to run manual history compression."""
+        existing_core = memory_manager.get_memory_core(self.history_profile_name)
+        try:
+            new_core = generate_updated_memory_core(
+                existing_core,
+                new_messages,
+                user_name=self.user_name,
+                char_name=self.ch_name,
+            )
+            memory_manager.update_memory_core(self.history_profile_name, new_core, new_index)
+            self.app.call_from_thread(
+                self.add_message,
+                f"✓ Context successfully compressed. Memory Core updated to index {new_index}.",
+                role="command"
+            )
+        except Exception as e:
+            self.app.call_from_thread(
+                self.add_message,
+                f"[ERROR] Context compression failed: {e}",
+                role="command"
+            )
 
 
 if __name__ == "__main__":
