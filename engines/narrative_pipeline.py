@@ -73,7 +73,7 @@ def retrieve_memory_stack(full_history: list, user_input: str, short_limit: int 
     query_tokens = _tokenize(user_input)
 
     semantic_pool = []
-    for index, msg in enumerate(history):
+    for index, msg in enumerate(remainder):
         content = msg.get("content", "")
         score = _score_overlap(content, query_tokens)
         if score > 0:
@@ -156,14 +156,22 @@ def render_pipeline_context(canonical_state: dict, memory_stack: dict | None, na
     blocks.append(f'PRIORITY: Respond to the latest user message first: "{latest_user_intent}"')
     blocks.append("Memory snippets are references for continuity only; do not answer old messages unless the user explicitly asks.")
 
+    # Filter out bulky biography details (backstory, mannerisms) already in the main system prompt
+    serialized_state = {
+        "mutable": canonical_state.get("mutable", {}),
+        "immutable": {
+            "name": canonical_state.get("immutable", {}).get("name", "Assistant"),
+            "personality_type": canonical_state.get("immutable", {}).get("personality_type", "Unknown"),
+        }
+    }
     blocks.append("[CANONICAL STATE]")
-    blocks.append(json.dumps(canonical_state, ensure_ascii=False, indent=2))
+    blocks.append(json.dumps(serialized_state, ensure_ascii=False, indent=2))
 
     if memory_stack is not None:
         compact_memory = {
             "continuity_flags": memory_stack.get("continuity_flags", []),
-            "episodic": memory_stack.get("episodic", [])[-4:],
-            "semantic": memory_stack.get("semantic", [])[:4],
+            "episodic": memory_stack.get("episodic", [])[-2:],
+            "semantic": memory_stack.get("semantic", [])[:2],
         }
         blocks.append("[MEMORY STACK]")
         blocks.append(json.dumps(compact_memory, ensure_ascii=False, indent=2))

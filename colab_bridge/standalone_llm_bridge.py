@@ -209,7 +209,7 @@ class Message(BaseModel):
 
 class ChatRequest(BaseModel):
     messages: list[Message]
-    max_tokens: int = 1024
+    max_tokens: int = 512
     temperature: float = 0.8
     repetition_penalty: float = 1.15
     n: int = 1
