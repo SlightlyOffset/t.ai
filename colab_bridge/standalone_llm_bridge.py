@@ -318,9 +318,15 @@ class LLMEngine:
         try:
             import requests
             resp = requests.post(
-                f"{self.ollama_url}/api/generate",
-                json={"model": self.model_id, "keep_alive": -1},
-                timeout=180
+                f"{self.ollama_url}/api/chat",
+                json={
+                    "model": self.model_id,
+                    "messages": [{"role": "user", "content": "ping"}],
+                    "stream": False,
+                    "keep_alive": -1,
+                    "options": {"num_predict": 1},
+                },
+                timeout=180,
             )
             if resp.status_code == 200:
                 print(f"[+] Model '{self.model_id}' preloaded into VRAM successfully.")
