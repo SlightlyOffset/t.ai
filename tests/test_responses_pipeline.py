@@ -350,6 +350,148 @@ class TestResponsesPipeline(unittest.TestCase):
         payload = mock_post.call_args.kwargs["json"]
         self.assertEqual(payload["repetition_penalty"], 1.4)
 
+    @patch("engines.responses.get_sentiment_score", return_value=0)
+    @patch("engines.responses.build_system_prompt", return_value="SYSTEM")
+    @patch("engines.responses.scan_for_lore", return_value="")
+    @patch("engines.responses.load_lorebook", return_value={})
+    @patch("engines.responses.ollama.chat", return_value=[])
+    @patch("engines.responses.get_pipeline_flags")
+    @patch("engines.responses.memory_manager")
+    @patch("engines.responses.get_setting")
+    def test_dynamic_truncation_no_starter(
+        self,
+        mock_get_setting,
+        mock_memory_manager,
+        mock_get_pipeline_flags,
+        mock_ollama_chat,
+        _mock_lorebook,
+        _mock_scan,
+        _mock_build_prompt,
+        _mock_sentiment,
+    ):
+        profile = {"name": "TestAI", "llm_model": "test-model"}
+        
+        # History has 5 turns, each 6000 characters (~1500 tokens). Total ~7500 tokens > 6200 limit.
+        history = [
+            {"role": "user", "content": "A" * 6000},  # Index 0 (Oldest)
+            {"role": "assistant", "content": "B" * 6000}, # Index 1
+            {"role": "user", "content": "C" * 6000}, # Index 2
+            {"role": "assistant", "content": "D" * 6000}, # Index 3
+            {"role": "user", "content": "E" * 6000}, # Index 4 (Latest)
+        ]
+        full_data = {"metadata": {"current_scene": "Room", "memory_core": "", "narrative_state": {}}}
+
+        mock_get_setting.side_effect = lambda key, default=None: {
+            "default_llm_model": "test-model",
+            "remote_llm_url": None,
+            "interaction_mode": "rp",
+            "memory_limit": 15,
+        }.get(key, default)
+        
+        # Disable candidates & critic to run single pass _call_llm_once path
+        mock_get_pipeline_flags.return_value = {
+            "enabled": True,
+            "instrumentation": False,
+            "state": False,
+            "memory": False,
+            "planner": False,
+            "candidates": False,
+            "critic": False,
+            "candidate_count": 1,
+            "style_profile": "balanced",
+        }
+        mock_memory_manager.get_full_data.return_value = full_data
+        mock_memory_manager.load_history.side_effect = [history, list(history)]
+
+        # Run stream
+        list(get_respond_stream("User prompt", profile, history_profile_name="test_profile"))
+        
+        # Verify that we popped from the front (index 0) because there's no assistant starter
+        # Since each msg is 1500 tokens, 1500 * 5 = 7500. Truncation must pop until <= 6200.
+        # Popping 0 (A) leaves: B (1500), C (1500), D (1500), E (1500) -> 6000 tokens.
+        # So it should pop exactly 1 turn, leaving B, C, D, E.
+        self.assertTrue(mock_ollama_chat.called)
+        sent_messages = mock_ollama_chat.call_args.kwargs["messages"]
+        
+        # Extract the content of the history turns sent to the LLM (skipping system prompt and user input)
+        history_contents = [m["content"] for m in sent_messages if m["role"] != "system" and m["content"] != "User prompt"]
+        
+        self.assertNotIn("A" * 6000, history_contents)
+        self.assertIn("B" * 6000, history_contents)
+        self.assertIn("E" * 6000, history_contents)
+
+    @patch("engines.responses.get_sentiment_score", return_value=0)
+    @patch("engines.responses.build_system_prompt", return_value="SYSTEM")
+    @patch("engines.responses.scan_for_lore", return_value="")
+    @patch("engines.responses.load_lorebook", return_value={})
+    @patch("engines.responses.ollama.chat", return_value=[])
+    @patch("engines.responses.get_pipeline_flags")
+    @patch("engines.responses.memory_manager")
+    @patch("engines.responses.get_setting")
+    def test_dynamic_truncation_with_starter(
+        self,
+        mock_get_setting,
+        mock_memory_manager,
+        mock_get_pipeline_flags,
+        mock_ollama_chat,
+        _mock_lorebook,
+        _mock_scan,
+        _mock_build_prompt,
+        _mock_sentiment,
+    ):
+        profile = {"name": "TestAI", "llm_model": "test-model"}
+        
+        # First message is assistant (starter message).
+        history = [
+            {"role": "assistant", "content": "STARTER" * 500}, # Index 0 (Starter) -> 3500 chars (~875 tokens)
+            {"role": "user", "content": "A" * 6000},          # Index 1 -> 1500 tokens
+            {"role": "assistant", "content": "B" * 6000},     # Index 2 -> 1500 tokens
+            {"role": "user", "content": "C" * 6000},          # Index 3 -> 1500 tokens (Latest)
+        ]
+        # Total tokens = 875 + 1500 + 1500 + 1500 = 5375.
+        # If we have system content and user_input, say system content is "SYSTEM" (1 token), user_input is 4000 chars (1000 tokens).
+        # Total is 5375 + 1 + 1000 = 6376 > 6200 limit.
+        # It must truncate. Since it has a starter, it should pop from index 1 ("A"), preserving "STARTER" (index 0).
+        full_data = {"metadata": {"current_scene": "Room", "memory_core": "", "narrative_state": {}}}
+
+        mock_get_setting.side_effect = lambda key, default=None: {
+            "default_llm_model": "test-model",
+            "remote_llm_url": None,
+            "interaction_mode": "rp",
+            "memory_limit": 15,
+        }.get(key, default)
+        
+        mock_get_pipeline_flags.return_value = {
+            "enabled": True,
+            "instrumentation": False,
+            "state": False,
+            "memory": False,
+            "planner": False,
+            "candidates": False,
+            "critic": False,
+            "candidate_count": 1,
+            "style_profile": "balanced",
+        }
+        mock_memory_manager.get_full_data.return_value = full_data
+        mock_memory_manager.load_history.side_effect = [history, list(history)]
+
+        # Run stream with a large user_input (4000 chars -> 1000 tokens)
+        user_input = "User prompt" * 400
+        list(get_respond_stream(user_input, profile, history_profile_name="test_profile"))
+        
+        self.assertTrue(mock_ollama_chat.called)
+        sent_messages = mock_ollama_chat.call_args.kwargs["messages"]
+        
+        # Extract the content of the history turns sent to the LLM (skipping system prompt and user input)
+        history_contents = [m["content"] for m in sent_messages if m["role"] != "system" and m["content"] != user_input]
+        
+        # Verify starter is preserved
+        self.assertIn("STARTER" * 500, history_contents)
+        # Verify "A" (index 1) was popped first to keep starter
+        self.assertNotIn("A" * 6000, history_contents)
+        self.assertIn("B" * 6000, history_contents)
+        self.assertIn("C" * 6000, history_contents)
+
 
 if __name__ == "__main__":
     unittest.main()

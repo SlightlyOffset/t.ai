@@ -681,6 +681,36 @@ def get_respond_stream(user_input: str, profile: dict, should_obey: bool | None 
             elif prior_assistant.get("content"):
                 regeneration_previous_replies = [prior_assistant.get("content")]
             prompt_history.pop()
+
+    # Dynamic Token-Aware Truncation of prompt_history
+    def est_tokens(t: str) -> int:
+        return len(t) // 4
+
+    sys_tokens = est_tokens(system_content)
+    input_tokens = est_tokens(user_input)
+    max_input_tokens = 6200
+
+    has_starter = False
+    if prompt_history and prompt_history[0].get("role") == "assistant":
+        has_starter = True
+
+    while True:
+        history_tokens = sum(est_tokens(m.get("content", "")) for m in prompt_history)
+        if sys_tokens + input_tokens + history_tokens <= max_input_tokens:
+            break
+        
+        # Ensure we do not drop the starter message (index 0) or the latest message (index -1)
+        min_allowed = 2 if (has_starter and len(prompt_history) >= 2) else 1
+        if len(prompt_history) <= min_allowed:
+            break
+
+        if has_starter:
+            prompt_history.pop(1)
+        else:
+            prompt_history.pop(0)
+
+    messages = [{'role': 'system', 'content': system_content}]
+    if is_regeneration:
         messages.extend(prompt_history)
         # The user_input passed in is the last user message.
         if (
@@ -702,6 +732,10 @@ def get_respond_stream(user_input: str, profile: dict, should_obey: bool | None 
     else:
         messages.extend(prompt_history)
         messages.append({'role': 'user', 'content': user_input})
+
+    # Sanitize: strip non-essential keys (e.g. alternatives, selected_index) from
+    # history messages so they don't bloat the remote payload or local context.
+    messages = [{"role": m["role"], "content": m["content"]} for m in messages]
 
     full_reply = ""
     selected_metrics = {}
@@ -809,7 +843,7 @@ def get_respond_stream(user_input: str, profile: dict, should_obey: bool | None 
                 payload = {
                     "messages": messages, 
                     "temperature": generation_temperature, 
-                    "max_tokens": 1024,
+                    "max_tokens": 512,
                     "repetition_penalty": repetition_penalty,
                     "use_rag": True
                 }
