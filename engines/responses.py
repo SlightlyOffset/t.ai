@@ -582,7 +582,14 @@ def get_respond_stream(user_input: str, profile: dict, should_obey: bool | None 
     last_summarized_index = full_data.get("metadata", {}).get("last_summarized_index", 0)
 
     limit = get_setting("memory_limit", 15)
-    history = memory_manager.load_history(history_profile_name, limit=limit)
+    full_history = memory_manager.load_history(history_profile_name)
+    unsummarized_history = full_history[last_summarized_index:]
+    
+    if limit and len(unsummarized_history) > limit:
+        history = unsummarized_history[-limit:]
+    else:
+        history = unsummarized_history
+        
     prompt_history = list(history) if history else []
 
     # Check if we are regenerating an existing assistant message that is already in persistent history.
