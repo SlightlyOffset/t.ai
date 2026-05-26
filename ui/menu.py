@@ -1053,7 +1053,7 @@ class TaiMenu(App):
 
         return cpu, ram
 
-    @work(thread=True)
+    @work(exclusive=True, thread=True)
     def update_usage_metrics(self) -> None:
         """Background worker to query system resources and remote bridge status periodically."""
         cpu, ram = self._get_local_metrics()
