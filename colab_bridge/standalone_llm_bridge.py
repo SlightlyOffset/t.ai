@@ -313,6 +313,22 @@ class LLMEngine:
         else:
             print(f"[+] Model '{self.model_id}' is ready.")
 
+        # 4. Preload the model into VRAM to prevent client-side timeouts on the first request.
+        print(f"[*] Preloading model '{self.model_id}' into VRAM (with keep_alive=-1)...")
+        try:
+            import requests
+            resp = requests.post(
+                f"{self.ollama_url}/api/generate",
+                json={"model": self.model_id, "keep_alive": -1},
+                timeout=180
+            )
+            if resp.status_code == 200:
+                print(f"[+] Model '{self.model_id}' preloaded into VRAM successfully.")
+            else:
+                logger.warning(f"Model preload returned status code {resp.status_code}: {resp.text}")
+        except Exception as e:
+            logger.warning(f"Failed to preload model '{self.model_id}': {e}")
+
         self.ready = True
         self.workers = {0: {}}  # Mock single worker for health check metrics
 
@@ -368,6 +384,7 @@ class LLMEngine:
             "model": self.model_id,
             "messages": messages,
             "stream": True,
+            "keep_alive": -1,
             "options": {
                 "temperature": temperature,
                 "repeat_penalty": repetition_penalty,
@@ -412,6 +429,7 @@ class LLMEngine:
             "model": self.model_id,
             "messages": messages,
             "stream": False,
+            "keep_alive": -1,
             "options": {
                 "temperature": temperature,
                 "repeat_penalty": repetition_penalty,
