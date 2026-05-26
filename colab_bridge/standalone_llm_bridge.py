@@ -32,33 +32,12 @@ from fastapi import FastAPI
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
-# Reduce CUDA allocator fragmentation unless caller already set a policy.
-os.environ.setdefault("PYTORCH_CUDA_ALLOC_CONF", "expandable_segments:True")
-
 try:
     from sentence_transformers import SentenceTransformer
     SENTENCE_TRANSFORMERS_AVAILABLE = True
 except ImportError:
     SENTENCE_TRANSFORMERS_AVAILABLE = False
     SentenceTransformer = None
-
-try:
-    import torch
-    from transformers import (
-        AutoModelForCausalLM,
-        AutoTokenizer,
-        BitsAndBytesConfig,
-        TextIteratorStreamer,
-    )
-    TRANSFORMERS_AVAILABLE = True
-except ImportError:
-    TRANSFORMERS_AVAILABLE = False
-    torch = None
-    AutoModelForCausalLM = None
-    AutoTokenizer = None
-    BitsAndBytesConfig = None
-    TextIteratorStreamer = None
-
 
 # Setup logging
 logging.basicConfig(
@@ -78,20 +57,49 @@ logging.getLogger("uvicorn.error").setLevel(logging.ERROR)
 os.environ["HF_HUB_DISABLE_PROGRESS_BARS"] = "1"
 
 FALLBACK_UNAVAILABLE_MESSAGE = "System busy/unavailable. Please retry in a moment."
-DEFAULT_GPU_MAX_MEMORY_GIB = int(os.getenv("LLM_WORKER_GPU_MAX_GIB", "13"))
-DEFAULT_CPU_MAX_MEMORY_GIB = int(os.getenv("LLM_WORKER_CPU_MAX_GIB", "24"))
 
 
-def _is_oom_or_gpu_error(exc: Exception) -> bool:
-    message = str(exc).lower()
-    gpu_markers = (
-        "out of memory",
-        "cuda error",
-        "cublas",
-        "cudnn",
-        "device-side assert",
-    )
-    return any(marker in message for marker in gpu_markers)
+def _get_gpu_metrics():
+    gpus = []
+    vram_allocated = None
+    vram_reserved = None
+    vram_total = None
+    try:
+        # Run nvidia-smi command to get memory details
+        import subprocess
+        result = subprocess.run(
+            ["nvidia-smi", "--query-gpu=index,memory.used,memory.total", "--format=csv,noheader,nounits"],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            check=True
+        )
+        for line in result.stdout.strip().split("\n"):
+            if not line:
+                continue
+            parts = line.split(",")
+            if len(parts) == 3:
+                gpu_id = int(parts[0].strip())
+                used_mib = float(parts[1].strip())
+                total_mib = float(parts[2].strip())
+                
+                # Convert to GiB
+                used_gib = used_mib / 1024.0
+                total_gib = total_mib / 1024.0
+                
+                gpus.append({
+                    "id": gpu_id,
+                    "allocated_gib": used_gib,
+                    "reserved_gib": used_gib,
+                    "total_gib": total_gib
+                })
+        if gpus:
+            vram_allocated = gpus[0]["allocated_gib"]
+            vram_reserved = gpus[0]["reserved_gib"]
+            vram_total = gpus[0]["total_gib"]
+    except Exception:
+        pass
+    return gpus, vram_allocated, vram_reserved, vram_total
 
 
 class LoreManager:
@@ -222,224 +230,169 @@ class SyncLoreRequest(BaseModel):
 
 
 class LLMEngine:
-    """Transformers-backed inference engine with dual-worker GPU pool support."""
+    """Ollama-backed inference engine that manages a local Ollama server process."""
 
     def __init__(self, model_id: str, hf_token: Optional[str] = None):
         self.model_id = model_id
-        self.hf_token = hf_token or os.getenv("HF_TOKEN")
-        self.workers: dict[int, dict] = {}
         self.error: Optional[str] = None
         self.ready = False
+        self.ollama_url = "http://localhost:11434"
+        
+        # Match expected interface for the health check endpoint
+        self.workers = {}
         self.multi_gpu = False
-        self._initialize_workers()
+        
+        self._initialize_ollama()
 
-    def _initialize_workers(self):
-        if not TRANSFORMERS_AVAILABLE:
-            self.error = "transformers stack is not installed"
-            logger.error("LLM engine unavailable: transformers stack is not installed")
+    def _initialize_ollama(self):
+        print(f"[*] Initializing Ollama backend for model: {self.model_id}")
+        
+        # 1. Check if Ollama is installed (executable exists in system path)
+        import shutil
+        if not shutil.which("ollama"):
+            self.error = "Ollama CLI is not installed or not in PATH. Please run the installer cell first."
+            logger.error(self.error)
             return
 
-        worker_targets: list[int | None]
-        if torch and torch.cuda.is_available():
-            gpu_count = torch.cuda.device_count()
-            worker_targets = [0, 1] if gpu_count > 1 else [0]
-            self.multi_gpu = gpu_count > 1
-            mode_label = "Dual-Worker Pool" if self.multi_gpu else "Single-Worker GPU"
-            print(f"[*] Initializing {mode_label} for model: {self.model_id}")
-        else:
-            worker_targets = [None]
-            self.multi_gpu = False
-            print(f"[*] Initializing CPU fallback worker for model: {self.model_id}")
-
-        for worker_id, device_id in enumerate(worker_targets):
-            worker = self._load_worker(worker_id, device_id)
-            if worker:
-                self.workers[worker_id] = worker
-
-        self.ready = bool(self.workers)
-        if not self.ready:
-            self.error = self.error or f"Failed to load any worker for model '{self.model_id}'"
-            logger.error(self.error)
-        else:
-            print(f"[+] LLM worker pool ready with {len(self.workers)} worker(s)")
-
-    def _load_worker(self, worker_id: int, device_id: int | None) -> Optional[dict]:
-        try:
-            device_label = f"cuda:{device_id}" if device_id is not None else "cpu"
-            print(f"[*] Loading worker {worker_id} on {device_label}...")
-
-            tokenizer_kwargs = {"trust_remote_code": True}
-            if self.hf_token:
-                tokenizer_kwargs["token"] = self.hf_token
-            tokenizer = AutoTokenizer.from_pretrained(self.model_id, **tokenizer_kwargs)
-            if tokenizer.pad_token_id is None and tokenizer.eos_token_id is not None:
-                tokenizer.pad_token = tokenizer.eos_token
-            
-            # Suppress clean_up_tokenization_spaces warning for BPE tokenizers
-            # This is specifically for BPE (like Llama-3) where cleanup can be destructive.
-            if hasattr(tokenizer, "clean_up_tokenization_spaces") and "TokenizerFast" in str(type(tokenizer)):
-                tokenizer.clean_up_tokenization_spaces = False
-
-            model_kwargs = {"trust_remote_code": True}
-            if self.hf_token:
-                model_kwargs["token"] = self.hf_token
-
-            if device_id is not None:
-                model_kwargs["device_map"] = f"cuda:{device_id}"
-                model_kwargs["torch_dtype"] = torch.float16
-                model_kwargs["low_cpu_mem_usage"] = True
-                model_kwargs["attn_implementation"] = "sdpa"
-                model_kwargs["quantization_config"] = BitsAndBytesConfig(
-                    load_in_4bit=True,
-                    bnb_4bit_use_double_quant=True,
-                    bnb_4bit_quant_type="nf4",
-                    bnb_4bit_compute_dtype=torch.float16,
-                )
-            else:
-                model_kwargs["device_map"] = "cpu"
-                model_kwargs["torch_dtype"] = torch.float32
-
+        # 2. Check if Ollama server is already running, if not, start it
+        if not self._is_ollama_running():
+            print("[*] Ollama server is not running. Starting Ollama daemon in background...")
             try:
-                model = AutoModelForCausalLM.from_pretrained(self.model_id, **model_kwargs)
-            except Exception as exc:
-                if device_id is None or not _is_oom_or_gpu_error(exc):
-                    raise
-
-                logger.warning(
-                    f"Worker {worker_id} hit OOM on {device_label}. Retrying with strict VRAM packing..."
+                # Start ollama serve in background
+                subprocess.Popen(
+                    ["ollama", "serve"],
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                    close_fds=True
                 )
-                if torch and torch.cuda.is_available():
-                    torch.cuda.empty_cache()
-
-                # Tighter packing: force strict device map and maximize GPU usage (14GiB)
-                retry_kwargs = dict(model_kwargs)
-                # Correct device_map syntax: {"": device_id} pins the whole model
-                retry_kwargs["device_map"] = {"": device_id}
-                retry_kwargs["max_memory"] = {device_id: "14GiB", "cpu": f"{DEFAULT_CPU_MAX_MEMORY_GIB}GiB"}
-                model = AutoModelForCausalLM.from_pretrained(self.model_id, **retry_kwargs)
-
-            model.eval()
-            if torch and device_id is not None and torch.cuda.is_available():
-                torch.cuda.set_device(device_id)
-                torch.cuda.empty_cache()
-            return {
-                "worker_id": worker_id,
-                "device_id": device_id,
-                "device_label": device_label,
-                "model": model,
-                "tokenizer": tokenizer,
-                "lock": threading.Lock(),
-            }
-        except Exception as exc:
-            self.error = str(exc)
-            logger.error(f"Failed to load worker {worker_id}: {exc}")
-            return None
-
-    def _build_inputs(self, worker: dict, messages: list[dict]):
-        tokenizer = worker["tokenizer"]
-        device_label = worker["device_label"]
-        if tokenizer.chat_template:
-            return tokenizer.apply_chat_template(
-                messages,
-                add_generation_prompt=True,
-                return_tensors="pt",
-                return_dict=True,
-            ).to(device_label)
-
-        prompt_lines = []
-        for message in messages:
-            role = message.get("role", "user")
-            content = message.get("content", "")
-            prompt_lines.append(f"{role.upper()}: {content}")
-        prompt_lines.append("ASSISTANT:")
-        prompt = "\n".join(prompt_lines)
-        return tokenizer(prompt, return_tensors="pt").to(device_label)
-
-    def _generation_kwargs(self, tokenizer, max_tokens: int, temperature: float, repetition_penalty: float) -> dict:
-        use_sampling = temperature > 0
-        safe_repetition_penalty = repetition_penalty if repetition_penalty > 0 else 1.15
-        return {
-            "max_new_tokens": max_tokens,
-            "temperature": temperature if use_sampling else 1.0,
-            "do_sample": use_sampling,
-            "repetition_penalty": safe_repetition_penalty,
-            "pad_token_id": tokenizer.pad_token_id or (tokenizer.eos_token_id[0] if isinstance(tokenizer.eos_token_id, list) else tokenizer.eos_token_id),
-            "use_cache": True,
-        }
-
-    def _fallback_candidates(self, n: int) -> list[str]:
-        return [FALLBACK_UNAVAILABLE_MESSAGE for _ in range(max(1, n))]
-
-    def _worker_generate_once(
-        self,
-        worker: dict,
-        messages: list[dict],
-        max_tokens: int,
-        temperature: float,
-        repetition_penalty: float,
-        **kwargs,
-    ) -> str:
-        model = worker["model"]
-        tokenizer = worker["tokenizer"]
-        device_id = worker["device_id"]
-        device_label = worker["device_label"]
-        with worker["lock"]:
-            if torch and device_id is not None and torch.cuda.is_available():
-                torch.cuda.set_device(device_id)
-            
-            inputs = self._build_inputs(worker, messages)
-            
-            # Context Truncation: Prevent RoPE kernel crashes by enforcing model limits
-            max_pos = getattr(model.config, "max_position_embeddings", 8192)
-            
-            # Ensure max_tokens doesn't exceed 90% of the total context window
-            max_tokens = min(max_tokens, int(max_pos * 0.9))
-            
-            input_len = inputs.input_ids.shape[1]
-            if input_len + max_tokens > max_pos:
-                # Slicing from the left (keep the most recent context)
-                keep_len = max_pos - max_tokens - 10 # 10 token safety buffer
                 
-                # If keep_len is too small, force at least 128 tokens of context by shrinking max_tokens
-                if keep_len < 128:
-                    keep_len = 128
-                    max_tokens = max_pos - keep_len - 10
+                # Wait for Ollama to spin up (up to 15 seconds)
+                for i in range(15):
+                    time.sleep(1.0)
+                    if self._is_ollama_running():
+                        print("[+] Ollama server started successfully.")
+                        break
+                else:
+                    self.error = "Failed to start Ollama server within 15 seconds."
+                    logger.error(self.error)
+                    return
+            except Exception as e:
+                self.error = f"Error launching Ollama server: {e}"
+                logger.error(self.error)
+                return
+        else:
+            print("[+] Ollama server is already running.")
 
-                # Truncate all tensor keys uniformly to avoid shape mismatches
-                for key in list(inputs.keys()):
-                    if hasattr(inputs[key], "shape") and inputs[key].shape[-1] == input_len:
-                        inputs[key] = inputs[key][:, -keep_len:]
-                input_len = inputs.input_ids.shape[1]
-                logger.info(f"Worker {worker['worker_id']} truncated context to {input_len} tokens")
-
-            gen_kwargs = self._generation_kwargs(
-                tokenizer,
-                max_tokens=max_tokens,
-                temperature=temperature,
-                repetition_penalty=repetition_penalty,
-            )
-            # Add any extra kwargs from the caller
-            gen_kwargs.update(kwargs)
-            
-            with torch.no_grad():
-                output_tokens = model.generate(
-                    **inputs,
-                    **gen_kwargs,
-                    num_return_sequences=1,
+        # 3. Check if the model is downloaded. If not, pull it.
+        if not self._is_model_downloaded():
+            print(f"[*] Model '{self.model_id}' is not in local registry. Pulling from Ollama registry (this may take a few minutes)...")
+            try:
+                process = subprocess.Popen(
+                    ["ollama", "pull", self.model_id],
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.STDOUT,
+                    text=True,
+                    bufsize=1
                 )
-            result = tokenizer.decode(output_tokens[0][input_len:], skip_special_tokens=True).strip()
-            if torch and device_id is not None and torch.cuda.is_available():
-                torch.cuda.empty_cache()
-            return result
+                # Stream the pulling progress to standard output
+                while True:
+                    line = process.stdout.readline()
+                    if not line:
+                        break
+                    print(line.strip())
+                process.wait()
+                if process.returncode != 0:
+                    self.error = f"Failed to pull model '{self.model_id}'. Return code: {process.returncode}"
+                    logger.error(self.error)
+                    return
+                print(f"[+] Model '{self.model_id}' pulled successfully.")
+            except Exception as e:
+                self.error = f"Error pulling model: {e}"
+                logger.error(self.error)
+                return
+        else:
+            print(f"[+] Model '{self.model_id}' is ready.")
 
-    def _pick_stream_worker(self) -> dict:
-        ordered_ids = sorted(self.workers.keys())
-        if len(ordered_ids) > 1:
-            primary = self.workers[ordered_ids[0]]
-            secondary = self.workers[ordered_ids[1]]
-            if primary["lock"].locked() and not secondary["lock"].locked():
-                return secondary
-        return self.workers[ordered_ids[0]]
+        self.ready = True
+        self.workers = {0: {}}  # Mock single worker for health check metrics
+
+    def _is_ollama_running(self) -> bool:
+        import requests
+        try:
+            resp = requests.get(f"{self.ollama_url}/api/tags", timeout=2.0)
+            return resp.status_code == 200
+        except Exception:
+            return False
+
+    def _is_model_downloaded(self) -> bool:
+        import requests
+        try:
+            resp = requests.get(f"{self.ollama_url}/api/tags", timeout=5.0)
+            if resp.status_code == 200:
+                data = resp.json()
+                models = data.get("models", [])
+                
+                # Check for exact match or normalized tags
+                model_names = [m.get("name") for m in models]
+                normalized_target = self.model_id.lower()
+                if ":" not in normalized_target:
+                    normalized_target += ":latest"
+                
+                for name in model_names:
+                    norm_name = name.lower()
+                    if ":" not in norm_name:
+                        norm_name += ":latest"
+                    if norm_name == normalized_target or norm_name.endswith("/" + normalized_target):
+                        return True
+            return False
+        except Exception as e:
+            logger.error(f"Error checking downloaded models: {e}")
+            return False
+
+    def generate_stream(
+        self,
+        messages: list[dict],
+        max_tokens: int = 1024,
+        temperature: float = 0.8,
+        repetition_penalty: float = 1.15,
+        **kwargs,
+    ):
+        import requests
+        import json
+        
+        if not self.ready:
+            yield FALLBACK_UNAVAILABLE_MESSAGE
+            return
+
+        payload = {
+            "model": self.model_id,
+            "messages": messages,
+            "stream": True,
+            "options": {
+                "temperature": temperature,
+                "repeat_penalty": repetition_penalty,
+                "num_predict": max_tokens
+            }
+        }
+        
+        try:
+            response = requests.post(
+                f"{self.ollama_url}/api/chat",
+                json=payload,
+                stream=True,
+                timeout=60
+            )
+            response.raise_for_status()
+            
+            for line in response.iter_lines():
+                if line:
+                    chunk = json.loads(line.decode("utf-8"))
+                    content = chunk.get("message", {}).get("content", "")
+                    if content:
+                        yield content
+        except Exception as e:
+            logger.error(f"Ollama streaming generation error: {e}")
+            yield FALLBACK_UNAVAILABLE_MESSAGE
 
     def generate_batch(
         self,
@@ -450,148 +403,42 @@ class LLMEngine:
         n: int = 1,
         **kwargs,
     ) -> list[str]:
-        if not self.ready:
-            return self._fallback_candidates(n)
-
-        task_total = max(1, n)
-        results: list[str] = [""] * task_total
-        task_queue: queue.Queue[int] = queue.Queue()
-        for idx in range(task_total):
-            task_queue.put(idx)
-
-        def pool_manager(worker: dict):
-            device_id = worker["device_id"]
-            if torch and device_id is not None and torch.cuda.is_available():
-                torch.cuda.set_device(device_id)
-
-            while True:
-                try:
-                    task_idx = task_queue.get_nowait()
-                except queue.Empty:
-                    break
-
-                try:
-                    candidate = self._worker_generate_once(
-                        worker,
-                        messages=messages,
-                        max_tokens=max_tokens,
-                        temperature=temperature,
-                        repetition_penalty=repetition_penalty,
-                        **kwargs,
-                    )
-                    results[task_idx] = candidate or FALLBACK_UNAVAILABLE_MESSAGE
-                except Exception as exc:
-                    if _is_oom_or_gpu_error(exc):
-                        logger.error(f"GPU generation error (worker {worker['worker_id']}): {exc}")
-                        if torch and device_id is not None and torch.cuda.is_available():
-                            torch.cuda.empty_cache()
-                        results[task_idx] = FALLBACK_UNAVAILABLE_MESSAGE
-                    else:
-                        logger.error(f"Batch generation failed on worker {worker['worker_id']}: {exc}")
-                        results[task_idx] = FALLBACK_UNAVAILABLE_MESSAGE
-                finally:
-                    task_queue.task_done()
-
-        threads = []
-        for worker_id in sorted(self.workers.keys()):
-            thread = threading.Thread(target=pool_manager, args=(self.workers[worker_id],), daemon=True)
-            thread.start()
-            threads.append(thread)
-
-        for thread in threads:
-            thread.join()
-
-        return [candidate if candidate else FALLBACK_UNAVAILABLE_MESSAGE for candidate in results]
-
-    def generate_stream(
-        self,
-        messages: list[dict],
-        max_tokens: int = 1024,
-        temperature: float = 0.8,
-        repetition_penalty: float = 1.15,
-        **kwargs,
-    ):
-        if not self.ready:
-            yield FALLBACK_UNAVAILABLE_MESSAGE
-            return
-
-        worker = self._pick_stream_worker()
-        model = worker["model"]
-        tokenizer = worker["tokenizer"]
-        worker_id = worker["worker_id"]
-        device_id = worker["device_id"]
+        import requests
         
-        with worker["lock"]:
-            generation_thread = None
+        if not self.ready:
+            return [FALLBACK_UNAVAILABLE_MESSAGE for _ in range(max(1, n))]
+
+        payload = {
+            "model": self.model_id,
+            "messages": messages,
+            "stream": False,
+            "options": {
+                "temperature": temperature,
+                "repeat_penalty": repetition_penalty,
+                "num_predict": max_tokens
+            }
+        }
+        
+        results = []
+        for i in range(max(1, n)):
             try:
-                if torch and device_id is not None and torch.cuda.is_available():
-                    torch.cuda.set_device(device_id)
-
-                inputs = self._build_inputs(worker, messages)
+                # Add slight temp variation for subsequent candidates if n > 1
+                if i > 0:
+                    payload["options"]["temperature"] = min(1.2, temperature + (0.05 * i))
                 
-                # Context Truncation for Stream: Prevent RoPE kernel crashes
-                max_pos = getattr(model.config, "max_position_embeddings", 8192)
-                max_tokens = min(max_tokens, int(max_pos * 0.9))
-                input_len = inputs.input_ids.shape[1]
-                
-                if input_len + max_tokens > max_pos:
-                    keep_len = max_pos - max_tokens - 10
-                    if keep_len < 128:
-                        keep_len = 128
-                        max_tokens = max_pos - keep_len - 10
-                    
-                    # Truncate all tensor keys uniformly to avoid shape mismatches
-                    for key in list(inputs.keys()):
-                        if hasattr(inputs[key], "shape") and inputs[key].shape[-1] == input_len:
-                            inputs[key] = inputs[key][:, -keep_len:]
-                    logger.info(f"Worker {worker_id} truncated stream context to {inputs.input_ids.shape[1]} tokens")
-
-                streamer = TextIteratorStreamer(
-                    tokenizer,
-                    skip_prompt=True,
-                    skip_special_tokens=True,
+                response = requests.post(
+                    f"{self.ollama_url}/api/chat",
+                    json=payload,
+                    timeout=90
                 )
-                gen_kwargs = self._generation_kwargs(
-                    tokenizer,
-                    max_tokens=max_tokens,
-                    temperature=temperature,
-                    repetition_penalty=repetition_penalty,
-                )
-                generation_kwargs = {
-                    **inputs,
-                    **gen_kwargs,
-                    **kwargs,
-                    "streamer": streamer,
-                }
-
-                def threaded_generate():
-                    if torch and device_id is not None and torch.cuda.is_available():
-                        torch.cuda.set_device(device_id)
-                    model.generate(**generation_kwargs)
-
-                generation_thread = threading.Thread(
-                    target=threaded_generate,
-                    daemon=True,
-                )
-                generation_thread.start()
-
-                for chunk in streamer:
-                    if chunk:
-                        yield chunk
-
-            except Exception as exc:
-                if _is_oom_or_gpu_error(exc):
-                    logger.error(f"GPU generation error (stream worker {worker_id}): {exc}")
-                else:
-                    logger.error(f"Streaming generation failed on worker {worker_id}: {exc}")
-                yield FALLBACK_UNAVAILABLE_MESSAGE
-            finally:
-                # Ensure the generation thread finishes before releasing the lock.
-                # This prevents subsequent requests from colliding with a dangling thread.
-                if generation_thread is not None and generation_thread.is_alive():
-                    generation_thread.join()
-                if torch and device_id is not None and torch.cuda.is_available():
-                    torch.cuda.empty_cache()
+                response.raise_for_status()
+                data = response.json()
+                content = data.get("message", {}).get("content", "").strip()
+                results.append(content or FALLBACK_UNAVAILABLE_MESSAGE)
+            except Exception as e:
+                logger.error(f"Ollama batch generation error on candidate {i}: {e}")
+                results.append(FALLBACK_UNAVAILABLE_MESSAGE)
+        return results
 
 
 
@@ -780,28 +627,7 @@ def create_app(
     @app.get("/health")
     async def health_check():
         """Health check endpoint."""
-        vram_allocated = None
-        vram_reserved = None
-        vram_total = None
-        gpus = []
-        if torch and torch.cuda.is_available():
-            try:
-                for i in range(torch.cuda.device_count()):
-                    alloc = torch.cuda.memory_allocated(i) / (1024 ** 3)
-                    res = torch.cuda.memory_reserved(i) / (1024 ** 3)
-                    tot = torch.cuda.get_device_properties(i).total_memory / (1024 ** 3)
-                    gpus.append({
-                        "id": i,
-                        "allocated_gib": alloc,
-                        "reserved_gib": res,
-                        "total_gib": tot
-                    })
-                if gpus:
-                    vram_allocated = gpus[0]["allocated_gib"]
-                    vram_reserved = gpus[0]["reserved_gib"]
-                    vram_total = gpus[0]["total_gib"]
-            except Exception:
-                pass
+        gpus, vram_allocated, vram_reserved, vram_total = _get_gpu_metrics()
         return {
             "status": "healthy",
             "tunnel_type": tunnel_manager.tunnel_type if tunnel_manager else "none",
