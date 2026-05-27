@@ -93,11 +93,7 @@ class CharacterImporter:
                 "other": replace_placeholders(g("scenario"))
             },
             "starter_messages": [replace_placeholders(g("first_mes"))] if g("first_mes") else [],
-            "bad_weight": 2,
-            "good_weight": 8,
             "system_prompt": f"Character: {char_name}\nPersonality: {replace_placeholders(g('personality'))}\nDescription: {replace_placeholders(g('description'))}\nScenario: {replace_placeholders(g('scenario'))}\n{replace_placeholders(g('system_prompt'))}",
-            "good_prompt_modifyer": "Be more friendly and supportive.",
-            "bad_prompt_modifyer": "Be more cold and distant.",
             "preferred_edge_voice": "en-US-AvaMultilingualNeural",
             "tts_engine": "edge-tts",
             "voice_clone_ref": None,
@@ -176,7 +172,7 @@ def import_character(source_path):
     """Main entry point for importing a character."""
     data = None
     avatar_path = "img/No_Image_Error.png"
-    
+
     if source_path.lower().endswith((".png", ".webp")):
         data = CharacterImporter.extract_from_png(source_path)
         if data and "name" in data:
@@ -185,7 +181,7 @@ def import_character(source_path):
             safe_name = re.sub(r'[^\w\s-]', '', char_name).strip().replace(' ', '_')
             ext = os.path.splitext(source_path)[1]
             dest_image = os.path.join("img", f"{safe_name}{ext}")
-            
+
             os.makedirs("img", exist_ok=True)
             try:
                 shutil.copy2(source_path, dest_image)

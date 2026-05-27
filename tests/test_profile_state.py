@@ -17,9 +17,9 @@ class TestProfileState(unittest.TestCase):
         self.assertEqual(char_path, os.path.join("profiles", "Char.json"))
         self.assertEqual(user_path, os.path.join("user_profiles", "User.json"))
 
-    @patch("engines.profile_state.get_mood_rule", return_value={"label": "Friendly", "color": "#00ff00"})
+    @patch("engines.profile_state.get_relationship_rule", return_value={"label": "Friendly", "color": "#00ff00"})
     @patch("engines.profile_state.resolve_avatar_abs_path", side_effect=["C:\\char.png", "C:\\user.png"])
-    def test_build_sidebar_state(self, _mock_avatar, _mock_mood):
+    def test_build_sidebar_state(self, _mock_avatar, _mock_rel):
         state = build_sidebar_state(
             character_profile={"relationship_score": 12, "avatar_path": "char.png"},
             user_profile={"avatar_path": "user.png"},
@@ -31,7 +31,7 @@ class TestProfileState(unittest.TestCase):
         self.assertEqual(state["char_avatar_abs"], "C:\\char.png")
         self.assertEqual(state["user_avatar_abs"], "C:\\user.png")
         self.assertIn("Nova", state["char_label"])
-        self.assertIn("Friendly", state["mood_label"])
+        self.assertIn("Friendly", state["status_label"])
         self.assertEqual(state["rel_progress"], 112)
 
 

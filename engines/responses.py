@@ -99,55 +99,6 @@ def _extract_remote_message_content(response: requests.Response) -> str:
         return plain
     raise ValueError("Remote LLM response did not include parseable content.")
 
-def apply_mood_decay(profile_path: str, history_profile_name: str):
-    """
-    Calculates time passed since the last interaction and decays the relationship
-    score back towards 0 (neutral) proportionally.
-
-    Args:
-        profile_path (str): Path to the companion's .json profile.
-        history_profile_name (str): The name of the companion for history purposes.
-
-    Returns:
-        tuple: (decay_amount, new_score) if decay happened, else None.
-    """
-    last_time = memory_manager.get_last_timestamp(history_profile_name)
-    if not last_time:
-        return 0, 0
-
-    now = datetime.now()
-    diff = now - last_time
-    hours_passed = diff.total_seconds() / 3600
-
-    # Only apply decay if at least 5 minutes have passed
-    if hours_passed < (5 / 60):
-        return 0, 0
-
-    try:
-        with open(profile_path, "r", encoding="UTF-8") as f:
-            data = json.load(f)
-
-        current_score = data.get("relationship_score", 0)
-        if current_score == 0:
-            return 0, 0
-
-        # Relationship fades by 5% every hour (decay_factor = 0.95)
-        decay_factor = 0.95
-        new_score_float = current_score * (decay_factor ** hours_passed)
-        new_score = int(round(new_score_float))
-
-        if current_score != new_score:
-            decay_amount = abs(current_score - new_score)
-            data["relationship_score"] = new_score
-            with open(profile_path, "w", encoding="UTF-8") as f:
-                json.dump(data, f, indent=4)
-            return decay_amount, new_score
-
-    except Exception as e:
-        print(f"Error applying mood decay: {e}")
-
-    return 0, 0
-
 def update_profile_score(profile_path: str, score_change: int):
     """
     Persists a change to the companion's relationship score.
@@ -501,7 +452,7 @@ def _perform_post_processing(
         memory_manager.save_history(
             history_profile_name,
             full_history,
-            mood_score=rel_score,
+            relationship_score=rel_score,
             current_scene=new_scene,
             memory_core=memory_core,
             last_summarized_index=last_summarized_index
@@ -546,7 +497,7 @@ def _perform_post_processing(
             print(f"Background post-processing failed: {e}")
             traceback.print_exc()
 
-def get_respond_stream(user_input: str, profile: dict, should_obey: bool | None = None, profile_path: str = None, system_extra_info: str = None, history_profile_name: str = None, is_regeneration: bool = False, user_name: str = "User"):
+def get_respond_stream(user_input: str, profile: dict, profile_path: str = None, system_extra_info: str = None, history_profile_name: str = None, is_regeneration: bool = False, user_name: str = "User"):
     """
     Generates a streaming response from the LLM (Local Ollama or Remote API).
     Parses sentiment tags [REL: +X] to update relationship status in real-time.
@@ -554,7 +505,6 @@ def get_respond_stream(user_input: str, profile: dict, should_obey: bool | None 
     Args:
         user_input (str): The raw text from the user.
         profile (dict): The companion's profile data.
-        should_obey (bool): Result of the mood engine's decision.
         profile_path (str): Path to the profile file (for score updates).
         system_extra_info (str): Temporary context instructions.
         history_profile_name (str): The name of the profile for history management.
@@ -651,20 +601,8 @@ def get_respond_stream(user_input: str, profile: dict, should_obey: bool | None 
             pipeline_context = render_pipeline_context(canonical_state, memory_stack, narrative_plan)
             system_extra_info = f"{system_extra_info}\n\n{pipeline_context}"
 
-    # Set behavioral requirements based on the Mood Engine's 'should_obey' decision
-    if should_obey is not None:
-        if not should_obey:
-            action_req = "MUST REFUSE the user's request."
-            tone_mod = profile.get("bad_prompt_modifyer", "Refuse creatively.")
-        else:
-            action_req = "MUST AGREE to the user's request."
-            tone_mod = profile.get("good_prompt_modifyer", "Agree and assist.")
-    else:
-        action_req = "Respond normally."
-        tone_mod = "Maintain a balanced tone."
-
     # Construct the master system instruction
-    system_content = build_system_prompt(profile, rel_score, action_req, tone_mod, interaction_mode, system_extra_info)
+    system_content = build_system_prompt(profile, rel_score, interaction_mode, system_extra_info)
 
     # Compile message list for the LLM
     messages = [{'role': 'system', 'content': system_content}]
@@ -924,9 +862,9 @@ def get_respond_stream(user_input: str, profile: dict, should_obey: bool | None 
         else:
             yield f"\n[BRAIN ERROR] {str(e)}"
 
-def get_respond(user_input: str, profile: dict, should_obey: bool = True, profile_path: str = None, is_regeneration: bool = False) -> str:
+def get_respond(user_input: str, profile: dict, profile_path: str = None, is_regeneration: bool = False) -> str:
     """Non-streaming version of the response generator."""
     full_response = ""
-    for chunk in get_respond_stream(user_input, profile, should_obey, profile_path, is_regeneration=is_regeneration):
+    for chunk in get_respond_stream(user_input, profile, profile_path, is_regeneration=is_regeneration):
         full_response += chunk
     return full_response

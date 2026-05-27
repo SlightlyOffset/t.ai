@@ -10,18 +10,18 @@ from engines.utilities import replace_placeholders
 
 RP_RULES_PATH = "response_rule/rp_rule.md"
 CASUAL_RULES_PATH = "response_rule/casual_rule.md"
-MOOD_INTENSITY_PATH = "response_rule/mood_intensity.json"
+RELATIONSHIP_INTENSITY_PATH = "response_rule/relationship_intensity.json"
 
-def get_mood_rule(rel_score: int) -> dict:
+def get_relationship_rule(rel_score: int) -> dict:
     """
-    Loads the mood_intensity.json and returns the correct rule object
+    Loads the relationship_intensity.json and returns the correct rule object
     based on the current relationship score.
     """
-    if not os.path.exists(MOOD_INTENSITY_PATH):
+    if not os.path.exists(RELATIONSHIP_INTENSITY_PATH):
         return {}
     
     try:
-        with open(MOOD_INTENSITY_PATH, "r", encoding="UTF-8") as f:
+        with open(RELATIONSHIP_INTENSITY_PATH, "r", encoding="UTF-8") as f:
             intensity_rules = json.load(f)
             
         # Sort by min_score descending to find the highest bracket the score falls into
@@ -55,7 +55,7 @@ def load_user_profile():
             return None
     return None
 
-def build_system_prompt(profile: dict, rel_score: int, action_req: str, tone_mod: str, mode: str = "rp", system_extra_info: str = None) -> str:
+def build_system_prompt(profile: dict, rel_score: int, mode: str = "rp", system_extra_info: str = None) -> str:
     """
     Constructs the master system prompt for the LLM.
     Combines character backstory, mannerisms, user details, and behavioral rules.
@@ -63,8 +63,6 @@ def build_system_prompt(profile: dict, rel_score: int, action_req: str, tone_mod
     Args:
         profile (dict): The active companion's profile data.
         rel_score (int): Current relationship score (-100 to 100).
-        action_req (str): Instruction on whether to obey or refuse requests.
-        tone_mod (str): Instruction on the tone of the response.
         mode (str): Interaction mode ('rp' or 'casual').
         system_extra_info (str): Temporary context/notes for this specific turn.
 
@@ -107,9 +105,9 @@ Mannerisms to watch for: {', '.join(user_profile.get('rp_mannerisms', []))}
 """
 
     # 3. Dynamic Context (Relationship and Tone)
-    mood_rule = get_mood_rule(rel_score)
-    rel_label = mood_rule.get("label", "Neutral")
-    mood_instruction = mood_rule.get("instruction", "") if mode == "rp" else ""
+    rel_rule = get_relationship_rule(rel_score)
+    rel_label = rel_rule.get("label", "Neutral")
+    rel_instruction = rel_rule.get("instruction", "") if mode == "rp" else ""
     
     system_content = f"""{base_prompt}
 
@@ -118,10 +116,8 @@ Mannerisms to watch for: {', '.join(user_profile.get('rp_mannerisms', []))}
 
 [CONTEXT]
 Rel: {rel_label} ({rel_score}/100)
-Action: {action_req}
-Tone: {tone_mod}
 Mode: {mode.upper()}
-{mood_instruction}
+{rel_instruction}
 """
 
     # 4. Global Behavioral Rules

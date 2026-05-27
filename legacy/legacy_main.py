@@ -32,7 +32,7 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from engines.actions import execute_command
 from engines.utilities import is_command, pick_profile, pick_user_profile, get_text_style, replace_placeholders
 from engines.app_commands import app_commands, RestartRequested
-from engines.responses import get_respond_stream, apply_mood_decay
+from engines.responses import get_respond_stream
 from engines.tts_module import generate_audio, play_audio, clean_text_for_tts
 from engines.config import update_setting, get_setting
 from engines.memory_v2 import memory_manager
@@ -164,7 +164,7 @@ def run_app():
 
         memory_manager.save_history(history_profile_name, [{"role": "assistant",
                                                             "content": starter_messages[0]}],
-                                    mood_score=character_profile.get("relationship_score", 0))
+                                    relationship_score=character_profile.get("relationship_score", 0))
 
     # Main interaction loop
     while True:
@@ -181,7 +181,7 @@ def run_app():
             narrator_voice = get_setting("narration_tts_voice", "en-US-AndrewNeural")
             narrator_engine = "edge-tts"
 
-            apply_mood_decay(character_profile_path, history_profile_name)
+
 
             gen_thread = threading.Thread(target=tts_generation_worker)
             play_thread = threading.Thread(target=tts_playback_worker)
@@ -205,15 +205,9 @@ def run_app():
                     gen_thread.join(); play_thread.join()
                     continue
 
-            should_obey = None
             if is_command(user_input) and config.get("execute_command", False):
-                rel_score = profile_data.get("relationship_score", 0)
-                weights = [max(0.1, profile_data.get("good_weight", 5) + (rel_score/10)),
-                           max(0.1, profile_data.get("bad_weight", 5) - (rel_score/10))]
-                should_obey = (random.choices(["good", "bad"], weights=weights, k=1)[0] == "good")
-                if should_obey:
-                    _, message = execute_command(user_input)
-                    print(Fore.GREEN + f"[SYSTEM] {message}" + Style.RESET_ALL)
+                _, message = execute_command(user_input)
+                print(Fore.GREEN + f"[SYSTEM] {message}" + Style.RESET_ALL)
 
             # Get text styles for terminal output
             char_style, narration_style = get_text_style(profile_data)
@@ -244,7 +238,7 @@ def run_app():
             narration_enable = get_setting("speak_narration", False)
             # ------------------------------------------------
 
-            for chunk in get_respond_stream(user_input, profile_data, should_obey=should_obey, profile_path=character_profile_path):
+            for chunk in get_respond_stream(user_input, profile_data, profile_path=character_profile_path):
                 if first_chunk:
                     # Clear "thinking..." (11 chars)
                     sys.stdout.write("\b" * 11 + " " * 11 + "\b" * 11)

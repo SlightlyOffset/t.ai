@@ -14,7 +14,7 @@ A lightweight, highly immersive, profile-based AI companion that lives in your t
 * **Sixel/Kitty Image Rendering**: High-fidelity character portraits integrated directly into the terminal for deeper immersion.
 * **Real-time Streaming**: Watch your companion "think" and type in real-time within immersive side-bordered bubbles.
 * **Immersive Styling**: Automatic italicization and dimming of RP narration (`*actions*`) to separate dialogue from description.
-* **Persistent Sidebars**: Real-time tracking of relationship scores, mood labels, and active profiles (Toggle with `Ctrl+B`).
+* **Persistent Sidebars**: Real-time tracking of relationship scores, status labels, and active profiles (Toggle with `Ctrl+B`).
 
 ### 🎙️ Advanced Audio & Voice Cloning
 
@@ -23,10 +23,10 @@ A lightweight, highly immersive, profile-based AI companion that lives in your t
 * **Hybrid Offloading**: Intelligent switching between local CPU/GPU and remote GPU pools (Colab/Kaggle) for zero-latency TTS playback.
 * **Pipelined Streaming**: Uses a multi-threaded queue system to generate and play audio *while* the LLM is still typing. Zero latency.
 
-### 📈 Relationship & Mood Engine
+### 📈 Relationship Engine
 
-* **Persistence**: A -100 to +100 relationship meter that dictates the AI's tone and obedience.
-* **Mood Decay & Sentiment Awareness**: The character remembers how long it's been since you last chatted. The AI self-reports its emotional state based on your interactions, updating its profile in real-time.
+* **Persistence**: A -100 to +100 relationship meter that dictates the AI's tone, obedience, and conversation instructions.
+* **Relationship Intensity Rules**: Leverages dynamic intensity states (defined in `relationship_intensity.json`) to adjust the system prompt and conversation instructions based on current scores.
 
 ### 🎭 Deep Character Immersion & Memory
 
@@ -175,10 +175,10 @@ Edit `settings.json` to customize your experience:
 
 ## 📜 Roadmap
 
-* [x] **Core Logic**: Mood Engine, Persistent Memory, and Relationships.
+* [x] **Core Logic**: Relationship Engine and Persistent Memory (mood engine decoupled for future reimplementation).
 * [x] **Cloud & Audio**: Colab Bridge, Streaming TTS, and XTTS v2 Integration.
 * [x] **TUI Overhaul**: High-fidelity bubble layout and terminal image rendering.
 * [x] **Security Sprint**: Comprehensive vulnerability remediation and hardening.
 * [ ] **Agentic Intelligence (v0.2.0)**: Transform t.ai into an autonomous agent (File I/O, Code Execution).
 * [ ] **Dedicated Command Mode**: Structured `Ctrl+!` input for complex task handling.
-* [ ] **Live2D Integration**: Map mood scores to sprite changes and animations.
+* [ ] **Live2D Integration**: Map relationship scores and future emotional states to sprite changes and animations.
