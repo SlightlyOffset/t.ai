@@ -39,7 +39,7 @@
     "voice_clone_ref": "", // path to the character's voice sample directory, e.g. "voices/MyChar". All .wav files inside are used for cloning. More samples = better quality. Null to disable.
     "tts_language": "", // language code passed to XTTS, e.g. "en", "ja", "fr"
     "llm_model": "", // the name of the LLM model to use for this character, should be a valid model from Hugging Face
-    "relationship_score": 0, // int 0-100, how much the user likes this character
+    "relationship_score": 0, // int -100 to 100, relationship score between the user and this character
     "colors": {
         "text": "", // the color for the character's text, should be a valid color from colorama.Fore
         "label": "", // the style for the character's labels (like name and timestamps), should be a valid style from colorama.Style
