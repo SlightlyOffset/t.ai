@@ -50,7 +50,7 @@
     width: 100%;
     text-align: center;
 }
-#lbl_char, #lbl_mood, #lbl_rel, #lbl_user {
+#lbl_char, #lbl_status, #lbl_rel, #lbl_user {
     width: 100%;
     text-align: center;
 }

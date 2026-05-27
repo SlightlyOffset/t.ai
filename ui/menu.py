@@ -332,7 +332,7 @@ class TaiMenu(App):
                 with Vertical(id="char_avatar_wrap", classes="avatar_container"):
                     yield self._build_avatar_widget(self._current_char_avatar_path, "avatar_portrait_character")
                 yield Label("Name: [bold magenta]None[/bold magenta]", id="lbl_char")
-                yield Label("Mood: [bold]Neutral[/bold]", id="lbl_mood")
+                yield Label("Status: [bold]Neutral[/bold]", id="lbl_status")
                 yield Label("Relationship:", classes="sidebar_label")
                 yield ProgressBar(total=200, show_percentage=False, id="rel_bar")
                 yield Label("Score: [bold]0[/bold]", id="lbl_rel")
@@ -737,7 +737,7 @@ class TaiMenu(App):
             pass
 
         self.query_one("#lbl_char").update(state["char_label"])
-        self.query_one("#lbl_mood").update(state["mood_label"])
+        self.query_one("#lbl_status").update(state["status_label"])
         self.query_one("#lbl_rel").update(state["rel_label"])
         self.query_one("#lbl_user").update(state["user_label"])
         self.query_one("#rel_bar").progress = state["rel_progress"]

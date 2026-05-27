@@ -31,7 +31,7 @@ class TestProfileState(unittest.TestCase):
         self.assertEqual(state["char_avatar_abs"], "C:\\char.png")
         self.assertEqual(state["user_avatar_abs"], "C:\\user.png")
         self.assertIn("Nova", state["char_label"])
-        self.assertIn("Friendly", state["mood_label"])
+        self.assertIn("Friendly", state["status_label"])
         self.assertEqual(state["rel_progress"], 112)
 
 

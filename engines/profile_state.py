@@ -102,7 +102,7 @@ def build_sidebar_state(
         "char_avatar_abs": char_avatar_abs,
         "user_avatar_abs": user_avatar_abs,
         "char_label": f"Name: [bold {char_name_lbl_color}]{ch_name}[/bold {char_name_lbl_color}]",
-        "mood_label": f"Mood: [bold {mood_rule.get('color', '#6e88ff')}]{mood_rule.get('label', 'Neutral / Acquaintance')}[/bold {mood_rule.get('color', '#6e88ff')}]",
+        "status_label": f"Status: [bold {mood_rule.get('color', '#6e88ff')}]{mood_rule.get('label', 'Neutral / Acquaintance')}[/bold {mood_rule.get('color', '#6e88ff')}]",
         "rel_label": f"Score: [bold]{rel}[/bold]",
         "user_label": f"User: [bold {user_name_lbl_color}]{user_name}[/bold {user_name_lbl_color}]",
         "rel_progress": rel + 100,
