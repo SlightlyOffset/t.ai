@@ -99,55 +99,6 @@ def _extract_remote_message_content(response: requests.Response) -> str:
         return plain
     raise ValueError("Remote LLM response did not include parseable content.")
 
-def apply_mood_decay(profile_path: str, history_profile_name: str):
-    """
-    Calculates time passed since the last interaction and decays the relationship
-    score back towards 0 (neutral) proportionally.
-
-    Args:
-        profile_path (str): Path to the companion's .json profile.
-        history_profile_name (str): The name of the companion for history purposes.
-
-    Returns:
-        tuple: (decay_amount, new_score) if decay happened, else None.
-    """
-    last_time = memory_manager.get_last_timestamp(history_profile_name)
-    if not last_time:
-        return 0, 0
-
-    now = datetime.now()
-    diff = now - last_time
-    hours_passed = diff.total_seconds() / 3600
-
-    # Only apply decay if at least 5 minutes have passed
-    if hours_passed < (5 / 60):
-        return 0, 0
-
-    try:
-        with open(profile_path, "r", encoding="UTF-8") as f:
-            data = json.load(f)
-
-        current_score = data.get("relationship_score", 0)
-        if current_score == 0:
-            return 0, 0
-
-        # Relationship fades by 5% every hour (decay_factor = 0.95)
-        decay_factor = 0.95
-        new_score_float = current_score * (decay_factor ** hours_passed)
-        new_score = int(round(new_score_float))
-
-        if current_score != new_score:
-            decay_amount = abs(current_score - new_score)
-            data["relationship_score"] = new_score
-            with open(profile_path, "w", encoding="UTF-8") as f:
-                json.dump(data, f, indent=4)
-            return decay_amount, new_score
-
-    except Exception as e:
-        print(f"Error applying mood decay: {e}")
-
-    return 0, 0
-
 def update_profile_score(profile_path: str, score_change: int):
     """
     Persists a change to the companion's relationship score.
@@ -501,7 +452,7 @@ def _perform_post_processing(
         memory_manager.save_history(
             history_profile_name,
             full_history,
-            mood_score=rel_score,
+            relationship_score=rel_score,
             current_scene=new_scene,
             memory_core=memory_core,
             last_summarized_index=last_summarized_index

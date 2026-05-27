@@ -3,7 +3,7 @@ import os
 from pathlib import Path
 
 from engines.config import get_setting
-from engines.prompts import get_mood_rule
+from engines.prompts import get_relationship_rule
 
 
 DEFAULT_AVATAR_PATH = "img/No_Image_Error.png"
@@ -96,13 +96,13 @@ def build_sidebar_state(
     user_avatar_abs = resolve_avatar_abs_path((user_profile or {}).get("avatar_path", DEFAULT_AVATAR_PATH))
 
     rel = character_profile.get("relationship_score", 0)
-    mood_rule = get_mood_rule(rel)
-
+    rel_rule = get_relationship_rule(rel)
+ 
     return {
         "char_avatar_abs": char_avatar_abs,
         "user_avatar_abs": user_avatar_abs,
         "char_label": f"Name: [bold {char_name_lbl_color}]{ch_name}[/bold {char_name_lbl_color}]",
-        "status_label": f"Status: [bold {mood_rule.get('color', '#6e88ff')}]{mood_rule.get('label', 'Neutral / Acquaintance')}[/bold {mood_rule.get('color', '#6e88ff')}]",
+        "status_label": f"Status: [bold {rel_rule.get('color', '#6e88ff')}]{rel_rule.get('label', 'Neutral / Acquaintance')}[/bold {rel_rule.get('color', '#6e88ff')}]",
         "rel_label": f"Score: [bold]{rel}[/bold]",
         "user_label": f"User: [bold {user_name_lbl_color}]{user_name}[/bold {user_name_lbl_color}]",
         "rel_progress": rel + 100,

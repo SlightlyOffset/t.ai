@@ -594,7 +594,7 @@ class TaiMenu(App):
             self.add_message(self.format_rp(starter_messages[0], role="assistant"), role="assistant", message_number=1)
             memory_manager.save_history(self.history_profile_name, [{"role": "assistant",
                                                                      "content": starter_messages[0]}],
-                                        mood_score=self.character_profile.get("relationship_score", 0))
+                                        relationship_score=self.character_profile.get("relationship_score", 0))
 
     def run_recap(self):
         messages_history = memory_manager.load_history(self.history_profile_name)

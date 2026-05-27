@@ -32,7 +32,7 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from engines.actions import execute_command
 from engines.utilities import is_command, pick_profile, pick_user_profile, get_text_style, replace_placeholders
 from engines.app_commands import app_commands, RestartRequested
-from engines.responses import get_respond_stream, apply_mood_decay
+from engines.responses import get_respond_stream
 from engines.tts_module import generate_audio, play_audio, clean_text_for_tts
 from engines.config import update_setting, get_setting
 from engines.memory_v2 import memory_manager
@@ -164,7 +164,7 @@ def run_app():
 
         memory_manager.save_history(history_profile_name, [{"role": "assistant",
                                                             "content": starter_messages[0]}],
-                                    mood_score=character_profile.get("relationship_score", 0))
+                                    relationship_score=character_profile.get("relationship_score", 0))
 
     # Main interaction loop
     while True:
@@ -181,7 +181,7 @@ def run_app():
             narrator_voice = get_setting("narration_tts_voice", "en-US-AndrewNeural")
             narrator_engine = "edge-tts"
 
-            apply_mood_decay(character_profile_path, history_profile_name)
+
 
             gen_thread = threading.Thread(target=tts_generation_worker)
             play_thread = threading.Thread(target=tts_playback_worker)

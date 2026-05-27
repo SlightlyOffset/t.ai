@@ -26,7 +26,7 @@ class TestHistoryManager(unittest.TestCase):
             {"role": "user", "content": "Hello"},
             {"role": "assistant", "content": "Hi there!"}
         ]
-        self.manager.save_history(profile, history, mood_score=10)
+        self.manager.save_history(profile, history, relationship_score=10)
         
         loaded = self.manager.load_history(profile)
         self.assertEqual(len(loaded), 2)
@@ -35,7 +35,7 @@ class TestHistoryManager(unittest.TestCase):
         # Check that we can also get the metadata
         data = self.manager.get_full_data(profile)
         self.assertIn("metadata", data)
-        self.assertEqual(data["metadata"]["mood_score"], 10)
+        self.assertEqual(data["metadata"]["relationship_score"], 10)
         self.assertIn("last_interaction", data["metadata"])
 
     def test_truncation(self):
@@ -98,7 +98,7 @@ class TestHistoryManager(unittest.TestCase):
         self.manager.save_history(
             profile,
             history,
-            mood_score=12,
+            relationship_score=12,
             current_scene="Cafe",
             memory_core="Summary exists",
             last_summarized_index=4,
@@ -111,7 +111,7 @@ class TestHistoryManager(unittest.TestCase):
         self.assertEqual(len(data["history"]), 3)
         self.assertEqual(data["metadata"]["last_summarized_index"], 0)
         self.assertEqual(data["metadata"]["memory_core"], "")
-        self.assertEqual(data["metadata"]["mood_score"], 12)
+        self.assertEqual(data["metadata"]["relationship_score"], 12)
         self.assertEqual(data["metadata"]["current_scene"], "Cafe")
 
     def test_rewind_history_keeps_valid_summary_index(self):

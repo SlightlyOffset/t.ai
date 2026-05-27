@@ -10,18 +10,18 @@ from engines.utilities import replace_placeholders
 
 RP_RULES_PATH = "response_rule/rp_rule.md"
 CASUAL_RULES_PATH = "response_rule/casual_rule.md"
-MOOD_INTENSITY_PATH = "response_rule/mood_intensity.json"
+RELATIONSHIP_INTENSITY_PATH = "response_rule/relationship_intensity.json"
 
-def get_mood_rule(rel_score: int) -> dict:
+def get_relationship_rule(rel_score: int) -> dict:
     """
-    Loads the mood_intensity.json and returns the correct rule object
+    Loads the relationship_intensity.json and returns the correct rule object
     based on the current relationship score.
     """
-    if not os.path.exists(MOOD_INTENSITY_PATH):
+    if not os.path.exists(RELATIONSHIP_INTENSITY_PATH):
         return {}
     
     try:
-        with open(MOOD_INTENSITY_PATH, "r", encoding="UTF-8") as f:
+        with open(RELATIONSHIP_INTENSITY_PATH, "r", encoding="UTF-8") as f:
             intensity_rules = json.load(f)
             
         # Sort by min_score descending to find the highest bracket the score falls into
@@ -105,9 +105,9 @@ Mannerisms to watch for: {', '.join(user_profile.get('rp_mannerisms', []))}
 """
 
     # 3. Dynamic Context (Relationship and Tone)
-    mood_rule = get_mood_rule(rel_score)
-    rel_label = mood_rule.get("label", "Neutral")
-    mood_instruction = mood_rule.get("instruction", "") if mode == "rp" else ""
+    rel_rule = get_relationship_rule(rel_score)
+    rel_label = rel_rule.get("label", "Neutral")
+    rel_instruction = rel_rule.get("instruction", "") if mode == "rp" else ""
     
     system_content = f"""{base_prompt}
 
@@ -117,7 +117,7 @@ Mannerisms to watch for: {', '.join(user_profile.get('rp_mannerisms', []))}
 [CONTEXT]
 Rel: {rel_label} ({rel_score}/100)
 Mode: {mode.upper()}
-{mood_instruction}
+{rel_instruction}
 """
 
     # 4. Global Behavioral Rules
