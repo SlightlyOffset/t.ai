@@ -13,7 +13,7 @@
     "default_llm_model": "fluffy/l3-8b-stheno-v3.2",
     "summarizer_model": "gemma2:2b",
     "local_utility_model": "phi3",
-    "memory_limit": 10,
+    "memory_limit": 15,
     "suppress_errors": true,
     "current_user_profile": "",
     "current_character_profile": "",
