@@ -1,15 +1,16 @@
 import re
 from textual.app import ComposeResult
 from textual.containers import Container, Horizontal, Vertical, VerticalScroll
-from textual.screen import Screen
+from textual.screen import ModalScreen
 from textual.widgets import Header, Label, Footer, TabbedContent, TabPane, Switch, Input, Select, Button
 
-class SettingsScreen(Screen):
+class SettingsScreen(ModalScreen):
     """Dedicated settings screen with categorized tabs for configuration."""
 
     DEFAULT_CSS = """
     SettingsScreen {
         align: center middle;
+        background: rgba(0, 0, 0, 0.65);
     }
 
     #settings_container {
