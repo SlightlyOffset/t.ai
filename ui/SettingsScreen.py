@@ -30,7 +30,7 @@ class SettingsScreen(Screen):
     }
 
     .settings_pane {
-        height: auto;
+        height: 100%;
         padding: 1;
     }
 
@@ -252,10 +252,10 @@ class SettingsScreen(Screen):
                             yield Label("Overhaul Planner Engine:", classes="settings_label")
                             yield Switch(value=overhaul_planner_enabled, id="overhaul_planner_enabled", classes="settings_widget")
                         with Horizontal(classes="settings_row"):
-                            yield Label("Overhaul Candidates Selection:", classes="settings_label")
+                            yield Label("Overhaul Candidates Enabled:", classes="settings_label")
                             yield Switch(value=overhaul_candidates_enabled, id="overhaul_candidates_enabled", classes="settings_widget")
                         with Horizontal(classes="settings_row"):
-                            yield Label("Overhaul Critic Evaluation:", classes="settings_label")
+                            yield Label("Overhaul Critic Enabled:", classes="settings_label")
                             yield Switch(value=overhaul_critic_enabled, id="overhaul_critic_enabled", classes="settings_widget")
                         with Horizontal(classes="settings_row"):
                             yield Label("Overhaul Candidate Count:", classes="settings_label")
