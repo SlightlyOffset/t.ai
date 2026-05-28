@@ -29,8 +29,11 @@ class SettingsScreen(Screen):
         margin-bottom: 1;
     }
 
+    #settings_tabs {
+        height: 1fr;
+    }
+
     .settings_pane {
-        height: 100%;
         padding: 1;
     }
 
