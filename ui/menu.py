@@ -604,10 +604,22 @@ class TaiMenu(App):
         if not messages_history:
             return
 
-        recap_state = split_recap_history(messages_history)
-        if recap_state["mode"] == "full":
+        # Check if we have an existing persistent summary
+        memory_core = memory_manager.get_memory_core(self.history_profile_name)
+        last_index = memory_manager.get_last_summarized_index(self.history_profile_name)
+        
+        # Defensive check against mocks in unit tests
+        if not isinstance(memory_core, str):
+            memory_core = ""
+        if not isinstance(last_index, int):
+            last_index = 0
+
+        short_limit = 15
+
+        if len(messages_history) <= short_limit:
+            # Short history: show all in full
             self.add_message(f"--- Recap: {len(messages_history)} messages loaded ---", role="system")
-            for index, msg_data in enumerate(recap_state["messages"], start=1):
+            for index, msg_data in enumerate(messages_history, start=1):
                 role = msg_data.get("role", "assistant")
                 content = msg_data.get("content", "")
                 if role != "system":
@@ -615,18 +627,64 @@ class TaiMenu(App):
                 message_number = index if role in ("user", "assistant") else None
                 self.add_message(content, role=role, msg_data=msg_data, message_number=message_number)
             self.add_message("--- Recap complete ---", role="system")
-        else:
-            self.add_message("--- [bold cyan]Analyzing past memories...[/bold cyan] ---", role="system")
-            self.summarize_and_display(
-                recap_state["older_history"],
-                recap_state["recent_history"],
-                recap_state["recent_start_index"],
-            )
+            return
+
+        # Long history: check memory core
+        if memory_core:
+            new_messages_count = len(messages_history) - last_index
+            if new_messages_count <= short_limit:
+                # Not enough new messages to warrant updating summary on boot.
+                # Display the cached summary instantly and show the new messages in full.
+                self.add_message("--- Recap: Memory Core (Loaded instantly) ---", role="system")
+                self.add_message(self.format_summary(memory_core), role="summary")
+                self.add_message("--- Recent Continuity ---", role="system")
+                
+                recent_history = messages_history[last_index:]
+                for offset, msg_data in enumerate(recent_history):
+                    role = msg_data.get("role", "assistant")
+                    content = msg_data.get("content", "")
+                    if role != "system":
+                        content = self.format_rp(content, role=role)
+                    message_number = last_index + 1 + offset if role in ("user", "assistant") else None
+                    self.add_message(content, role=role, msg_data=msg_data, message_number=message_number)
+                
+                self.add_message("--- Recap complete ---", role="system")
+                return
+
+        # Fallback to background summarization if no summary exists or too many new messages accumulated
+        recap_state = split_recap_history(messages_history, short_history_limit=short_limit, recent_window=5)
+        self.add_message("--- [bold cyan]Analyzing past memories...[/bold cyan] ---", role="system")
+        self.summarize_and_display(
+            recap_state["older_history"],
+            recap_state["recent_history"],
+            recap_state["recent_start_index"],
+            existing_core=memory_core,
+            last_summarized_index=last_index
+        )
 
     @work(thread=True)
-    def summarize_and_display(self, older_history: list, recent_history: list, recent_start_index: int):
+    def summarize_and_display(self, older_history: list, recent_history: list, recent_start_index: int, existing_core: str = "", last_summarized_index: int = 0):
         """Worker for summarizing history in the background."""
-        summary = generate_recap_summary(older_history, user_name=self.user_name, char_name=self.ch_name)
+        if existing_core:
+            # Incremental update: summarize only new messages up to older_history end
+            new_messages_to_sum = older_history[last_summarized_index:]
+            if new_messages_to_sum:
+                summary = generate_updated_memory_core(
+                    existing_core,
+                    new_messages_to_sum,
+                    user_name=self.user_name,
+                    char_name=self.ch_name,
+                )
+                # Persist the update
+                new_last_index = len(older_history)
+                memory_manager.update_memory_core(self.history_profile_name, summary, new_last_index)
+            else:
+                summary = existing_core
+        else:
+            summary = generate_recap_summary(older_history, user_name=self.user_name, char_name=self.ch_name)
+            # Save the initial memory core
+            new_last_index = len(older_history)
+            memory_manager.update_memory_core(self.history_profile_name, summary, new_last_index)
 
         def update_ui():
             self.add_message(self.format_summary(summary), role="summary")
