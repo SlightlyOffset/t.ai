@@ -115,6 +115,7 @@ class TaiMenu(App):
     BINDINGS = [
         ("ctrl+b", "toggle_sidebar", "Toggle Sidebar"),
         ("ctrl+o", "open_profile_select", "Profiles"),
+        ("ctrl+s", "open_settings", "Settings"),
         ("ctrl+q", "quit", "Quit"),
         ("alt+left", "previous_response", "Prev Resp"),
         ("alt+right", "next_or_regenerate_response", "Next/Regen"),
@@ -314,6 +315,45 @@ class TaiMenu(App):
         """Open the profile selection screen."""
         from ui.ProfileSelectScreen import ProfileSelect
         self.push_screen(ProfileSelect(), callback=self.on_profile_selected)
+
+    def action_open_settings(self) -> None:
+        """Open the global settings screen."""
+        from ui.SettingsScreen import SettingsScreen
+        self.push_screen(SettingsScreen(), callback=self.on_settings_saved)
+
+    def on_settings_saved(self, result: dict | None) -> None:
+        """Callback handled when SettingsScreen is dismissed with saved changes."""
+        if not result:
+            return
+
+        self.add_message("✓ Settings saved successfully", role="system")
+
+        # Sync Main TUI settings sidebar widgets with new settings
+        try:
+            self.query_one("#sw_tts", Switch).value = result.get("tts_enabled", False)
+            self.query_one("#sw_dialogue", Switch).value = result.get("character_speak", True)
+            self.query_one("#sw_narration", Switch).value = result.get("speak_narration", True)
+            self.query_one("#sw_privacy", Switch).value = result.get("privacy_mode", False)
+
+            self.query_one("#model_select", Select).value = result.get("default_llm_model")
+            self.query_one("#tts_engine_select", Select).value = result.get("default_tts_engine")
+            self.query_one("#character_voice_select", Select).value = result.get("default_tts_voice")
+            self.query_one("#narration_voice_select", Select).value = result.get("narration_tts_voice")
+            self.query_one("#image_protocol_select", Select).value = result.get("image_protocol")
+        except Exception:
+            pass
+
+        # Update character profile settings locally if character active
+        if self.character_profile and self.char_path:
+            self.character_profile["llm_model"] = result.get("default_llm_model")
+            self.character_profile["tts_engine"] = result.get("default_tts_engine")
+            self.character_profile["preferred_edge_voice"] = result.get("default_tts_voice")
+            from engines.utilities import save_json_atomic
+            save_json_atomic(self.char_path, self.character_profile)
+
+        # Apply settings changes live
+        self.remount_avatar_widgets()
+        self.update_sidebar()
 
     def compose(self) -> ComposeResult:
         self._current_char_avatar_path, self._current_user_avatar_path = get_initial_avatar_paths(
@@ -918,6 +958,10 @@ class TaiMenu(App):
                     f"[SYSTEM] Rewound conversation from {command_action['original_count']} to {command_action['kept_count']} messages.",
                     role="command",
                 )
+                return
+
+            if command_action["type"] == "open_settings":
+                self.action_open_settings()
                 return
 
             if command_action["type"] == "compress":

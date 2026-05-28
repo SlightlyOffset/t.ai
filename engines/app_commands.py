@@ -57,6 +57,10 @@ class RewindRequested(Exception):
         super().__init__(f"Rewind requested to message {message_number}")
         self.message_number = message_number
 
+class SettingsRequested(Exception):
+    """Exception raised to signal the TUI to open the settings screen."""
+    pass
+
 def app_commands(ops: str, suppress_output: bool = False):
     """
     Dispatcher for internal operational commands.
@@ -324,6 +328,13 @@ def app_commands(ops: str, suppress_output: bool = False):
         else:
             _log("[SYSTEM] Compression is only supported in TUI mode.", Fore.RED)
 
+    def _settings():
+        """Opens the TUI settings screen (TUI only)."""
+        if suppress_output:
+            raise SettingsRequested()
+        else:
+            _log("[SYSTEM] Settings GUI is only supported in TUI mode. Use //show_settings to print settings.", Fore.YELLOW)
+
     def _rewind(args):
         """Rewinds conversation to a specific message number. Usage: //rewind <message_number>"""
         if not args or not args.strip():
@@ -480,6 +491,7 @@ def app_commands(ops: str, suppress_output: bool = False):
         "//regenerate": _regen,
         "//rewind": _rewind,
         "//compress": _compress,
+        "//settings": _settings,
     }
 
     pattern = re.match(r'^/+', ops.strip().lower())
@@ -521,6 +533,11 @@ def app_commands(ops: str, suppress_output: bool = False):
             if suppress_output:
                 raise
             _log("[SYSTEM] Rewind is only supported in TUI mode.", Fore.RED)
+            return True
+        except SettingsRequested:
+            if suppress_output:
+                raise
+            _log("[SYSTEM] Settings screen is only supported in TUI mode.", Fore.RED)
             return True
         except Exception as e:
             _log(f"[ERROR] Command failed: {e}", Fore.RED)
