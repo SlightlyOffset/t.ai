@@ -29,7 +29,7 @@ from engines.chat_controller import (
     previous_response_variant,
 )
 from engines.config import update_setting, get_setting
-from engines.formatting import format_roleplay_text, format_summary_text
+from engines.formatting import TextFormatter
 from engines.profile_state import (
     build_sidebar_state,
     get_initial_avatar_paths,
@@ -437,7 +437,7 @@ class TaiMenu(App):
 
     @staticmethod
     def format_summary(summary: str) -> str:
-        return format_summary_text(summary)
+        return TextFormatter.format_summary(summary)
 
     def format_rp(self, text, role) -> str:
         """
@@ -453,14 +453,14 @@ class TaiMenu(App):
         if self.user_profile:
             user_speech_color = self.user_profile.get("colors", {}).get("speech_highlight", "yellow")
         assistant_speech_color = character_profile.get("colors", {}).get("speech_highlight", "yellow")
-        return format_roleplay_text(
-            text=text,
-            role=role,
+        
+        formatter = TextFormatter(
             user_name=user_name,
             character_name=character_name,
             user_speech_color=user_speech_color,
             assistant_speech_color=assistant_speech_color,
         )
+        return formatter.format_rp(text, role)
 
     def populate_tts_engines(self) -> None:
         """Populate the TTS engine selection list with available engines."""
@@ -757,6 +757,15 @@ class TaiMenu(App):
             self.remote_status = ""
 
     def add_message(self, text, role="user", msg_data=None, message_number: int | None = None, raw_text: str | None = None):
+        if role not in ("system", "command", "tip_message"):
+            import re
+            is_formatted = False
+            if "[" in text and "]" in text:
+                if re.search(r"\[(?:/?[ib]|/?[a-zA-Z#][^\]]*)\]", text):
+                    is_formatted = True
+            if not is_formatted or "{{" in text or role == "summary":
+                text = self.format_rp(text, role=role)
+
         container = self.query_one("#chat_list")
         if role == "system":
             container.mount(Static(text, markup=True, classes="system_msg"))

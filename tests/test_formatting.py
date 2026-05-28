@@ -1,6 +1,6 @@
 import unittest
 
-from engines.formatting import format_roleplay_text, format_summary_text, get_tts_split_points
+from engines.formatting import format_roleplay_text, format_summary_text, get_tts_split_points, TextFormatter
 
 
 class TestFormatting(unittest.TestCase):
@@ -31,6 +31,27 @@ class TestFormatting(unittest.TestCase):
         self.assertIn(text.index("!") + 1, points)
         self.assertIn(text.index("\n") + 1, points)
         self.assertIn(text.index("*") + 1, points)
+
+    def test_text_formatter_class_directly(self):
+        formatter = TextFormatter(
+            user_name="John",
+            character_name="AI",
+            user_speech_color="cyan",
+            assistant_speech_color="red"
+        )
+        # Test format_rp
+        rp_res = formatter.format_rp('{{user}} and {{char}} say "hello"', role="assistant")
+        self.assertIn("John and AI", rp_res)
+        self.assertIn('[red]"hello"[/red]', rp_res)
+        
+        # Test format_summary
+        sum_res = formatter.format_summary("## title\n**bold**")
+        self.assertIn("[b][u]title[/u][/b]", sum_res)
+        self.assertIn("[b]bold[/b]", sum_res)
+        
+        # Test get_tts_split_points
+        points = formatter.get_tts_split_points("Hi. Hello!")
+        self.assertIn(3, points)
 
 
 if __name__ == "__main__":
