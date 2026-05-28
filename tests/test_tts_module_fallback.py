@@ -13,11 +13,12 @@ class TestTTSModuleFallback(unittest.TestCase):
     @patch('engines.tts_module.is_xtts_supported')
     @patch('engines.tts_module.XTTSWorker')
     @patch('engines.tts_module.asyncio.run')
+    @patch('engines.tts_module.generate_edge_tts', new_callable=MagicMock)
     @patch('engines.tts_module.EDGE_AVAILABLE', True)
     @patch('engines.tts_module.is_online')
     @patch('engines.tts_module.get_setting')
     @patch('engines.tts_module.os.path.exists')
-    def test_generate_audio_fallback_to_edge_on_xtts_failure(self, mock_exists, mock_get_setting, mock_is_online, mock_async_run, mock_xtts_worker, mock_is_xtts_supported):
+    def test_generate_audio_fallback_to_edge_on_xtts_failure(self, mock_exists, mock_get_setting, mock_is_online, mock_generate_edge, mock_async_run, mock_xtts_worker, mock_is_xtts_supported):
         mock_get_setting.side_effect = lambda k, d=None: True if k == "tts_enabled" else ("en-GB-SoniaNeural" if k == "default_tts_voice" else d)
         mock_is_online.return_value = True
         
@@ -44,10 +45,11 @@ class TestTTSModuleFallback(unittest.TestCase):
     @patch('engines.tts_module.is_xtts_supported')
     @patch('engines.tts_module.XTTSWorker')
     @patch('engines.tts_module.asyncio.run')
+    @patch('engines.tts_module.generate_edge_tts', new_callable=MagicMock)
     @patch('engines.tts_module.is_online')
     @patch('engines.tts_module.get_setting')
     @patch('engines.tts_module.os.path.exists')
-    def test_generate_audio_fallback_to_edge_when_xtts_not_supported(self, mock_exists, mock_get_setting, mock_is_online, mock_async_run, mock_xtts_worker, mock_is_xtts_supported):
+    def test_generate_audio_fallback_to_edge_when_xtts_not_supported(self, mock_exists, mock_get_setting, mock_is_online, mock_generate_edge, mock_async_run, mock_xtts_worker, mock_is_xtts_supported):
         mock_get_setting.side_effect = lambda k, d=None: True if k == "tts_enabled" else d
         mock_is_xtts_supported.return_value = False
         mock_is_online.return_value = True

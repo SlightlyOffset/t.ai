@@ -35,9 +35,10 @@ class TestTTSCacheIntegration(unittest.TestCase):
     @patch('engines.tts_module.get_cache_path')
     @patch('engines.tts_module.os.path.exists')
     @patch('engines.tts_module.asyncio.run')
+    @patch('engines.tts_module.generate_edge_tts', new_callable=MagicMock)
     @patch('engines.tts_module.is_online')
     @patch('engines.tts_module.EDGE_AVAILABLE', True)
-    def test_cache_miss_triggers_generation_and_save(self, mock_is_online, mock_async_run, mock_exists, mock_get_cache_path, mock_save_to_cache, mock_get_setting):
+    def test_cache_miss_triggers_generation_and_save(self, mock_is_online, mock_generate_edge, mock_async_run, mock_exists, mock_get_cache_path, mock_save_to_cache, mock_get_setting):
         mock_get_setting.return_value = True # tts_enabled
         mock_is_online.return_value = True
         
