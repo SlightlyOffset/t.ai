@@ -111,5 +111,33 @@ class TestMenu(unittest.TestCase):
         # Verify it reverted back to the previous mode
         self.assertEqual(event_null.select.value, "casual")
 
+    @patch('ui.menu.TaiMenu.set_timer')
+    @patch('ui.menu.TaiMenu.query_one')
+    def test_add_message_system_tip_timers(self, mock_query_one, mock_set_timer):
+        """Test that system and tip messages mount and trigger set_timer for removal."""
+        class DummyMenu(TaiMenu):
+            def __init__(self):
+                pass
+        app = DummyMenu()
+        app.query_one = mock_query_one
+        app.set_timer = mock_set_timer
+        
+        mock_container = MagicMock()
+        mock_query_one.return_value = mock_container
+        
+        # Test system message
+        app.add_message("System Message", role="system")
+        self.assertTrue(mock_container.mount.called)
+        self.assertTrue(mock_set_timer.called)
+        
+        # Reset mocks
+        mock_container.mount.reset_mock()
+        mock_set_timer.reset_mock()
+        
+        # Test tip message
+        app.add_message("Tip Message", role="tip_message")
+        self.assertTrue(mock_container.mount.called)
+        self.assertTrue(mock_set_timer.called)
+
 if __name__ == "__main__":
     unittest.main()

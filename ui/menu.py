@@ -912,13 +912,27 @@ class TaiMenu(App):
 
         container = self.query_one("#chat_list")
         if role == "system":
-            container.mount(Static(text, markup=True, classes="system_msg"))
+            widget = Static(text, markup=True, classes="system_msg")
+            container.mount(widget)
+            def safe_remove_sys():
+                try:
+                    widget.remove()
+                except Exception:
+                    pass
+            self.set_timer(2.0, safe_remove_sys)
         elif role == "command":
             container.mount(Static(text, markup=True, classes="command_msg"))
         elif role == "summary":
             container.mount(Static(text, markup=True, classes="summary_msg"))
         elif role == "tip_message":
-            container.mount(Static(text, markup=True, classes="tip_msg"))
+            widget = Static(text, markup=True, classes="tip_msg")
+            container.mount(widget)
+            def safe_remove_tip():
+                try:
+                    widget.remove()
+                except Exception:
+                    pass
+            self.set_timer(2.0, safe_remove_tip)
         else:
             row_class = "user_row" if role == "user" else "ai_row"
             bubble_class = "user_bubble" if role == "user" else "ai_bubble"
@@ -960,11 +974,6 @@ class TaiMenu(App):
         """Handles user input submission from ChatInput."""
         message = event.value.strip()
         if not message: return
-
-        # Format user message for display
-        display_message = self.format_rp(message, role="user")
-        user_message_number = get_user_message_number(message, self.history_profile_name)
-        self.add_message(display_message, role="user", message_number=user_message_number, raw_text=message)
 
         # Handle commands (original message)
         if message.startswith("//"):
@@ -1019,9 +1028,15 @@ class TaiMenu(App):
                 self.add_message("[SYSTEM] Recognized command pattern but no action taken: Non-existent command.", role="command")
                 return
 
+            return
+
+        # Format user message for display
+        display_message = self.format_rp(message, role="user")
+        user_message_number = get_user_message_number(message, self.history_profile_name)
+        self.add_message(display_message, role="user", message_number=user_message_number, raw_text=message)
+
         # Trigger AI response
-        if not message.startswith("//"):
-            memory_manager.set_pending_user_message(self.history_profile_name, message)
+        memory_manager.set_pending_user_message(self.history_profile_name, message)
 
         assistant_message_number = (user_message_number + 1) if user_message_number is not None else None
         self.stream_response(message, message_number=assistant_message_number)
