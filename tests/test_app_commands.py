@@ -86,14 +86,10 @@ class TestAppCommands(unittest.TestCase):
         self.assertIn("=========================", output)
 
     @patch('sys.stdout', new_callable=StringIO)
-    def test_restart_raises_and_prints_message(self, mock_stdout):
+    def test_change_char_in_cli_raises_restart(self, mock_stdout):
+        """Verify that //change char raises RestartRequested in CLI mode."""
         with self.assertRaises(RestartRequested):
-            app_commands("//restart")
-        output = strip_ansi(mock_stdout.getvalue())
-        self.assertIn("[SYSTEM] Restarting application...", output)
-        # Ensure no extra leftover lines bleed in after the raise
-        lines = [l for l in output.splitlines() if l.strip()]
-        self.assertEqual(len(lines), 1)
+            app_commands("//change char")
 
     @patch('sys.stdout', new_callable=StringIO)
     def test_recap_alias_works(self, mock_stdout):
@@ -159,7 +155,7 @@ class TestAppCommands(unittest.TestCase):
     def test_toggle_errors_enables_suppression(self, mock_stdout):
         # Start with suppress_errors = False → toggling should enable it
         self.mock_get_setting.return_value = False
-        result = app_commands("//toggle_errors")
+        result = app_commands("//toggle errors")
         self.assertTrue(result)
         output = strip_ansi(mock_stdout.getvalue())
         self.assertIn("[SYSTEM] Non-critical error messages suppressed.", output)
@@ -168,10 +164,46 @@ class TestAppCommands(unittest.TestCase):
     def test_toggle_errors_disables_suppression(self, mock_stdout):
         # Start with suppress_errors = True → toggling should disable it
         self.mock_get_setting.return_value = True
-        result = app_commands("//toggle_errors")
+        result = app_commands("//toggle errors")
         self.assertTrue(result)
         output = strip_ansi(mock_stdout.getvalue())
         self.assertIn("[SYSTEM] Error messages will now be shown.", output)
+
+    @patch('sys.stdout', new_callable=StringIO)
+    @patch('engines.app_commands.update_setting')
+    def test_mode_display_when_no_args(self, mock_update, mock_stdout):
+        self.mock_get_setting.return_value = "rp"
+        result = app_commands("//mode")
+        self.assertTrue(result)
+        self.assertIn("[SYSTEM] Interaction mode is RP.", strip_ansi(mock_stdout.getvalue()))
+        mock_update.assert_not_called()
+
+    @patch('sys.stdout', new_callable=StringIO)
+    @patch('engines.app_commands.update_setting')
+    def test_mode_changes_to_rp(self, mock_update, mock_stdout):
+        self.mock_get_setting.return_value = "casual"
+        result = app_commands("//mode rp")
+        self.assertTrue(result)
+        self.assertIn("[SYSTEM] Interaction mode set to RP.", strip_ansi(mock_stdout.getvalue()))
+        mock_update.assert_called_with("interaction_mode", "rp")
+
+    @patch('sys.stdout', new_callable=StringIO)
+    @patch('engines.app_commands.update_setting')
+    def test_mode_changes_to_casual(self, mock_update, mock_stdout):
+        self.mock_get_setting.return_value = "rp"
+        result = app_commands("//mode casual")
+        self.assertTrue(result)
+        self.assertIn("[SYSTEM] Interaction mode set to CASUAL.", strip_ansi(mock_stdout.getvalue()))
+        mock_update.assert_called_with("interaction_mode", "casual")
+
+    @patch('sys.stdout', new_callable=StringIO)
+    @patch('engines.app_commands.update_setting')
+    def test_mode_changes_to_casual_misspelled(self, mock_update, mock_stdout):
+        self.mock_get_setting.return_value = "rp"
+        result = app_commands("//mode cassual")
+        self.assertTrue(result)
+        self.assertIn("[SYSTEM] Interaction mode set to CASUAL.", strip_ansi(mock_stdout.getvalue()))
+        mock_update.assert_called_with("interaction_mode", "casual")
 
 
 if __name__ == "__main__":

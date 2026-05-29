@@ -18,8 +18,9 @@ class TestTTSModule(unittest.TestCase):
     @patch('engines.tts_module.get_setting')
     @patch('engines.tts_module.is_online')
     @patch('engines.tts_module.EDGE_AVAILABLE', True)
+    @patch('engines.tts_module.generate_edge_tts', new_callable=MagicMock)
     @patch('asyncio.run')
-    def test_generate_audio_uses_edge_tts_by_default(self, mock_async_run, mock_is_online, mock_get_setting):
+    def test_generate_audio_uses_edge_tts_by_default(self, mock_async_run, mock_generate_edge, mock_is_online, mock_get_setting):
         mock_is_online.return_value = True
         mock_get_setting.side_effect = lambda key, default=None: {
             "default_tts_voice": "en-GB-SoniaNeural",

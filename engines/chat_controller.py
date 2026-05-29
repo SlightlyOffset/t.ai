@@ -1,4 +1,4 @@
-from engines.app_commands import app_commands, RegenerateRequested, RestartRequested, RewindRequested, CompressRequested
+from engines.app_commands import app_commands, RegenerateRequested, RestartRequested, RewindRequested, CompressRequested, SettingsRequested
 from engines.memory_v2 import memory_manager
 
 
@@ -38,6 +38,8 @@ def handle_command_input(message: str, history_profile_name: str) -> dict | None
         return {"type": "regenerate", "user_text": get_latest_regeneration_prompt(history_profile_name)}
     except CompressRequested:
         return {"type": "compress"}
+    except SettingsRequested:
+        return {"type": "open_settings"}
     except RewindRequested as rewind_request:
         original_count, kept_count = memory_manager.rewind_history(
             history_profile_name,

@@ -48,5 +48,20 @@ class TestConfig(unittest.TestCase):
         self.assertTrue(get_setting("tts_enabled", True))
         self.assertFalse(get_setting("suppress_errors", False))
 
+    def test_update_settings(self):
+        from engines.config import update_settings
+        updates = {
+            "tts_enabled": False,
+            "suppress_errors": True,
+            "new_custom_setting": "hello"
+        }
+        success = update_settings(updates)
+        self.assertTrue(success)
+        
+        # Verify they were saved
+        self.assertFalse(get_setting("tts_enabled", True))
+        self.assertTrue(get_setting("suppress_errors", False))
+        self.assertEqual(get_setting("new_custom_setting"), "hello")
+
 if __name__ == "__main__":
     unittest.main()

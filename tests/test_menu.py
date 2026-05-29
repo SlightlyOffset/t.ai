@@ -71,5 +71,210 @@ class TestMenu(unittest.TestCase):
         mock_get_last.return_value = None
         self.assertEqual(app._resolve_regeneration_text("Previous"), "Previous")
 
+    @patch('ui.menu.update_setting')
+    def test_on_select_changed_interaction_mode(self, mock_update_setting):
+        """Test on_select_changed updates interaction_mode when interaction_mode_select changes."""
+        app = MagicMock(spec=TaiMenu)
+        app.on_select_changed = lambda event: TaiMenu.on_select_changed(app, event)
+        app.add_message = MagicMock()
+
+        # Select RP Mode
+        event_rp = MagicMock()
+        event_rp.select.id = "interaction_mode_select"
+        event_rp.value = "rp"
+        app.on_select_changed(event_rp)
+        mock_update_setting.assert_any_call("interaction_mode", "rp")
+        app.add_message.assert_any_call("Interaction mode set to [bold]RP[/bold]", role="system")
+
+        # Select Casual Mode
+        event_casual = MagicMock()
+        event_casual.select.id = "interaction_mode_select"
+        event_casual.value = "casual"
+        app.on_select_changed(event_casual)
+        mock_update_setting.assert_any_call("interaction_mode", "casual")
+        app.add_message.assert_any_call("Interaction mode set to [bold]CASUAL[/bold]", role="system")
+
+    @patch('ui.menu.get_setting')
+    def test_on_select_changed_interaction_mode_null_fallback(self, mock_get_setting):
+        """Test on_select_changed reverts interaction_mode_select when null is selected."""
+        app = MagicMock(spec=TaiMenu)
+        app.on_select_changed = lambda event: TaiMenu.on_select_changed(app, event)
+        
+        mock_get_setting.return_value = "casual"
+        
+        event_null = MagicMock()
+        event_null.select.id = "interaction_mode_select"
+        from textual.widgets import Select
+        event_null.value = Select.NULL
+        
+        app.on_select_changed(event_null)
+        # Verify it reverted back to the previous mode
+        self.assertEqual(event_null.select.value, "casual")
+
+    @patch('ui.menu.TaiMenu.set_timer')
+    @patch('ui.menu.TaiMenu.query_one')
+    def test_add_message_system_tip_timers(self, mock_query_one, mock_set_timer):
+        """Test that system, tip, and command messages mount and trigger set_timer with proper intervals."""
+        class DummyMenu(TaiMenu):
+            def __init__(self):
+                pass
+        app = DummyMenu()
+        app.query_one = mock_query_one
+        app.set_timer = mock_set_timer
+        
+        mock_container = MagicMock()
+        mock_query_one.return_value = mock_container
+        
+        # Test system message -> 5.0s
+        app.add_message("System Message", role="system")
+        self.assertTrue(mock_container.mount.called)
+        mock_set_timer.assert_called_with(5.0, unittest.mock.ANY)
+        
+        # Reset mocks
+        mock_container.mount.reset_mock()
+        mock_set_timer.reset_mock()
+        
+        # Test tip message -> 10.0s
+        app.add_message("Tip Message", role="tip_message")
+        self.assertTrue(mock_container.mount.called)
+        mock_set_timer.assert_called_with(10.0, unittest.mock.ANY)
+
+        # Reset mocks
+        mock_container.mount.reset_mock()
+        mock_set_timer.reset_mock()
+
+        # Test command message -> 10.0s
+        app.add_message("Command Output", role="command")
+        self.assertTrue(mock_container.mount.called)
+        mock_set_timer.assert_called_with(10.0, unittest.mock.ANY)
+
+        # Reset mocks
+        mock_container.mount.reset_mock()
+        mock_set_timer.reset_mock()
+
+        # Test help command output -> no timer scheduled
+        app.add_message("[AVAILABLE COMMANDS]\n  //help", role="command")
+        self.assertTrue(mock_container.mount.called)
+        self.assertFalse(mock_set_timer.called)
+
+        # Reset mocks
+        mock_container.mount.reset_mock()
+        mock_set_timer.reset_mock()
+
+        # Test error command output -> no timer scheduled
+        app.add_message("[ERROR] Something failed", role="command")
+        self.assertTrue(mock_container.mount.called)
+        self.assertFalse(mock_set_timer.called)
+
+    @patch('ui.menu.handle_command_input')
+    @patch('ui.menu.memory_manager')
+    @patch('ui.menu.get_user_message_number')
+    @patch('ui.menu.TaiMenu.stream_response')
+    def test_on_chat_input_submitted_command_handling(self, mock_stream, mock_get_msg_num, mock_mem, mock_handle_command):
+        """Test that chat input submitted with '//' is handled as a command and doesn't add user bubbles."""
+        import asyncio
+        class DummyMenu(TaiMenu):
+            def __init__(self):
+                self.history_profile_name = "test_profile"
+                self.char_path = "profiles/test.json"
+                self.user_path = "user_profiles/test.json"
+            def format_rp(self, text, role="user"):
+                return text
+
+        app = DummyMenu()
+        app.add_message = MagicMock()
+        app.update_sidebar = MagicMock()
+        app.reload_chat_from_history = MagicMock()
+        app.check_for_rolling_summary = MagicMock()
+        app.action_open_settings = MagicMock()
+        app.run_manual_compression = MagicMock()
+
+        # Mock Event
+        class MockEvent:
+            def __init__(self, value):
+                self.value = value
+
+        # 1. Command with command_noop return
+        mock_handle_command.return_value = {"type": "command_noop"}
+        asyncio.run(app.on_chat_input_submitted(MockEvent("//invalid")))
+        
+        # Verify that add_message was called with role="command", NOT role="user"
+        app.add_message.assert_any_call("[SYSTEM] Recognized command pattern but no action taken: Non-existent command.", role="command")
+        # Check that role="user" was never added
+        for call in app.add_message.call_args_list:
+            self.assertNotEqual(call[1].get("role"), "user")
+
+        app.add_message.reset_mock()
+
+        # 2. Command with command_success return
+        mock_handle_command.return_value = {"type": "command_success", "messages": ["Line 1", "Line 2"]}
+        asyncio.run(app.on_chat_input_submitted(MockEvent("//toggle clear")))
+        app.add_message.assert_any_call("Line 1\nLine 2", role="command")
+        for call in app.add_message.call_args_list:
+            self.assertNotEqual(call[1].get("role"), "user")
+
+        app.add_message.reset_mock()
+
+        # 2b. Test command slash normalization with single slash '/'
+        asyncio.run(app.on_chat_input_submitted(MockEvent("/toggle clear")))
+        mock_handle_command.assert_called_with("//toggle clear", "test_profile")
+        app.add_message.reset_mock()
+
+        # 2c. Test command slash normalization with multiple slashes '///'
+        asyncio.run(app.on_chat_input_submitted(MockEvent("///toggle clear")))
+        mock_handle_command.assert_called_with("//toggle clear", "test_profile")
+        app.add_message.reset_mock()
+
+        # 3. Regular chat message
+        mock_get_msg_num.return_value = 1
+        asyncio.run(app.on_chat_input_submitted(MockEvent("Hello world")))
+        app.add_message.assert_called_once_with("Hello world", role="user", message_number=1, raw_text="Hello world")
+        mock_stream.assert_called_once_with("Hello world", message_number=2)
+
+    @patch('ui.menu.handle_command_input')
+    @patch('ui.menu.memory_manager')
+    @patch('ui.menu.get_user_message_number')
+    @patch('ui.menu.TaiMenu.stream_response')
+    @patch('ui.menu.TaiMenu.query_one')
+    def test_on_chat_input_submitted_reset_command(self, mock_query_one, mock_stream, mock_get_msg_num, mock_mem, mock_handle_command):
+        """Test that chat input submitted with '//reset' clears the UI and calls print_starter_message."""
+        import asyncio
+        class DummyMenu(TaiMenu):
+            def __init__(self):
+                self.history_profile_name = "test_profile"
+                self.char_path = "profiles/test.json"
+                self.user_path = "user_profiles/test.json"
+                self.character_profile = {}
+                self.user_profile = {}
+                self.ch_name = "TestChar"
+                self.user_name = "TestUser"
+                self.char_name_lbl_color = "red"
+                self.user_name_lbl_color = "blue"
+
+        app = DummyMenu()
+        app.add_message = MagicMock()
+        app.update_sidebar = MagicMock()
+        app.print_starter_message = MagicMock()
+        
+        mock_container = MagicMock()
+        mock_child = MagicMock()
+        mock_container.children = [mock_child]
+        mock_query_one.return_value = mock_container
+
+        # Mock Event
+        class MockEvent:
+            def __init__(self, value):
+                self.value = value
+
+        mock_handle_command.return_value = {"type": "command_success", "messages": ["Wiped history"]}
+        
+        # Test active profile reset
+        asyncio.run(app.on_chat_input_submitted(MockEvent("//reset")))
+        
+        # Verify it cleared chat container children, and reprinted starter message
+        self.assertTrue(mock_child.remove.called)
+        self.assertTrue(app.print_starter_message.called)
+        self.assertTrue(app.update_sidebar.called)
+
 if __name__ == "__main__":
     unittest.main()

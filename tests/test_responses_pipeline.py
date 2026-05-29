@@ -5,6 +5,20 @@ from engines.responses import _call_llm_once, get_respond_stream
 
 
 class TestResponsesPipeline(unittest.TestCase):
+    def setUp(self):
+        # Force all background threads to run synchronously during tests to prevent race conditions
+        self.thread_patcher = patch("threading.Thread.start", autospec=True)
+        self.mock_thread_start = self.thread_patcher.start()
+        
+        def run_sync(mock_self):
+            if mock_self._target:
+                mock_self._target(*mock_self._args, **mock_self._kwargs)
+                
+        self.mock_thread_start.side_effect = run_sync
+
+    def tearDown(self):
+        self.thread_patcher.stop()
+
     @patch("engines.responses.get_setting")
     @patch("engines.responses.requests.post")
     def test_call_llm_once_remote_sends_repetition_penalty(self, mock_post, mock_get_setting):

@@ -9,6 +9,7 @@ import random
 import threading
 import time
 import sys
+import re
 
 # Third-party imports
 import ollama
@@ -21,7 +22,7 @@ from textual.reactive import reactive
 from textual.message import Message
 
 # First-party imports
-from engines.app_commands import RestartRequested
+from engines.app_commands import RestartRequested, normalize_command_prefix
 from engines.chat_controller import (
     get_user_message_number,
     handle_command_input,
@@ -29,7 +30,7 @@ from engines.chat_controller import (
     previous_response_variant,
 )
 from engines.config import update_setting, get_setting
-from engines.formatting import format_roleplay_text, format_summary_text
+from engines.formatting import TextFormatter
 from engines.profile_state import (
     build_sidebar_state,
     get_initial_avatar_paths,
@@ -115,6 +116,7 @@ class TaiMenu(App):
     BINDINGS = [
         ("ctrl+b", "toggle_sidebar", "Toggle Sidebar"),
         ("ctrl+o", "open_profile_select", "Profiles"),
+        ("ctrl+s", "open_settings", "Settings"),
         ("ctrl+q", "quit", "Quit"),
         ("alt+left", "previous_response", "Prev Resp"),
         ("alt+right", "next_or_regenerate_response", "Next/Regen"),
@@ -128,6 +130,11 @@ class TaiMenu(App):
     TTS_ENGINES = [
         ("Edge TTS", "edge-tts"),
         ("XTTS-V2", "xtts")
+    ]
+
+    INTERACTION_MODES = [
+        ("Roleplay (RP)", "rp"),
+        ("Casual", "casual")
     ]
 
     EDGE_VOICES = [
@@ -315,6 +322,40 @@ class TaiMenu(App):
         from ui.ProfileSelectScreen import ProfileSelect
         self.push_screen(ProfileSelect(), callback=self.on_profile_selected)
 
+    def action_open_settings(self) -> None:
+        """Open the global settings screen."""
+        from ui.SettingsScreen import SettingsScreen
+        self.push_screen(SettingsScreen(), callback=self.on_settings_saved)
+
+    def on_settings_saved(self, result: dict | None) -> None:
+        """Callback handled when SettingsScreen is dismissed with saved changes."""
+        if not result:
+            return
+
+        self.add_message("✓ Settings saved successfully", role="system")
+
+        # Sync Main TUI settings sidebar widgets with new settings
+        try:
+            self.query_one("#sw_tts", Switch).value = result.get("tts_enabled", False)
+            self.query_one("#sw_dialogue", Switch).value = result.get("character_speak", True)
+            self.query_one("#sw_narration", Switch).value = result.get("speak_narration", True)
+            self.query_one("#sw_privacy", Switch).value = result.get("privacy_mode", False)
+            self.query_one("#interaction_mode_select", Select).value = result.get("interaction_mode", "rp")
+
+            char_profile = self.character_profile or {}
+            self.query_one("#model_select", Select).value = char_profile.get("llm_model") or result.get("default_llm_model")
+            self.query_one("#tts_engine_select", Select).value = char_profile.get("tts_engine") or result.get("default_tts_engine")
+            self.query_one("#character_voice_select", Select).value = char_profile.get("preferred_edge_voice") or result.get("default_tts_voice")
+            self.query_one("#narration_voice_select", Select).value = result.get("narration_tts_voice")
+            self.query_one("#image_protocol_select", Select).value = result.get("image_protocol")
+        except Exception:
+            pass
+
+
+        # Apply settings changes live
+        self.remount_avatar_widgets()
+        self.update_sidebar()
+
     def compose(self) -> ComposeResult:
         self._current_char_avatar_path, self._current_user_avatar_path = get_initial_avatar_paths(
             self.char_path,
@@ -367,6 +408,9 @@ class TaiMenu(App):
                     yield Label("Privacy Mode:", classes="setting_label")
                     yield Switch(value=get_setting("privacy_mode", False), id="sw_privacy")
 
+                yield Label("Interaction Mode:", classes="sidebar_label")
+                yield Select([], id="interaction_mode_select", prompt="Select Mode")
+
                 yield Label("Image Protocol:", classes="sidebar_label")
                 yield Select([], id="image_protocol_select", prompt="Select Image Protocol")
 
@@ -391,6 +435,7 @@ class TaiMenu(App):
         self.populate_voices()
         self.populate_tts_engines()
         self.populate_image_protocols()
+        self.populate_interaction_modes()
 
         # Start usage metrics update loop
         self.set_interval(2.0, self.update_usage_metrics)
@@ -434,10 +479,11 @@ class TaiMenu(App):
         self.populate_voices()
         self.populate_tts_engines()
         self.populate_image_protocols()
+        self.populate_interaction_modes()
 
     @staticmethod
     def format_summary(summary: str) -> str:
-        return format_summary_text(summary)
+        return TextFormatter.format_summary(summary)
 
     def format_rp(self, text, role) -> str:
         """
@@ -453,14 +499,14 @@ class TaiMenu(App):
         if self.user_profile:
             user_speech_color = self.user_profile.get("colors", {}).get("speech_highlight", "yellow")
         assistant_speech_color = character_profile.get("colors", {}).get("speech_highlight", "yellow")
-        return format_roleplay_text(
-            text=text,
-            role=role,
+
+        formatter = TextFormatter(
             user_name=user_name,
             character_name=character_name,
             user_speech_color=user_speech_color,
             assistant_speech_color=assistant_speech_color,
         )
+        return formatter.format_rp(text, role)
 
     def populate_tts_engines(self) -> None:
         """Populate the TTS engine selection list with available engines."""
@@ -527,33 +573,56 @@ class TaiMenu(App):
         """Update the character profile with selected LLM, Character Voice, or Narration Voice."""
         from engines.utilities import save_json_atomic
 
-        # Handle cases where value might be Select.BLANK (NULL)
-        val = event.value if event.value != Select.BLANK else None
+        # Handle cases where value might be Select.NULL
+        val = event.value if event.value != Select.NULL else None
 
-        if event.select.id == "model_select" and val is not None:
-            self.character_profile["llm_model"] = val
-            save_json_atomic(self.char_path, self.character_profile)
-            self.add_message(f"LLM model switched to [bold]{val}[/bold]", role="system")
-        elif event.select.id == "character_voice_select" and val is not None:
-            self.character_profile["preferred_edge_voice"] = val
-            save_json_atomic(self.char_path, self.character_profile)
-            self.add_message(f"Companion voice set to [bold]{val}[/bold]", role="system")
-        elif event.select.id == "narration_voice_select" and val is not None:
-            if update_setting("narration_tts_voice", val):
-                self.add_message(f"Narration voice set to [bold]{val}[/bold]", role="system")
+        if event.select.id == "model_select":
+            if val is not None:
+                self.character_profile["llm_model"] = val
+                save_json_atomic(self.char_path, self.character_profile)
+                self.add_message(f"LLM model switched to [bold]{val}[/bold]", role="system")
             else:
-                self.add_message(f"Failed to set narration voice to [bold]{val}[/bold]", role="system")
-        elif event.select.id == "tts_engine_select" and val is not None:
-            self.character_profile["tts_engine"] = val
-            save_json_atomic(self.char_path, self.character_profile)
-            self.add_message(f"TTS engine switched to [bold]{val}[/bold]", role="system")
-        elif event.select.id == "image_protocol_select" and val is not None:
-            valid_protocols = {value for _, value in self.IMAGE_PROTOCOLS}
-            if val in valid_protocols and update_setting("image_protocol", val):
-                self.remount_avatar_widgets()
-                self.add_message(f"Image protocol set to [bold]{val}[/bold]", role="system")
+                event.select.value = self.character_profile.get("llm_model") if self.character_profile else get_setting("default_llm_model", "llama3")
+        elif event.select.id == "character_voice_select":
+            if val is not None:
+                self.character_profile["preferred_edge_voice"] = val
+                save_json_atomic(self.char_path, self.character_profile)
+                self.add_message(f"Companion voice set to [bold]{val}[/bold]", role="system")
             else:
-                self.add_message(f"Failed to set image protocol to [bold]{val}[/bold]", role="system")
+                event.select.value = self.character_profile.get("preferred_edge_voice") if self.character_profile else get_setting("narration_tts_voice", "en-US-AndrewNeural")
+        elif event.select.id == "narration_voice_select":
+            if val is not None:
+                if update_setting("narration_tts_voice", val):
+                    self.add_message(f"Narration voice set to [bold]{val}[/bold]", role="system")
+                else:
+                    self.add_message(f"Failed to set narration voice to [bold]{val}[/bold]", role="system")
+            else:
+                event.select.value = get_setting("narration_tts_voice", "en-US-AndrewNeural")
+        elif event.select.id == "tts_engine_select":
+            if val is not None:
+                self.character_profile["tts_engine"] = val
+                save_json_atomic(self.char_path, self.character_profile)
+                self.add_message(f"TTS engine switched to [bold]{val}[/bold]", role="system")
+            else:
+                event.select.value = self.character_profile.get("tts_engine") if self.character_profile else get_setting("default_tts_engine", "edge-tts")
+        elif event.select.id == "image_protocol_select":
+            if val is not None:
+                valid_protocols = {value for _, value in self.IMAGE_PROTOCOLS}
+                if val in valid_protocols and update_setting("image_protocol", val):
+                    self.remount_avatar_widgets()
+                    self.add_message(f"Image protocol set to [bold]{val}[/bold]", role="system")
+                else:
+                    self.add_message(f"Failed to set image protocol to [bold]{val}[/bold]", role="system")
+            else:
+                event.select.value = get_setting("image_protocol", "auto")
+        elif event.select.id == "interaction_mode_select":
+            if val is not None:
+                if update_setting("interaction_mode", val):
+                    self.add_message(f"Interaction mode set to [bold]{val.upper()}[/bold]", role="system")
+                else:
+                    self.add_message(f"Failed to set interaction mode to [bold]{val.upper()}[/bold]", role="system")
+            else:
+                event.select.value = get_setting("interaction_mode", "rp")
 
     def populate_image_protocols(self) -> None:
         """Populate image protocol selection and sync current setting."""
@@ -564,6 +633,18 @@ class TaiMenu(App):
         if current_protocol not in valid_protocols:
             current_protocol = "auto"
         select.value = current_protocol
+
+    def populate_interaction_modes(self) -> None:
+        """Populate interaction mode selection and sync current setting."""
+        try:
+            select = self.query_one("#interaction_mode_select", Select)
+            select.set_options(self.INTERACTION_MODES)
+            current_mode = get_setting("interaction_mode", "rp")
+            if current_mode not in ("rp", "casual"):
+                current_mode = "rp"
+            select.value = current_mode
+        except Exception:
+            pass
 
     def start_tts_worker(self) -> None:
         """Starts a worker thread for TTS generation and playback."""
@@ -604,10 +685,22 @@ class TaiMenu(App):
         if not messages_history:
             return
 
-        recap_state = split_recap_history(messages_history)
-        if recap_state["mode"] == "full":
+        # Check if we have an existing persistent summary
+        memory_core = memory_manager.get_memory_core(self.history_profile_name)
+        last_index = memory_manager.get_last_summarized_index(self.history_profile_name)
+
+        # Defensive check against mocks in unit tests
+        if not isinstance(memory_core, str):
+            memory_core = ""
+        if not isinstance(last_index, int):
+            last_index = 0
+
+        short_limit = 15
+
+        if len(messages_history) <= short_limit:
+            # Short history: show all in full
             self.add_message(f"--- Recap: {len(messages_history)} messages loaded ---", role="system")
-            for index, msg_data in enumerate(recap_state["messages"], start=1):
+            for index, msg_data in enumerate(messages_history, start=1):
                 role = msg_data.get("role", "assistant")
                 content = msg_data.get("content", "")
                 if role != "system":
@@ -615,18 +708,64 @@ class TaiMenu(App):
                 message_number = index if role in ("user", "assistant") else None
                 self.add_message(content, role=role, msg_data=msg_data, message_number=message_number)
             self.add_message("--- Recap complete ---", role="system")
-        else:
-            self.add_message("--- [bold cyan]Analyzing past memories...[/bold cyan] ---", role="system")
-            self.summarize_and_display(
-                recap_state["older_history"],
-                recap_state["recent_history"],
-                recap_state["recent_start_index"],
-            )
+            return
+
+        # Long history: check memory core
+        if memory_core:
+            new_messages_count = len(messages_history) - last_index
+            if new_messages_count <= short_limit:
+                # Not enough new messages to warrant updating summary on boot.
+                # Display the cached summary instantly and show the new messages in full.
+                self.add_message("--- Recap: Memory Core (Loaded instantly) ---", role="system")
+                self.add_message(self.format_summary(memory_core), role="summary")
+                self.add_message("--- Recent Continuity ---", role="system")
+
+                recent_history = messages_history[last_index:]
+                for offset, msg_data in enumerate(recent_history):
+                    role = msg_data.get("role", "assistant")
+                    content = msg_data.get("content", "")
+                    if role != "system":
+                        content = self.format_rp(content, role=role)
+                    message_number = last_index + 1 + offset if role in ("user", "assistant") else None
+                    self.add_message(content, role=role, msg_data=msg_data, message_number=message_number)
+
+                self.add_message("--- Recap complete ---", role="system")
+                return
+
+        # Fallback to background summarization if no summary exists or too many new messages accumulated
+        recap_state = split_recap_history(messages_history, short_history_limit=short_limit, recent_window=5)
+        self.add_message("--- [bold cyan]Analyzing past memories...[/bold cyan] ---", role="system")
+        self.summarize_and_display(
+            recap_state["older_history"],
+            recap_state["recent_history"],
+            recap_state["recent_start_index"],
+            existing_core=memory_core,
+            last_summarized_index=last_index
+        )
 
     @work(thread=True)
-    def summarize_and_display(self, older_history: list, recent_history: list, recent_start_index: int):
+    def summarize_and_display(self, older_history: list, recent_history: list, recent_start_index: int, existing_core: str = "", last_summarized_index: int = 0):
         """Worker for summarizing history in the background."""
-        summary = generate_recap_summary(older_history, user_name=self.user_name, char_name=self.ch_name)
+        if existing_core:
+            # Incremental update: summarize only new messages up to older_history end
+            new_messages_to_sum = older_history[last_summarized_index:]
+            if new_messages_to_sum:
+                summary = generate_updated_memory_core(
+                    existing_core,
+                    new_messages_to_sum,
+                    user_name=self.user_name,
+                    char_name=self.ch_name,
+                )
+                # Persist the update
+                new_last_index = len(older_history)
+                memory_manager.update_memory_core(self.history_profile_name, summary, new_last_index)
+            else:
+                summary = existing_core
+        else:
+            summary = generate_recap_summary(older_history, user_name=self.user_name, char_name=self.ch_name)
+            # Save the initial memory core
+            new_last_index = len(older_history)
+            memory_manager.update_memory_core(self.history_profile_name, summary, new_last_index)
 
         def update_ui():
             self.add_message(self.format_summary(summary), role="summary")
@@ -703,7 +842,7 @@ class TaiMenu(App):
 
         # Print character's starter messages and save to memory (if any, which should always be any)
         # Only do this if the history doesn't exist yet, to avoid repeating starter messages on every launch
-        has_history = memory_manager.has_history(self.history_profile_name)
+        has_history = memory_manager.has_history(self.history_profile_name) and memory_manager.get_history_length(self.history_profile_name) > 0
         if not has_history:
             self.print_starter_message()
 
@@ -757,15 +896,47 @@ class TaiMenu(App):
             self.remote_status = ""
 
     def add_message(self, text, role="user", msg_data=None, message_number: int | None = None, raw_text: str | None = None):
+        if role not in ("system", "command", "tip_message"):
+            import re
+            is_formatted = False
+            if "[" in text and "]" in text:
+                if re.search(r"\[(?:/?[ib]|/?[a-zA-Z#][^\]]*)\]", text):
+                    is_formatted = True
+            if not is_formatted or "{{" in text or role == "summary":
+                text = self.format_rp(text, role=role)
+
         container = self.query_one("#chat_list")
         if role == "system":
-            container.mount(Static(text, markup=True, classes="system_msg"))
+            widget = Static(text, markup=True, classes="system_msg")
+            container.mount(widget)
+            def safe_remove_sys():
+                try:
+                    widget.remove()
+                except Exception:
+                    pass
+            self.set_timer(5.0, safe_remove_sys)
         elif role == "command":
-            container.mount(Static(text, markup=True, classes="command_msg"))
+            widget = Static(text, markup=True, classes="command_msg")
+            container.mount(widget)
+            # Only pop out status messages; keep reference outputs like help menu and errors visible
+            if "[AVAILABLE COMMANDS]" not in text and "[ERROR]" not in text:
+                def safe_remove_cmd():
+                    try:
+                        widget.remove()
+                    except Exception:
+                        pass
+                self.set_timer(10.0, safe_remove_cmd)
         elif role == "summary":
             container.mount(Static(text, markup=True, classes="summary_msg"))
         elif role == "tip_message":
-            container.mount(Static(text, markup=True, classes="tip_msg"))
+            widget = Static(text, markup=True, classes="tip_msg")
+            container.mount(widget)
+            def safe_remove_tip():
+                try:
+                    widget.remove()
+                except Exception:
+                    pass
+            self.set_timer(10.0, safe_remove_tip)
         else:
             row_class = "user_row" if role == "user" else "ai_row"
             bubble_class = "user_bubble" if role == "user" else "ai_bubble"
@@ -808,10 +979,9 @@ class TaiMenu(App):
         message = event.value.strip()
         if not message: return
 
-        # Format user message for display
-        display_message = self.format_rp(message, role="user")
-        user_message_number = get_user_message_number(message, self.history_profile_name)
-        self.add_message(display_message, role="user", message_number=user_message_number, raw_text=message)
+        normalized = normalize_command_prefix(message)
+        if normalized:
+            message = normalized
 
         # Handle commands (original message)
         if message.startswith("//"):
@@ -828,8 +998,45 @@ class TaiMenu(App):
                 return
 
             if command_action["type"] == "command_success":
-                for msg in command_action["messages"]:
-                    self.add_message(msg, role="command")
+                if command_action["messages"]:
+                    combined_msg = "\n".join(command_action["messages"])
+                    self.add_message(combined_msg, role="command")
+                
+                # Check for history or relationship reset commands to reload/repopulate
+                parts = message.split()
+                is_reset = len(parts) >= 1 and parts[0] == "//reset"
+                if is_reset:
+                    # Reload character profile from disk to update relationship stats
+                    if self.char_path and os.path.exists(self.char_path):
+                        try:
+                            import json
+                            with open(self.char_path, "r", encoding="utf-8") as f:
+                                self.character_profile = json.load(f)
+                        except Exception:
+                            pass
+                    
+                    is_reset_rel = len(parts) >= 2 and parts[1] == "rel"
+                    if not is_reset_rel:
+                        # History reset occurred. Check if it targets the active profile
+                        target_profile = parts[1] if len(parts) >= 2 else ""
+                        is_active_profile = False
+                        if not target_profile or target_profile == "all":
+                            is_active_profile = True
+                        else:
+                            clean_target = target_profile.replace("_history.json", "").replace(".json", "")
+                            clean_active = self.history_profile_name.replace("_history.json", "").replace(".json", "")
+                            if clean_target.lower() == clean_active.lower():
+                                is_active_profile = True
+                        
+                        if is_active_profile:
+                            # Clear chat list widgets on screen
+                            chat_list = self.query_one("#chat_list")
+                            for child in list(chat_list.children):
+                                child.remove()
+                            
+                            # Re-print starter message (which also saves it to history)
+                            self.print_starter_message()
+
                 self.update_sidebar()
                 return
 
@@ -853,6 +1060,10 @@ class TaiMenu(App):
                 )
                 return
 
+            if command_action["type"] == "open_settings":
+                self.action_open_settings()
+                return
+
             if command_action["type"] == "compress":
                 self.add_message("[SYSTEM] Starting manual history compression...", role="command")
                 self.run_manual_compression()
@@ -862,9 +1073,15 @@ class TaiMenu(App):
                 self.add_message("[SYSTEM] Recognized command pattern but no action taken: Non-existent command.", role="command")
                 return
 
+            return
+
+        # Format user message for display
+        display_message = self.format_rp(message, role="user")
+        user_message_number = get_user_message_number(message, self.history_profile_name)
+        self.add_message(display_message, role="user", message_number=user_message_number, raw_text=message)
+
         # Trigger AI response
-        if not message.startswith("//"):
-            memory_manager.set_pending_user_message(self.history_profile_name, message)
+        memory_manager.set_pending_user_message(self.history_profile_name, message)
 
         assistant_message_number = (user_message_number + 1) if user_message_number is not None else None
         self.stream_response(message, message_number=assistant_message_number)

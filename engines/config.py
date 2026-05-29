@@ -86,3 +86,20 @@ def update_setting(key, value):
     settings = load_settings()
     settings[key] = value
     return save_json_atomic(SETTINGS_FILE, settings)
+
+def update_settings(updates):
+    """
+    Updates multiple settings at once and saves them back to the file atomically.
+    
+    Args:
+        updates (dict): A dictionary of key-value pairs to update.
+        
+    Returns:
+        bool: True if the update was successful, False otherwise.
+    """
+    from engines.utilities import save_json_atomic
+    settings = load_settings()
+    for key, value in updates.items():
+        settings[key] = value
+    return save_json_atomic(SETTINGS_FILE, settings)
+

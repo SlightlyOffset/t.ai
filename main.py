@@ -62,12 +62,120 @@ def check_dependencies():
         print(f"  pip install {' '.join(missing_libs)}")
         sys.exit(1)
 
+def check_ollama_and_models():
+    """If using local Ollama, verify it is running and the default model is pulled."""
+    if "--force" in sys.argv or "-f" in sys.argv:
+        print("[WARNING] Force launch requested. Skipping Ollama and model validations...")
+        return
+
+    project_root = os.path.abspath(os.path.dirname(__file__))
+    if project_root not in sys.path:
+        sys.path.insert(0, project_root)
+        
+    try:
+        from engines.config import get_setting
+    except ImportError as e:
+        print(f"[CRITICAL] Failed to load config engine: {e}")
+        sys.exit(1)
+
+    if get_setting("force_launch", False):
+        print("[WARNING] force_launch is enabled in settings. Skipping Ollama and model validations...")
+        return
+
+    remote_llm = get_setting("remote_llm_url")
+    if remote_llm:
+        return
+
+    default_model = get_setting("default_llm_model") or "fluffy/l3-8b-stheno-v3.2"
+    target_model = default_model
+
+    # Check if there is an active character profile setting and it overrides the model
+    current_char = get_setting("current_character_profile")
+    if current_char:
+        char_path = os.path.join("profiles", current_char)
+        if os.path.exists(char_path):
+            try:
+                import json
+                with open(char_path, "r", encoding="utf-8") as f:
+                    char_profile = json.load(f)
+                    if char_profile and isinstance(char_profile, dict):
+                        char_model = char_profile.get("llm_model")
+                        if char_model:
+                            target_model = char_model
+            except Exception:
+                pass
+
+    try:
+        import ollama
+        response = ollama.list()
+    except Exception as e:
+        print("[CRITICAL] Local Ollama service is not running or not installed.")
+        print("  Please make sure Ollama is installed and running on your system (https://ollama.com).")
+        print(f"  Error details: {e}")
+        if sys.stdin.isatty():
+            try:
+                choice = input("\nWould you like to force launch anyway? (y/N): ").strip().lower()
+                if choice in ('y', 'yes'):
+                    print("[WARNING] Force launching anyway...")
+                    return
+            except (KeyboardInterrupt, EOFError):
+                pass
+        sys.exit(1)
+
+    models = []
+    if isinstance(response, dict):
+        models = [m.get("model", m.get("name", "")) for m in response.get("models", [])]
+    else:
+        try:
+            models = [m.model for m in getattr(response, "models", [])]
+        except Exception:
+            try:
+                models = [getattr(m, "name", "") for m in getattr(response, "models", [])]
+            except Exception:
+                pass
+
+    def normalize_model_name(name):
+        if not name: return ""
+        name = name.strip().lower()
+        return name
+
+    normalized_models = [normalize_model_name(m) for m in models if m]
+    normalized_target = normalize_model_name(target_model)
+
+    has_model = normalized_target in normalized_models
+    if not has_model and ":" not in normalized_target:
+        has_model = (normalized_target + ":latest") in normalized_models
+
+    if not has_model:
+        for m in normalized_models:
+            if m.startswith(normalized_target + ":") or (":" not in normalized_target and m == normalized_target):
+                has_model = True
+                break
+
+    if not has_model:
+        print(f"[CRITICAL] Required model '{target_model}' is not pulled in local Ollama.")
+        print(f"  Please run: ollama pull {target_model}")
+        if models:
+            print("\n  Available local models:")
+            for m in models:
+                if m: print(f"    - {m}")
+        if sys.stdin.isatty():
+            try:
+                choice = input("\nWould you like to force launch anyway? (y/N): ").strip().lower()
+                if choice in ('y', 'yes'):
+                    print("[WARNING] Force launching anyway...")
+                    return
+            except (KeyboardInterrupt, EOFError):
+                pass
+        sys.exit(1)
+
 def main():
     """Initialize environment and launch the TUI."""
     # 1. Environment and Dependency Checks
     check_python_version()
     ensure_directories()
     check_dependencies()
+    check_ollama_and_models()
 
     # 2. Launch the Application loop
     while True:
