@@ -72,27 +72,27 @@ class TestMenu(unittest.TestCase):
         self.assertEqual(app._resolve_regeneration_text("Previous"), "Previous")
 
     @patch('ui.menu.update_setting')
-    def test_on_switch_changed_rp_mode(self, mock_update_setting):
-        """Test on_switch_changed updates interaction_mode when sw_rp_mode changes."""
+    def test_on_select_changed_interaction_mode(self, mock_update_setting):
+        """Test on_select_changed updates interaction_mode when interaction_mode_select changes."""
         app = MagicMock(spec=TaiMenu)
-        app.on_switch_changed = lambda event: TaiMenu.on_switch_changed(app, event)
+        app.on_select_changed = lambda event: TaiMenu.on_select_changed(app, event)
         app.add_message = MagicMock()
 
-        # Switch ON (RP Mode)
-        event_on = MagicMock()
-        event_on.switch.id = "sw_rp_mode"
-        event_on.value = True
-        app.on_switch_changed(event_on)
+        # Select RP Mode
+        event_rp = MagicMock()
+        event_rp.select.id = "interaction_mode_select"
+        event_rp.value = "rp"
+        app.on_select_changed(event_rp)
         mock_update_setting.assert_any_call("interaction_mode", "rp")
-        app.add_message.assert_any_call("Interaction Mode: [bold]RP[/bold]", role="system")
+        app.add_message.assert_any_call("Interaction mode set to [bold]RP[/bold]", role="system")
 
-        # Switch OFF (Casual Mode)
-        event_off = MagicMock()
-        event_off.switch.id = "sw_rp_mode"
-        event_off.value = False
-        app.on_switch_changed(event_off)
+        # Select Casual Mode
+        event_casual = MagicMock()
+        event_casual.select.id = "interaction_mode_select"
+        event_casual.value = "casual"
+        app.on_select_changed(event_casual)
         mock_update_setting.assert_any_call("interaction_mode", "casual")
-        app.add_message.assert_any_call("Interaction Mode: [bold]CASUAL[/bold]", role="system")
+        app.add_message.assert_any_call("Interaction mode set to [bold]CASUAL[/bold]", role="system")
 
 if __name__ == "__main__":
     unittest.main()
