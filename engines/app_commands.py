@@ -232,7 +232,7 @@ def app_commands(ops: str, suppress_output: bool = False):
             _log(f"[ERROR] Unknown setting to toggle: '{choice}'. Use //toggle to list options.", Fore.RED)
 
     def _reset(args=None):
-        """Resets chat history or relationship score. Usage: //reset [all|rel] [profile]"""
+        """Resets chat history or relationship score. If no arguments are provided, resets the current profile's history. Usage: //reset [all|rel] [profile]"""
         subcommand = ""
         target_profile = ""
         
@@ -315,10 +315,11 @@ def app_commands(ops: str, suppress_output: bool = False):
                         return
 
         if profile_name:
-            if not subcommand and not suppress_output:
-                _log("[SYSTEM] Conversation history reset.", Fore.YELLOW)
             memory_manager.save_history(profile_name, [])
-            _log("[SYSTEM] History cleared.", Fore.GREEN)
+            if not subcommand:
+                _log(f"[SYSTEM] History cleared for current profile: {profile_name}.", Fore.GREEN)
+            else:
+                _log(f"[SYSTEM] History cleared for profile: {profile_name}.", Fore.GREEN)
 
     def _restart():
         """Signals the main loop to restart the application."""
