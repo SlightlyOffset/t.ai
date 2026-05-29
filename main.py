@@ -87,6 +87,23 @@ def check_ollama_and_models():
         return
 
     default_model = get_setting("default_llm_model") or "fluffy/l3-8b-stheno-v3.2"
+    target_model = default_model
+
+    # Check if there is an active character profile setting and it overrides the model
+    current_char = get_setting("current_character_profile")
+    if current_char:
+        char_path = os.path.join("profiles", current_char)
+        if os.path.exists(char_path):
+            try:
+                import json
+                with open(char_path, "r", encoding="utf-8") as f:
+                    char_profile = json.load(f)
+                    if char_profile and isinstance(char_profile, dict):
+                        char_model = char_profile.get("llm_model")
+                        if char_model:
+                            target_model = char_model
+            except Exception:
+                pass
 
     try:
         import ollama
@@ -123,21 +140,21 @@ def check_ollama_and_models():
         return name
 
     normalized_models = [normalize_model_name(m) for m in models if m]
-    normalized_default = normalize_model_name(default_model)
+    normalized_target = normalize_model_name(target_model)
 
-    has_model = normalized_default in normalized_models
-    if not has_model and ":" not in normalized_default:
-        has_model = (normalized_default + ":latest") in normalized_models
+    has_model = normalized_target in normalized_models
+    if not has_model and ":" not in normalized_target:
+        has_model = (normalized_target + ":latest") in normalized_models
 
     if not has_model:
         for m in normalized_models:
-            if m.startswith(normalized_default + ":") or (":" not in normalized_default and m == normalized_default):
+            if m.startswith(normalized_target + ":") or (":" not in normalized_target and m == normalized_target):
                 has_model = True
                 break
 
     if not has_model:
-        print(f"[CRITICAL] Default model '{default_model}' is not pulled in local Ollama.")
-        print(f"  Please run: ollama pull {default_model}")
+        print(f"[CRITICAL] Required model '{target_model}' is not pulled in local Ollama.")
+        print(f"  Please run: ollama pull {target_model}")
         if models:
             print("\n  Available local models:")
             for m in models:

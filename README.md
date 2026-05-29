@@ -153,11 +153,14 @@ python main.py
 Inside the chat, you can use operational commands or keyboard shortcuts:
 
 * `Ctrl+B`: Toggle sidebar visibility.
+* `Ctrl+S`: Open settings configuration window.
 * `//help`: Show all commands.
-* `//mode`: Toggle between RP and Casual modes.
-* `//change <char|user>`: Swap to a different character or user profile.
+* `//settings`: Open the tabbed configuration settings screen.
+* `//mode [rp|casual]`: Displays or changes the active interaction mode.
+* `//toggle <setting>`: Toggles a boolean setting (e.g., `tts`, `speak`, `narration`, `errors`, `privacy`, `debug`).
+* `//change <char|user> <name>`: Swap to a different character or user profile.
+* `//reset [all|rel]`: Reset chat history (all) or relationship scores (rel).
 * `//import_card <path>`: Imports a SillyTavern character card.
-* `//restart`: Cleanly reboot the application.
 
 ---
 

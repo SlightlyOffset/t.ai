@@ -77,12 +77,13 @@ class TestSettingsScreen(unittest.TestCase):
         self.screen.action_cancel()
         self.screen.dismiss.assert_called_once_with(None)
 
-    @patch('engines.config.update_setting')
+    @patch('engines.config.update_settings')
     def test_save_action_success(self, mock_update):
         """Test that saving with valid settings updates config and dismisses screen."""
+        mock_update.return_value = True
         self.screen.action_save()
 
-        # Verify update_setting was called for keys
+        # Verify update_settings was called
         self.assertTrue(mock_update.called)
         # Verify dismissed with settings dict
         self.screen.dismiss.assert_called_once()
@@ -93,7 +94,7 @@ class TestSettingsScreen(unittest.TestCase):
         self.assertEqual(dismissed_dict["overhaul_candidate_count"], 2)
         self.assertEqual(dismissed_dict["interaction_mode"], "rp")
 
-    @patch('engines.config.update_setting')
+    @patch('engines.config.update_settings')
     def test_save_action_insecure_llm_url(self, mock_update):
         """Test validation rejects insecure HTTP remote LLM URL."""
         self.widgets["#remote_llm_url"].value = "http://insecure-llm.com"
@@ -103,7 +104,7 @@ class TestSettingsScreen(unittest.TestCase):
         mock_update.assert_not_called()
         self.screen.dismiss.assert_not_called()
 
-    @patch('engines.config.update_setting')
+    @patch('engines.config.update_settings')
     def test_save_action_insecure_tts_url(self, mock_update):
         """Test validation rejects insecure HTTP remote TTS URL."""
         self.widgets["#remote_tts_url"].value = "http://insecure-tts.com"
@@ -113,9 +114,10 @@ class TestSettingsScreen(unittest.TestCase):
         mock_update.assert_not_called()
         self.screen.dismiss.assert_not_called()
 
-    @patch('engines.config.update_setting')
+    @patch('engines.config.update_settings')
     def test_save_action_secure_urls_succeed(self, mock_update):
         """Test validation accepts secure HTTPS remote URLs."""
+        mock_update.return_value = True
         self.widgets["#remote_llm_url"].value = "https://secure-llm.com"
         self.widgets["#remote_tts_url"].value = "https://secure-tts.com"
         self.screen.action_save()
@@ -124,22 +126,42 @@ class TestSettingsScreen(unittest.TestCase):
         self.assertTrue(mock_update.called)
         self.screen.dismiss.assert_called_once()
 
-    @patch('engines.config.update_setting')
-    def test_save_action_numeric_fallbacks(self, mock_update):
-        """Test that invalid numeric inputs fallback to standard default values."""
+    @patch('engines.config.update_settings')
+    def test_save_action_numeric_validation_failures(self, mock_update):
+        """Test that invalid numeric inputs trigger validation errors and do not save."""
+        # 1. Invalid memory limit
         self.widgets["#memory_limit"].value = "not-an-int"
-        self.widgets["#repetition_penalty"].value = "not-a-float"
-        self.widgets["#tts_rate"].value = "invalid-int"
-        self.widgets["#overhaul_candidate_count"].value = "invalid"
-
         self.screen.action_save()
+        self.screen.show_error.assert_called_with("Memory Message Limit must be a positive integer.")
+        self.screen.dismiss.assert_not_called()
+        mock_update.assert_not_called()
+        self.screen.show_error.reset_mock()
 
-        self.screen.dismiss.assert_called_once()
-        dismissed_dict = self.screen.dismiss.call_args[0][0]
-        self.assertEqual(dismissed_dict["memory_limit"], 15)
-        self.assertEqual(dismissed_dict["repetition_penalty"], 1.15)
-        self.assertEqual(dismissed_dict["tts_rate"], 170)
-        self.assertEqual(dismissed_dict["overhaul_candidate_count"], 2)
+        # Reset memory limit to valid, test invalid repetition penalty
+        self.widgets["#memory_limit"].value = "15"
+        self.widgets["#repetition_penalty"].value = "not-a-float"
+        self.screen.action_save()
+        self.screen.show_error.assert_called_with("Repetition Penalty must be a positive number.")
+        self.screen.dismiss.assert_not_called()
+        mock_update.assert_not_called()
+        self.screen.show_error.reset_mock()
+
+        # Reset repetition penalty, test invalid tts rate
+        self.widgets["#repetition_penalty"].value = "1.15"
+        self.widgets["#tts_rate"].value = "invalid-int"
+        self.screen.action_save()
+        self.screen.show_error.assert_called_with("TTS Speech Rate must be a positive integer.")
+        self.screen.dismiss.assert_not_called()
+        mock_update.assert_not_called()
+        self.screen.show_error.reset_mock()
+
+        # Reset tts rate, test invalid overhaul candidate count
+        self.widgets["#tts_rate"].value = "170"
+        self.widgets["#overhaul_candidate_count"].value = "invalid"
+        self.screen.action_save()
+        self.screen.show_error.assert_called_with("Overhaul Candidate Count must be a positive integer.")
+        self.screen.dismiss.assert_not_called()
+        mock_update.assert_not_called()
 
     def test_button_pressed_cancel(self):
         """Test that pressing the cancel button triggers cancel action."""

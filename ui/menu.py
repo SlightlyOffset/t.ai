@@ -342,21 +342,15 @@ class TaiMenu(App):
             self.query_one("#sw_privacy", Switch).value = result.get("privacy_mode", False)
             self.query_one("#interaction_mode_select", Select).value = result.get("interaction_mode", "rp")
 
-            self.query_one("#model_select", Select).value = result.get("default_llm_model")
-            self.query_one("#tts_engine_select", Select).value = result.get("default_tts_engine")
-            self.query_one("#character_voice_select", Select).value = result.get("default_tts_voice")
+            char_profile = self.character_profile or {}
+            self.query_one("#model_select", Select).value = char_profile.get("llm_model") or result.get("default_llm_model")
+            self.query_one("#tts_engine_select", Select).value = char_profile.get("tts_engine") or result.get("default_tts_engine")
+            self.query_one("#character_voice_select", Select).value = char_profile.get("preferred_edge_voice") or result.get("default_tts_voice")
             self.query_one("#narration_voice_select", Select).value = result.get("narration_tts_voice")
             self.query_one("#image_protocol_select", Select).value = result.get("image_protocol")
         except Exception:
             pass
 
-        # Update character profile settings locally if character active
-        if self.character_profile and self.char_path:
-            self.character_profile["llm_model"] = result.get("default_llm_model")
-            self.character_profile["tts_engine"] = result.get("default_tts_engine")
-            self.character_profile["preferred_edge_voice"] = result.get("default_tts_voice")
-            from engines.utilities import save_json_atomic
-            save_json_atomic(self.char_path, self.character_profile)
 
         # Apply settings changes live
         self.remount_avatar_widgets()

@@ -307,23 +307,35 @@ class SettingsScreen(ModalScreen):
         # Parse and validate integers/floats
         try:
             memory_limit = int(self.query_one("#memory_limit", Input).value.strip())
+            if memory_limit <= 0:
+                raise ValueError()
         except ValueError:
-            memory_limit = 15
+            self.show_error("Memory Message Limit must be a positive integer.")
+            return
 
         try:
             repetition_penalty = float(self.query_one("#repetition_penalty", Input).value.strip())
+            if repetition_penalty <= 0:
+                raise ValueError()
         except ValueError:
-            repetition_penalty = 1.15
+            self.show_error("Repetition Penalty must be a positive number.")
+            return
 
         try:
             tts_rate = int(self.query_one("#tts_rate", Input).value.strip())
+            if tts_rate <= 0:
+                raise ValueError()
         except ValueError:
-            tts_rate = 170
+            self.show_error("TTS Speech Rate must be a positive integer.")
+            return
 
         try:
             overhaul_candidate_count = int(self.query_one("#overhaul_candidate_count", Input).value.strip())
+            if overhaul_candidate_count <= 0:
+                raise ValueError()
         except ValueError:
-            overhaul_candidate_count = 2
+            self.show_error("Overhaul Candidate Count must be a positive integer.")
+            return
 
         # 2. Build updated settings dict
         updated_settings = {
@@ -366,9 +378,10 @@ class SettingsScreen(ModalScreen):
         }
 
         # 3. Save atomically and dismiss screen returning settings dict
-        from engines.config import update_setting
-        for key, val in updated_settings.items():
-            update_setting(key, val)
+        from engines.config import update_settings
+        if not update_settings(updated_settings):
+            self.show_error("Failed to save settings. Please check directory permissions.")
+            return
 
         self.dismiss(updated_settings)
 
