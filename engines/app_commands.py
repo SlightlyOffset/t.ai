@@ -91,10 +91,6 @@ def app_commands(ops: str, suppress_output: bool = False):
             if not desc:
                 if cmd == "//mode":
                     desc = "Shortcut to toggle interaction mode (RP / Casual)."
-                elif cmd == "//reset_all":
-                    desc = "Shortcut to wipe all chat history files."
-                elif cmd == "//reset_rel":
-                    desc = "Shortcut to reset active profile relationship score."
             _log(f"  {cmd:<25} - {desc}", Fore.CYAN)
 
 
@@ -293,7 +289,7 @@ def app_commands(ops: str, suppress_output: bool = False):
                 profile_name = os.path.basename(current_profile_setting).replace(".json", "")
             else:
                 if suppress_output:
-                    _log("[SYSTEM] Manual history picking is only supported in CLI mode. Use //reset_all to clear active profile.", Fore.RED)
+                    _log("[SYSTEM] Manual history picking is only supported in CLI mode. Use //reset all to wipe all profiles.", Fore.RED)
                     return
                 else:
                     history_path = pick_history()
@@ -552,8 +548,6 @@ def app_commands(ops: str, suppress_output: bool = False):
         "//change_character": _change_character,
         "//change_user_profile": _change_user_profile,
         "//reset": _reset,
-        "//reset_all": lambda: _reset("all"),
-        "//reset_rel": lambda: _reset("rel"),
         "//restart": _restart,
         "//toggle": _toggle,
         "//show_settings": _show_settings,
