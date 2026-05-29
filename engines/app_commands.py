@@ -321,11 +321,6 @@ def app_commands(ops: str, suppress_output: bool = False):
             else:
                 _log(f"[SYSTEM] History cleared for profile: {profile_name}.", Fore.GREEN)
 
-    def _restart():
-        """Signals the main loop to restart the application."""
-        _log("[SYSTEM] Restarting application...", Fore.YELLOW)
-        raise RestartRequested()
-
     def _clear():
         """Clears the terminal screen (CLI only)."""
         if suppress_output:
@@ -342,6 +337,9 @@ def app_commands(ops: str, suppress_output: bool = False):
 
         choice = args.strip().lower()
         if choice in ("char", "character"):
+            if suppress_output:
+                _log("[SYSTEM] Character switching is handled via Ctrl+O (Profiles) in TUI.", Fore.YELLOW)
+                return
             _log("[SYSTEM] Changing character...", Fore.YELLOW)
             raise RestartRequested()
         elif choice in ("user", "profile"):
@@ -586,7 +584,6 @@ def app_commands(ops: str, suppress_output: bool = False):
         "//lore": _lore,
         "//change": _change,
         "//reset": _reset,
-        "//restart": _restart,
         "//toggle": _toggle,
         "//show_settings": _show_settings,
         "//history": _history,

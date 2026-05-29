@@ -86,14 +86,10 @@ class TestAppCommands(unittest.TestCase):
         self.assertIn("=========================", output)
 
     @patch('sys.stdout', new_callable=StringIO)
-    def test_restart_raises_and_prints_message(self, mock_stdout):
+    def test_change_char_in_cli_raises_restart(self, mock_stdout):
+        """Verify that //change char raises RestartRequested in CLI mode."""
         with self.assertRaises(RestartRequested):
-            app_commands("//restart")
-        output = strip_ansi(mock_stdout.getvalue())
-        self.assertIn("[SYSTEM] Restarting application...", output)
-        # Ensure no extra leftover lines bleed in after the raise
-        lines = [l for l in output.splitlines() if l.strip()]
-        self.assertEqual(len(lines), 1)
+            app_commands("//change char")
 
     @patch('sys.stdout', new_callable=StringIO)
     def test_recap_alias_works(self, mock_stdout):
