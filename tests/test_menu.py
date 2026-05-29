@@ -139,5 +139,60 @@ class TestMenu(unittest.TestCase):
         self.assertTrue(mock_container.mount.called)
         self.assertTrue(mock_set_timer.called)
 
+    @patch('ui.menu.handle_command_input')
+    @patch('ui.menu.memory_manager')
+    @patch('ui.menu.get_user_message_number')
+    @patch('ui.menu.TaiMenu.stream_response')
+    def test_on_chat_input_submitted_command_handling(self, mock_stream, mock_get_msg_num, mock_mem, mock_handle_command):
+        """Test that chat input submitted with '//' is handled as a command and doesn't add user bubbles."""
+        import asyncio
+        class DummyMenu(TaiMenu):
+            def __init__(self):
+                self.history_profile_name = "test_profile"
+                self.char_path = "profiles/test.json"
+                self.user_path = "user_profiles/test.json"
+            def format_rp(self, text, role="user"):
+                return text
+
+        app = DummyMenu()
+        app.add_message = MagicMock()
+        app.update_sidebar = MagicMock()
+        app.reload_chat_from_history = MagicMock()
+        app.check_for_rolling_summary = MagicMock()
+        app.action_open_settings = MagicMock()
+        app.run_manual_compression = MagicMock()
+
+        # Mock Event
+        class MockEvent:
+            def __init__(self, value):
+                self.value = value
+
+        # 1. Command with command_noop return
+        mock_handle_command.return_value = {"type": "command_noop"}
+        asyncio.run(app.on_chat_input_submitted(MockEvent("//invalid")))
+        
+        # Verify that add_message was called with role="command", NOT role="user"
+        app.add_message.assert_any_call("[SYSTEM] Recognized command pattern but no action taken: Non-existent command.", role="command")
+        # Check that role="user" was never added
+        for call in app.add_message.call_args_list:
+            self.assertNotEqual(call[1].get("role"), "user")
+
+        app.add_message.reset_mock()
+
+        # 2. Command with command_success return
+        mock_handle_command.return_value = {"type": "command_success", "messages": ["Success message"]}
+        asyncio.run(app.on_chat_input_submitted(MockEvent("//toggle clear")))
+        app.add_message.assert_any_call("Success message", role="command")
+        for call in app.add_message.call_args_list:
+            self.assertNotEqual(call[1].get("role"), "user")
+
+        app.add_message.reset_mock()
+
+        # 3. Regular chat message
+        mock_get_msg_num.return_value = 1
+        asyncio.run(app.on_chat_input_submitted(MockEvent("Hello world")))
+        app.add_message.assert_called_once_with("Hello world", role="user", message_number=1, raw_text="Hello world")
+        mock_stream.assert_called_once_with("Hello world", message_number=2)
+
 if __name__ == "__main__":
     unittest.main()
