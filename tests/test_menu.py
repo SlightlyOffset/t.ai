@@ -105,7 +105,7 @@ class TestMenu(unittest.TestCase):
         event_null = MagicMock()
         event_null.select.id = "interaction_mode_select"
         from textual.widgets import Select
-        event_null.value = Select.BLANK
+        event_null.value = Select.NULL
         
         app.on_select_changed(event_null)
         # Verify it reverted back to the previous mode

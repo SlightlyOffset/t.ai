@@ -578,8 +578,8 @@ class TaiMenu(App):
         """Update the character profile with selected LLM, Character Voice, or Narration Voice."""
         from engines.utilities import save_json_atomic
 
-        # Handle cases where value might be Select.BLANK (NULL)
-        val = event.value if event.value != Select.BLANK else None
+        # Handle cases where value might be Select.NULL
+        val = event.value if event.value != Select.NULL else None
 
         if event.select.id == "model_select":
             if val is not None:
