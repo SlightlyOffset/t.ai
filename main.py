@@ -62,12 +62,79 @@ def check_dependencies():
         print(f"  pip install {' '.join(missing_libs)}")
         sys.exit(1)
 
+def check_ollama_and_models():
+    """If using local Ollama, verify it is running and the default model is pulled."""
+    project_root = os.path.abspath(os.path.dirname(__file__))
+    if project_root not in sys.path:
+        sys.path.insert(0, project_root)
+        
+    try:
+        from engines.config import get_setting
+    except ImportError as e:
+        print(f"[CRITICAL] Failed to load config engine: {e}")
+        sys.exit(1)
+
+    remote_llm = get_setting("remote_llm_url")
+    if remote_llm:
+        return
+
+    default_model = get_setting("default_llm_model") or "fluffy/l3-8b-stheno-v3.2"
+
+    try:
+        import ollama
+        response = ollama.list()
+    except Exception as e:
+        print("[CRITICAL] Local Ollama service is not running or not installed.")
+        print("  Please make sure Ollama is installed and running on your system (https://ollama.com).")
+        print(f"  Error details: {e}")
+        sys.exit(1)
+
+    models = []
+    if isinstance(response, dict):
+        models = [m.get("model", m.get("name", "")) for m in response.get("models", [])]
+    else:
+        try:
+            models = [m.model for m in getattr(response, "models", [])]
+        except Exception:
+            try:
+                models = [getattr(m, "name", "") for m in getattr(response, "models", [])]
+            except Exception:
+                pass
+
+    def normalize_model_name(name):
+        if not name: return ""
+        name = name.strip().lower()
+        return name
+
+    normalized_models = [normalize_model_name(m) for m in models if m]
+    normalized_default = normalize_model_name(default_model)
+
+    has_model = normalized_default in normalized_models
+    if not has_model and ":" not in normalized_default:
+        has_model = (normalized_default + ":latest") in normalized_models
+
+    if not has_model:
+        for m in normalized_models:
+            if m.startswith(normalized_default + ":") or (":" not in normalized_default and m == normalized_default):
+                has_model = True
+                break
+
+    if not has_model:
+        print(f"[CRITICAL] Default model '{default_model}' is not pulled in local Ollama.")
+        print(f"  Please run: ollama pull {default_model}")
+        if models:
+            print("\n  Available local models:")
+            for m in models:
+                if m: print(f"    - {m}")
+        sys.exit(1)
+
 def main():
     """Initialize environment and launch the TUI."""
     # 1. Environment and Dependency Checks
     check_python_version()
     ensure_directories()
     check_dependencies()
+    check_ollama_and_models()
 
     # 2. Launch the Application loop
     while True:

@@ -162,5 +162,55 @@ class TestTUIStartup(unittest.TestCase):
         self.assertEqual(app.user_path, "new_user.json")
         self.assertTrue(mock_load.called)
 
+    @patch('engines.config.get_setting')
+    @patch('ollama.list')
+    def test_check_ollama_and_models_running_and_pulled(self, mock_ollama_list, mock_get_setting):
+        """Test check_ollama_and_models succeeds when Ollama is running and model is pulled."""
+        from main import check_ollama_and_models
+        mock_get_setting.side_effect = lambda key, default=None: {
+            "remote_llm_url": None,
+            "default_llm_model": "fluffy/l3-8b-stheno-v3.2"
+        }.get(key, default)
+        
+        # Mock pulled models
+        mock_ollama_list.return_value = {
+            "models": [{"model": "fluffy/l3-8b-stheno-v3.2:latest"}]
+        }
+        
+        # Should not raise SystemExit
+        check_ollama_and_models()
+
+    @patch('engines.config.get_setting')
+    @patch('ollama.list')
+    def test_check_ollama_and_models_not_running(self, mock_ollama_list, mock_get_setting):
+        """Test check_ollama_and_models raises SystemExit when local Ollama is not running."""
+        from main import check_ollama_and_models
+        mock_get_setting.side_effect = lambda key, default=None: {
+            "remote_llm_url": None,
+            "default_llm_model": "fluffy/l3-8b-stheno-v3.2"
+        }.get(key, default)
+        
+        mock_ollama_list.side_effect = Exception("Connection refused")
+        
+        with self.assertRaises(SystemExit):
+            check_ollama_and_models()
+
+    @patch('engines.config.get_setting')
+    @patch('ollama.list')
+    def test_check_ollama_and_models_missing_model(self, mock_ollama_list, mock_get_setting):
+        """Test check_ollama_and_models raises SystemExit when model is not pulled."""
+        from main import check_ollama_and_models
+        mock_get_setting.side_effect = lambda key, default=None: {
+            "remote_llm_url": None,
+            "default_llm_model": "fluffy/l3-8b-stheno-v3.2"
+        }.get(key, default)
+        
+        mock_ollama_list.return_value = {
+            "models": [{"model": "llama3:latest"}]
+        }
+        
+        with self.assertRaises(SystemExit):
+            check_ollama_and_models()
+
 if __name__ == '__main__':
     unittest.main()
