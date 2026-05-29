@@ -61,6 +61,21 @@ class SettingsRequested(Exception):
     """Exception raised to signal the TUI to open the settings screen."""
     pass
 
+def normalize_command_prefix(ops: str) -> str | None:
+    """
+    If the input is a command (starts with one or more slashes), return the
+    normalized command string starting with '//'. Otherwise return None.
+    """
+    stripped = ops.strip()
+    if not stripped.startswith("/"):
+        return None
+    import re
+    pattern = re.match(r'^/+', stripped.lower())
+    if pattern:
+        return "//" + stripped[pattern.end():]
+    return "//" + stripped
+
+
 def app_commands(ops: str, suppress_output: bool = False):
     """
     Dispatcher for internal operational commands.
@@ -583,9 +598,9 @@ def app_commands(ops: str, suppress_output: bool = False):
         "//settings": _settings,
     }
 
-    pattern = re.match(r'^/+', ops.strip().lower())
-    if pattern:
-        ops = "//" + ops[pattern.end():]
+    normalized = normalize_command_prefix(ops)
+    if normalized:
+        ops = normalized
     
     # Split command and arguments
     parts = ops.split(" ", 1)

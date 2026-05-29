@@ -22,7 +22,7 @@ from textual.reactive import reactive
 from textual.message import Message
 
 # First-party imports
-from engines.app_commands import RestartRequested
+from engines.app_commands import RestartRequested, normalize_command_prefix
 from engines.chat_controller import (
     get_user_message_number,
     handle_command_input,
@@ -983,10 +983,9 @@ class TaiMenu(App):
         message = event.value.strip()
         if not message: return
 
-        import re
-        pattern = re.match(r'^/+', message.lower())
-        if pattern:
-            message = "//" + message[pattern.end():]
+        normalized = normalize_command_prefix(message)
+        if normalized:
+            message = normalized
 
         # Handle commands (original message)
         if message.startswith("//"):
