@@ -95,6 +95,14 @@ def check_ollama_and_models():
         print("[CRITICAL] Local Ollama service is not running or not installed.")
         print("  Please make sure Ollama is installed and running on your system (https://ollama.com).")
         print(f"  Error details: {e}")
+        if sys.stdin.isatty():
+            try:
+                choice = input("\nWould you like to force launch anyway? (y/N): ").strip().lower()
+                if choice in ('y', 'yes'):
+                    print("[WARNING] Force launching anyway...")
+                    return
+            except (KeyboardInterrupt, EOFError):
+                pass
         sys.exit(1)
 
     models = []
@@ -134,6 +142,14 @@ def check_ollama_and_models():
             print("\n  Available local models:")
             for m in models:
                 if m: print(f"    - {m}")
+        if sys.stdin.isatty():
+            try:
+                choice = input("\nWould you like to force launch anyway? (y/N): ").strip().lower()
+                if choice in ('y', 'yes'):
+                    print("[WARNING] Force launching anyway...")
+                    return
+            except (KeyboardInterrupt, EOFError):
+                pass
         sys.exit(1)
 
 def main():

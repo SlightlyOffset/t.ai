@@ -232,5 +232,86 @@ class TestTUIStartup(unittest.TestCase):
         check_ollama_and_models()
         self.assertFalse(mock_ollama_list.called)
 
+    @patch('engines.config.get_setting')
+    @patch('ollama.list')
+    @patch('sys.stdin.isatty', return_value=True)
+    @patch('builtins.input')
+    def test_check_ollama_and_models_not_running_interactive_force_launch(self, mock_input, mock_isatty, mock_ollama_list, mock_get_setting):
+        """Test that user can force launch when Ollama is not running in an interactive session."""
+        from main import check_ollama_and_models
+        mock_get_setting.side_effect = lambda key, default=None: {
+            "remote_llm_url": None,
+            "default_llm_model": "fluffy/l3-8b-stheno-v3.2"
+        }.get(key, default)
+        
+        mock_ollama_list.side_effect = Exception("Connection refused")
+        mock_input.return_value = "y"
+        
+        # Should not raise SystemExit
+        check_ollama_and_models()
+        mock_input.assert_called_once()
+
+    @patch('engines.config.get_setting')
+    @patch('ollama.list')
+    @patch('sys.stdin.isatty', return_value=True)
+    @patch('builtins.input')
+    def test_check_ollama_and_models_not_running_interactive_no_force_launch(self, mock_input, mock_isatty, mock_ollama_list, mock_get_setting):
+        """Test that rejecting force launch when Ollama is not running raises SystemExit."""
+        from main import check_ollama_and_models
+        mock_get_setting.side_effect = lambda key, default=None: {
+            "remote_llm_url": None,
+            "default_llm_model": "fluffy/l3-8b-stheno-v3.2"
+        }.get(key, default)
+        
+        mock_ollama_list.side_effect = Exception("Connection refused")
+        mock_input.return_value = "n"
+        
+        with self.assertRaises(SystemExit):
+            check_ollama_and_models()
+        mock_input.assert_called_once()
+
+    @patch('engines.config.get_setting')
+    @patch('ollama.list')
+    @patch('sys.stdin.isatty', return_value=True)
+    @patch('builtins.input')
+    def test_check_ollama_and_models_missing_model_interactive_force_launch(self, mock_input, mock_isatty, mock_ollama_list, mock_get_setting):
+        """Test that user can force launch when default model is missing in an interactive session."""
+        from main import check_ollama_and_models
+        mock_get_setting.side_effect = lambda key, default=None: {
+            "remote_llm_url": None,
+            "default_llm_model": "fluffy/l3-8b-stheno-v3.2"
+        }.get(key, default)
+        
+        mock_ollama_list.return_value = {
+            "models": [{"model": "llama3:latest"}]
+        }
+        mock_input.return_value = "yes"
+        
+        # Should not raise SystemExit
+        check_ollama_and_models()
+        mock_input.assert_called_once()
+
+    @patch('engines.config.get_setting')
+    @patch('ollama.list')
+    @patch('sys.stdin.isatty', return_value=True)
+    @patch('builtins.input')
+    def test_check_ollama_and_models_missing_model_interactive_no_force_launch(self, mock_input, mock_isatty, mock_ollama_list, mock_get_setting):
+        """Test that rejecting force launch when model is missing raises SystemExit."""
+        from main import check_ollama_and_models
+        mock_get_setting.side_effect = lambda key, default=None: {
+            "remote_llm_url": None,
+            "default_llm_model": "fluffy/l3-8b-stheno-v3.2"
+        }.get(key, default)
+        
+        mock_ollama_list.return_value = {
+            "models": [{"model": "llama3:latest"}]
+        }
+        mock_input.return_value = ""
+        
+        with self.assertRaises(SystemExit):
+            check_ollama_and_models()
+        mock_input.assert_called_once()
+
 if __name__ == '__main__':
     unittest.main()
+
