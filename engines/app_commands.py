@@ -10,7 +10,7 @@ import re
 import json
 
 # Third-party imports
-from colorama import Fore, init, Style
+from colorama import Fore, init
 
 # Local imports
 from engines.config import update_setting, get_setting
@@ -88,7 +88,18 @@ def app_commands(ops: str, suppress_output: bool = False):
         for cmd, func in cmds.items():
             doc = func.__doc__ if func.__doc__ else ""
             desc = doc.split("\n")[0] if doc else ""
+            if not desc:
+                if cmd == "//mode":
+                    desc = "Shortcut to toggle interaction mode (RP / Casual)."
+                elif cmd.startswith("//toggle_"):
+                    setting_name = cmd.replace("//toggle_", "")
+                    desc = f"Shortcut to toggle '{setting_name}' setting."
+                elif cmd == "//reset_all":
+                    desc = "Shortcut to wipe all chat history files."
+                elif cmd == "//reset_rel":
+                    desc = "Shortcut to reset active profile relationship score."
             _log(f"  {cmd:<25} - {desc}", Fore.CYAN)
+
 
     def _exit():
         """Exits the application."""
@@ -107,99 +118,199 @@ def app_commands(ops: str, suppress_output: bool = False):
                 display_value = "********"
             _log(f"  {key}: {display_value}", Fore.CYAN)
 
-    def _toggle_tts():
-        """Toggles Text-to-Speech on or off."""
-        is_enabled = get_setting("tts_enabled", True)
-        _log("[SYSTEM] Text-to-Speech enabled." if not is_enabled else "[SYSTEM] Text-to-Speech disabled.", 
-             Fore.GREEN if not is_enabled else Fore.RED)
-        update_setting("tts_enabled", not is_enabled)
-
-    def _toggle_tts_tag():
-        """Toggles the visibility of the TTS engine tag in chat."""
-        is_enabled = get_setting("show_tts_engine", True)
-        _log("[SYSTEM] TTS engine tag enabled." if not is_enabled else "[SYSTEM] TTS engine tag disabled.",
-             Fore.GREEN if not is_enabled else Fore.RED)
-        update_setting("show_tts_engine", not is_enabled)
-
-    def _toggle_narration():
-        """Toggles whether narration (text in asterisks) is spoken."""
-        is_enabled = get_setting("speak_narration", False)
-        _log("[SYSTEM] Narration enabled." if not is_enabled else "[SYSTEM] Narration disabled.",
-             Fore.GREEN if not is_enabled else Fore.RED)
-        update_setting("speak_narration", not is_enabled)
-
-    def _toggle_speak():
-        """Toggles whether character dialogue is spoken."""
-        is_enabled = get_setting("character_speak", True)
-        _log("[SYSTEM] Character speaking enabled." if not is_enabled else "[SYSTEM] Character speaking disabled.",
-             Fore.GREEN if not is_enabled else Fore.RED)
-        update_setting("character_speak", not is_enabled)
-
-    def _toggle_command():
-        """Toggles the AI's ability to execute system commands."""
-        is_enabled = get_setting("execute_command", False)
-        _log("[SYSTEM] Command execution enabled." if not is_enabled else "[SYSTEM] Command execution disabled.",
-             Fore.GREEN if not is_enabled else Fore.RED)
-        update_setting("execute_command", not is_enabled)
-
-    def _reset():
-        """Wipes a specific history file (only works in CLI)."""
-        if suppress_output:
-            _log("[SYSTEM] Manual history picking is only supported in CLI mode. Use //reset_all to clear active profile.", Fore.RED)
+    def _toggle(args=None):
+        """Toggles a boolean setting. Usage: //toggle [tts|tts_tag|speak|narration|command|clear|recap|errors|privacy|debug|mode]"""
+        if not args or not args.strip():
+            _log("[SYSTEM] Usage: //toggle [tts|tts_tag|speak|narration|command|clear|recap|errors|privacy|debug|mode]", Fore.YELLOW)
+            _log("Available settings to toggle:", Fore.YELLOW)
+            _log("  tts       - Text-to-Speech master enable", Fore.CYAN)
+            _log("  tts_tag   - Show TTS engine tag in chat", Fore.CYAN)
+            _log("  speak     - Character speaking toggle", Fore.CYAN)
+            _log("  narration - Read narration toggle", Fore.CYAN)
+            _log("  command   - AI system command execution toggle", Fore.CYAN)
+            _log("  clear     - Clear screen on start toggle", Fore.CYAN)
+            _log("  recap     - Auto recap at startup toggle", Fore.CYAN)
+            _log("  errors    - Error messages suppression toggle", Fore.CYAN)
+            _log("  privacy   - Privacy Mode (PII redaction) toggle", Fore.CYAN)
+            _log("  debug     - Debug mode toggle", Fore.CYAN)
+            _log("  mode      - Interaction mode toggle (RP / Casual)", Fore.CYAN)
             return
 
-        _log("[SYSTEM] Conversation history reset.", Fore.YELLOW)
-        history_path = pick_history()
-        if history_path:
-            profile_name = os.path.basename(history_path).replace("_history.json", "")
+        choice = args.strip().lower()
+        if choice == "mode":
+            current_mode = get_setting("interaction_mode", "rp")
+            new_mode = "casual" if current_mode == "rp" else "rp"
+            update_setting("interaction_mode", new_mode)
+            _log(f"[SYSTEM] Interaction mode set to {new_mode.upper()}.", Fore.GREEN)
+            return
+
+        toggle_map = {
+            "tts": (
+                "tts_enabled", 
+                "[SYSTEM] Text-to-Speech enabled.", 
+                "[SYSTEM] Text-to-Speech disabled.", 
+                False
+            ),
+            "tts_tag": (
+                "show_tts_engine", 
+                "[SYSTEM] TTS engine tag enabled.", 
+                "[SYSTEM] TTS engine tag disabled.", 
+                True
+            ),
+            "speak": (
+                "character_speak", 
+                "[SYSTEM] Character speaking enabled.", 
+                "[SYSTEM] Character speaking disabled.", 
+                True
+            ),
+            "narration": (
+                "speak_narration", 
+                "[SYSTEM] Narration enabled.", 
+                "[SYSTEM] Narration disabled.", 
+                False
+            ),
+            "command": (
+                "execute_command", 
+                "[SYSTEM] Command execution enabled.", 
+                "[SYSTEM] Command execution disabled.", 
+                False
+            ),
+            "clear": (
+                "clear_on_start", 
+                "[SYSTEM] Console will now clear at startup.", 
+                "[SYSTEM] Console will no longer clear at startup.", 
+                True
+            ),
+            "recap": (
+                "auto_recap_on_start", 
+                "[SYSTEM] Auto recap at startup is now enabled.", 
+                "[SYSTEM] Auto recap at startup is now disabled.", 
+                True
+            ),
+            "errors": (
+                "suppress_errors", 
+                "[SYSTEM] Non-critical error messages suppressed.", 
+                "[SYSTEM] Error messages will now be shown.", 
+                False
+            ),
+            "privacy": (
+                "privacy_mode", 
+                "[SYSTEM] Privacy mode enabled.", 
+                "[SYSTEM] Privacy mode disabled.", 
+                False
+            ),
+            "debug": (
+                "debug_mode", 
+                "[SYSTEM] Debug mode enabled.", 
+                "[SYSTEM] Debug mode disabled.", 
+                False
+            ),
+        }
+
+        if choice in toggle_map:
+            key, enabled_msg, disabled_msg, default_val = toggle_map[choice]
+            current = get_setting(key, default_val)
+            new_val = not current
+            update_setting(key, new_val)
+            
+            # Special color mapping for errors: enabling suppression is RED, disabling is GREEN
+            if choice == "errors":
+                color = Fore.RED if new_val else Fore.GREEN
+            else:
+                color = Fore.GREEN if new_val else Fore.RED
+                
+            _log(enabled_msg if new_val else disabled_msg, color)
+        else:
+            _log(f"[ERROR] Unknown setting to toggle: '{choice}'. Use //toggle to list options.", Fore.RED)
+
+    def _reset(args=None):
+        """Resets chat history or relationship score. Usage: //reset [all|rel] [profile]"""
+        subcommand = ""
+        target_profile = ""
+        
+        if args and isinstance(args, str) and args.strip():
+            parts = args.strip().split()
+            if parts:
+                subcommand = parts[0].lower()
+                if len(parts) > 1:
+                    target_profile = parts[1]
+
+        # Case 1: //reset rel -> reset relationship score
+        if subcommand == "rel":
+            if target_profile:
+                profile_path = os.path.join("profiles", target_profile if target_profile.endswith(".json") else f"{target_profile}.json")
+            else:
+                if suppress_output:
+                    current_profile_setting = get_setting("current_character_profile")
+                    if current_profile_setting:
+                        profile_path = os.path.join("profiles", current_profile_setting)
+                    else:
+                        _log("[SYSTEM] No active character profile to reset relationship.", Fore.RED)
+                        return
+                else:
+                    profile_path = pick_profile()
+            
+            if profile_path and os.path.exists(profile_path):
+                from engines.utilities import save_json_atomic
+                try:
+                    with open(profile_path, "r", encoding="UTF-8") as f:
+                        profile_data = json.load(f)
+                    profile_data["relationship_score"] = 0
+                    if save_json_atomic(profile_path, profile_data):
+                        _log("[SYSTEM] Relationship score reset to 0.", Fore.GREEN)
+                    else:
+                        _log("[SYSTEM] Failed to save profile.", Fore.RED)
+                except Exception as e:
+                    _log(f"[ERROR] Failed to reset relationship score: {e}", Fore.RED)
+            else:
+                _log("[SYSTEM] No profile selected.", Fore.RED)
+            return
+
+        # Case 2: //reset all -> clear all history files
+        if subcommand == "all":
+            if suppress_output:
+                for filename in os.listdir(HISTORY_PATH):
+                    if filename.endswith(".json"):
+                        profile_name = filename.replace("_history.json", "")
+                        memory_manager.save_history(profile_name, [])
+                _log("[SYSTEM] All history files have been wiped.", Fore.GREEN)
+                return
+
+            confirm = input(Fore.RED + "Are you sure you want to reset ALL history files? (y/n): ").strip().lower()
+            if confirm == 'y':
+                for filename in os.listdir(HISTORY_PATH):
+                    if filename.endswith(".json"):
+                        profile_name = filename.replace("_history.json", "")
+                        memory_manager.save_history(profile_name, [])
+                _log("[SYSTEM] All history files have been wiped.", Fore.GREEN)
+            else:
+                _log("[SYSTEM] Reset cancelled.", Fore.YELLOW)
+            return
+
+        # Case 3: //reset [profile_name] -> clear history of specific or active profile
+        if subcommand:
+            profile_name = subcommand.replace("_history.json", "").replace(".json", "")
+        else:
+            current_profile_setting = get_setting("current_character_profile")
+            if current_profile_setting:
+                profile_name = os.path.basename(current_profile_setting).replace(".json", "")
+            else:
+                if suppress_output:
+                    _log("[SYSTEM] Manual history picking is only supported in CLI mode. Use //reset_all to clear active profile.", Fore.RED)
+                    return
+                else:
+                    history_path = pick_history()
+                    if history_path:
+                        profile_name = os.path.basename(history_path).replace("_history.json", "")
+                    else:
+                        _log("[SYSTEM] No history selected.", Fore.RED)
+                        return
+
+        if profile_name:
+            if not subcommand and not suppress_output:
+                _log("[SYSTEM] Conversation history reset.", Fore.YELLOW)
             memory_manager.save_history(profile_name, [])
             _log("[SYSTEM] History cleared.", Fore.GREEN)
-        else:
-            _log("[SYSTEM] No history selected.", Fore.RED)
-
-    def _reset_all():
-        """Wipes ALL history files in the history directory."""
-        if suppress_output:
-            # In TUI, we don't want interactive prompts here. 
-            # We'll just assume they want to clear everything or we could make a specific TUI command.
-            from engines.memory_v2 import memory_manager
-            for filename in os.listdir(HISTORY_PATH):
-                if filename.endswith(".json"):
-                    profile_name = filename.replace("_history.json", "")
-                    memory_manager.save_history(profile_name, [])
-            _log("[SYSTEM] All history files have been wiped.", Fore.GREEN)
-            return
-
-        confirm = input(Fore.RED + "Are you sure you want to reset ALL history files? (y/n): ").strip().lower()
-        if confirm == 'y':
-            from engines.memory_v2 import memory_manager
-            for filename in os.listdir(HISTORY_PATH):
-                if filename.endswith(".json"):
-                    profile_name = filename.replace("_history.json", "")
-                    memory_manager.save_history(profile_name, [])
-            _log("[SYSTEM] All history files have been wiped.", Fore.GREEN)
-        else:
-            _log("[SYSTEM] Reset cancelled.", Fore.YELLOW)
-
-    def _reset_rel():
-        """Resets the relationship score of a chosen profile to zero (CLI only)."""
-        if suppress_output:
-             _log("[SYSTEM] Manual relationship reset is only supported in CLI mode.", Fore.RED)
-             return
-
-        from engines.utilities import pick_profile, save_json_atomic
-        profile_path = pick_profile()
-        if profile_path:
-            with open(profile_path, "r", encoding="UTF-8") as f:
-                profile_data = json.load(f)
-            
-            profile_data["relationship_score"] = 0
-            if save_json_atomic(profile_path, profile_data):
-                _log("[SYSTEM] Relationship score reset to 0.", Fore.GREEN)
-            else:
-                _log("[SYSTEM] Failed to save profile.", Fore.RED)
-        else:
-            _log("[SYSTEM] No profile selected.", Fore.RED)
 
     def _restart():
         """Signals the main loop to restart the application."""
@@ -234,20 +345,6 @@ def app_commands(ops: str, suppress_output: bool = False):
             raise RestartRequested()
         else:
             _log("[SYSTEM] No user profile selected.", Fore.RED)
-
-    def _toggle_clear_on_start():
-        """Toggles whether the console clears on application start."""
-        is_enabled = get_setting("clear_on_start", True)
-        _log("[SYSTEM] Console will now clear at startup." if not is_enabled else "[SYSTEM] Console will no longer clear at startup.",
-             Fore.GREEN if not is_enabled else Fore.RED)
-        update_setting("clear_on_start", not is_enabled)
-
-    def _toggle_errors():
-        """Toggles the suppression of non-critical error messages."""
-        is_enabled = get_setting("suppress_errors", False)
-        _log("[SYSTEM] Error messages will now be shown." if is_enabled else "[SYSTEM] Non-critical error messages suppressed.",
-             Fore.GREEN if is_enabled else Fore.RED)
-        update_setting("suppress_errors", not is_enabled)
 
     def _history(args=None):
         """Displays the recent conversation history (CLI only)."""
@@ -294,13 +391,6 @@ def app_commands(ops: str, suppress_output: bool = False):
             _log("=========================", Fore.WHITE)
         else:
             _log("[SYSTEM] No history found for the current profile.", Fore.YELLOW)
-
-    def _toggle_recap_on_start():
-        """Toggles whether a history recap is shown at startup."""
-        is_enabled = get_setting("auto_recap_on_start", True)
-        _log("[SYSTEM] Auto recap at startup is now enabled." if not is_enabled else "[SYSTEM] Auto recap at startup is now disabled.",
-             Fore.GREEN if not is_enabled else Fore.RED)
-        update_setting("auto_recap_on_start", not is_enabled)
 
     def _clear_cache():
         """Clears the local TTS audio cache."""
@@ -374,13 +464,6 @@ def app_commands(ops: str, suppress_output: bool = False):
 
         original_count, kept_count = memory_manager.rewind_history(profile_name, message_number)
         _log(f"[SYSTEM] Rewound conversation from {original_count} to {kept_count} messages.", Fore.GREEN)
-
-    def _toggle_mode():
-        """Toggles between Roleplay (RP) and Casual interaction modes."""
-        current_mode = get_setting("interaction_mode", "rp")
-        new_mode = "casual" if current_mode == "rp" else "rp"
-        update_setting("interaction_mode", new_mode)
-        _log(f"[SYSTEM] Interaction mode set to {new_mode.upper()}.", Fore.GREEN)
 
     def _import_card(args):
         """Imports a character card (PNG or JSON) from SillyTavern format."""
@@ -462,7 +545,7 @@ def app_commands(ops: str, suppress_output: bool = False):
 
     # Mapping of command strings to their respective functions
     cmds = {
-        "//mode": _toggle_mode,
+        "//mode": lambda: _toggle("mode"),
         "//exit": _exit,
         "//quit": _exit,
         "//help": _help,
@@ -472,17 +555,18 @@ def app_commands(ops: str, suppress_output: bool = False):
         "//change_character": _change_character,
         "//change_user_profile": _change_user_profile,
         "//reset": _reset,
-        "//reset_all": _reset_all,
-        "//reset_rel": _reset_rel,
+        "//reset_all": lambda: _reset("all"),
+        "//reset_rel": lambda: _reset("rel"),
         "//restart": _restart,
-        '//toggle_tts_tag': _toggle_tts_tag,
-        "//toggle_tts": _toggle_tts,
-        "//toggle_speak": _toggle_speak,
-        "//toggle_narration": _toggle_narration,
-        "//toggle_command": _toggle_command,
-        "//toggle_clear_on_start": _toggle_clear_on_start,
-        "//toggle_recap_on_start": _toggle_recap_on_start,
-        "//toggle_errors": _toggle_errors,
+        "//toggle_tts_tag": lambda: _toggle("tts_tag"),
+        "//toggle_tts": lambda: _toggle("tts"),
+        "//toggle_speak": lambda: _toggle("speak"),
+        "//toggle_narration": lambda: _toggle("narration"),
+        "//toggle_command": lambda: _toggle("command"),
+        "//toggle_clear_on_start": lambda: _toggle("clear"),
+        "//toggle_recap_on_start": lambda: _toggle("recap"),
+        "//toggle_errors": lambda: _toggle("errors"),
+        "//toggle": _toggle,
         "//show_settings": _show_settings,
         "//history": _history,
         "//recap": _history,
