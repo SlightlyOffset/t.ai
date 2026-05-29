@@ -114,7 +114,7 @@ class TestMenu(unittest.TestCase):
     @patch('ui.menu.TaiMenu.set_timer')
     @patch('ui.menu.TaiMenu.query_one')
     def test_add_message_system_tip_timers(self, mock_query_one, mock_set_timer):
-        """Test that system and tip messages mount and trigger set_timer for removal."""
+        """Test that system, tip, and command messages mount and trigger set_timer with proper intervals."""
         class DummyMenu(TaiMenu):
             def __init__(self):
                 pass
@@ -125,19 +125,28 @@ class TestMenu(unittest.TestCase):
         mock_container = MagicMock()
         mock_query_one.return_value = mock_container
         
-        # Test system message
+        # Test system message -> 5.0s
         app.add_message("System Message", role="system")
         self.assertTrue(mock_container.mount.called)
-        self.assertTrue(mock_set_timer.called)
+        mock_set_timer.assert_called_with(5.0, unittest.mock.ANY)
         
         # Reset mocks
         mock_container.mount.reset_mock()
         mock_set_timer.reset_mock()
         
-        # Test tip message
+        # Test tip message -> 5.0s
         app.add_message("Tip Message", role="tip_message")
         self.assertTrue(mock_container.mount.called)
-        self.assertTrue(mock_set_timer.called)
+        mock_set_timer.assert_called_with(5.0, unittest.mock.ANY)
+
+        # Reset mocks
+        mock_container.mount.reset_mock()
+        mock_set_timer.reset_mock()
+
+        # Test command message -> 10.0s
+        app.add_message("Command Output", role="command")
+        self.assertTrue(mock_container.mount.called)
+        mock_set_timer.assert_called_with(10.0, unittest.mock.ANY)
 
     @patch('ui.menu.handle_command_input')
     @patch('ui.menu.memory_manager')
