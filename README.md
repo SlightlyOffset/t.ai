@@ -155,8 +155,7 @@ Inside the chat, you can use operational commands or keyboard shortcuts:
 * `Ctrl+B`: Toggle sidebar visibility.
 * `//help`: Show all commands.
 * `//mode`: Toggle between RP and Casual modes.
-* `//change_character`: Swap to a different character profile.
-* `//change_user_profile`: Swap to a different user profile.
+* `//change <char|user>`: Swap to a different character or user profile.
 * `//import_card <path>`: Imports a SillyTavern character card.
 * `//restart`: Cleanly reboot the application.
 

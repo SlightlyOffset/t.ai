@@ -318,26 +318,32 @@ def app_commands(ops: str, suppress_output: bool = False):
         print("\033[H\033[J", end="")
         _log("[SYSTEM] Screen cleared.", Fore.YELLOW)
 
-    def _change_character():
-        """Changes the current character profile."""
-        _log("[SYSTEM] Changing character...", Fore.YELLOW)
-        raise RestartRequested()
-
-    def _change_user_profile():
-        """Changes the current user profile (CLI only)."""
-        if suppress_output:
-            _log("[SYSTEM] Profile switching is handled via the 'Profiles' button in TUI.", Fore.YELLOW)
+    def _change(args=None):
+        """Changes character or user profile. Usage: //change [char|user]"""
+        if not args or not args.strip():
+            _log("[SYSTEM] Usage: //change [char|user]", Fore.YELLOW)
             return
 
-        _log("[SYSTEM] Changing user profile.", Fore.YELLOW)
-        new_profile_path = pick_user_profile()
-        if new_profile_path:
-            new_profile_name = os.path.basename(new_profile_path)
-            update_setting("current_user_profile", new_profile_name)
-            _log(f"[SYSTEM] User profile changed to {new_profile_name}. Restarting...", Fore.GREEN)
+        choice = args.strip().lower()
+        if choice in ("char", "character"):
+            _log("[SYSTEM] Changing character...", Fore.YELLOW)
             raise RestartRequested()
+        elif choice in ("user", "profile"):
+            if suppress_output:
+                _log("[SYSTEM] Profile switching is handled via the 'Profiles' button in TUI.", Fore.YELLOW)
+                return
+
+            _log("[SYSTEM] Changing user profile.", Fore.YELLOW)
+            new_profile_path = pick_user_profile()
+            if new_profile_path:
+                new_profile_name = os.path.basename(new_profile_path)
+                update_setting("current_user_profile", new_profile_name)
+                _log(f"[SYSTEM] User profile changed to {new_profile_name}. Restarting...", Fore.GREEN)
+                raise RestartRequested()
+            else:
+                _log("[SYSTEM] No user profile selected.", Fore.RED)
         else:
-            _log("[SYSTEM] No user profile selected.", Fore.RED)
+            _log(f"[ERROR] Unknown target to change: '{choice}'. Use //change [char|user]", Fore.RED)
 
     def _history(args=None):
         """Displays the recent conversation history (CLI only)."""
@@ -545,8 +551,7 @@ def app_commands(ops: str, suppress_output: bool = False):
         "//clear": _clear,
         "//import_card": _import_card,
         "//lore": _lore,
-        "//change_character": _change_character,
-        "//change_user_profile": _change_user_profile,
+        "//change": _change,
         "//reset": _reset,
         "//restart": _restart,
         "//toggle": _toggle,
