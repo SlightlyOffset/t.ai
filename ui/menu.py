@@ -848,7 +848,7 @@ class TaiMenu(App):
 
         # Print character's starter messages and save to memory (if any, which should always be any)
         # Only do this if the history doesn't exist yet, to avoid repeating starter messages on every launch
-        has_history = memory_manager.has_history(self.history_profile_name)
+        has_history = memory_manager.has_history(self.history_profile_name) and memory_manager.get_history_length(self.history_profile_name) > 0
         if not has_history:
             self.print_starter_message()
 
@@ -1005,6 +1005,42 @@ class TaiMenu(App):
                 if command_action["messages"]:
                     combined_msg = "\n".join(command_action["messages"])
                     self.add_message(combined_msg, role="command")
+                
+                # Check for history or relationship reset commands to reload/repopulate
+                parts = message.split()
+                is_reset = len(parts) >= 1 and parts[0] == "//reset"
+                if is_reset:
+                    # Reload character profile from disk to update relationship stats
+                    if self.char_path and os.path.exists(self.char_path):
+                        try:
+                            import json
+                            with open(self.char_path, "r", encoding="utf-8") as f:
+                                self.character_profile = json.load(f)
+                        except Exception:
+                            pass
+                    
+                    is_reset_rel = len(parts) >= 2 and parts[1] == "rel"
+                    if not is_reset_rel:
+                        # History reset occurred. Check if it targets the active profile
+                        target_profile = parts[1] if len(parts) >= 2 else ""
+                        is_active_profile = False
+                        if not target_profile or target_profile == "all":
+                            is_active_profile = True
+                        else:
+                            clean_target = target_profile.replace("_history.json", "").replace(".json", "")
+                            clean_active = self.history_profile_name.replace("_history.json", "").replace(".json", "")
+                            if clean_target.lower() == clean_active.lower():
+                                is_active_profile = True
+                        
+                        if is_active_profile:
+                            # Clear chat list widgets on screen
+                            chat_list = self.query_one("#chat_list")
+                            for child in list(chat_list.children):
+                                child.remove()
+                            
+                            # Re-print starter message (which also saves it to history)
+                            self.print_starter_message()
+
                 self.update_sidebar()
                 return
 

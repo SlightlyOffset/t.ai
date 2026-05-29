@@ -213,5 +213,50 @@ class TestMenu(unittest.TestCase):
         app.add_message.assert_called_once_with("Hello world", role="user", message_number=1, raw_text="Hello world")
         mock_stream.assert_called_once_with("Hello world", message_number=2)
 
+    @patch('ui.menu.handle_command_input')
+    @patch('ui.menu.memory_manager')
+    @patch('ui.menu.get_user_message_number')
+    @patch('ui.menu.TaiMenu.stream_response')
+    @patch('ui.menu.TaiMenu.query_one')
+    def test_on_chat_input_submitted_reset_command(self, mock_query_one, mock_stream, mock_get_msg_num, mock_mem, mock_handle_command):
+        """Test that chat input submitted with '//reset' clears the UI and calls print_starter_message."""
+        import asyncio
+        class DummyMenu(TaiMenu):
+            def __init__(self):
+                self.history_profile_name = "test_profile"
+                self.char_path = "profiles/test.json"
+                self.user_path = "user_profiles/test.json"
+                self.character_profile = {}
+                self.user_profile = {}
+                self.ch_name = "TestChar"
+                self.user_name = "TestUser"
+                self.char_name_lbl_color = "red"
+                self.user_name_lbl_color = "blue"
+
+        app = DummyMenu()
+        app.add_message = MagicMock()
+        app.update_sidebar = MagicMock()
+        app.print_starter_message = MagicMock()
+        
+        mock_container = MagicMock()
+        mock_child = MagicMock()
+        mock_container.children = [mock_child]
+        mock_query_one.return_value = mock_container
+
+        # Mock Event
+        class MockEvent:
+            def __init__(self, value):
+                self.value = value
+
+        mock_handle_command.return_value = {"type": "command_success", "messages": ["Wiped history"]}
+        
+        # Test active profile reset
+        asyncio.run(app.on_chat_input_submitted(MockEvent("//reset")))
+        
+        # Verify it cleared chat container children, and reprinted starter message
+        self.assertTrue(mock_child.remove.called)
+        self.assertTrue(app.print_starter_message.called)
+        self.assertTrue(app.update_sidebar.called)
+
 if __name__ == "__main__":
     unittest.main()
