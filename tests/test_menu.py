@@ -197,6 +197,16 @@ class TestMenu(unittest.TestCase):
 
         app.add_message.reset_mock()
 
+        # 2b. Test command slash normalization with single slash '/'
+        asyncio.run(app.on_chat_input_submitted(MockEvent("/toggle clear")))
+        mock_handle_command.assert_called_with("//toggle clear", "test_profile")
+        app.add_message.reset_mock()
+
+        # 2c. Test command slash normalization with multiple slashes '///'
+        asyncio.run(app.on_chat_input_submitted(MockEvent("///toggle clear")))
+        mock_handle_command.assert_called_with("//toggle clear", "test_profile")
+        app.add_message.reset_mock()
+
         # 3. Regular chat message
         mock_get_msg_num.return_value = 1
         asyncio.run(app.on_chat_input_submitted(MockEvent("Hello world")))

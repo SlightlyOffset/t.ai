@@ -9,6 +9,7 @@ import random
 import threading
 import time
 import sys
+import re
 
 # Third-party imports
 import ollama
@@ -504,7 +505,7 @@ class TaiMenu(App):
         if self.user_profile:
             user_speech_color = self.user_profile.get("colors", {}).get("speech_highlight", "yellow")
         assistant_speech_color = character_profile.get("colors", {}).get("speech_highlight", "yellow")
-        
+
         formatter = TextFormatter(
             user_name=user_name,
             character_name=character_name,
@@ -693,7 +694,7 @@ class TaiMenu(App):
         # Check if we have an existing persistent summary
         memory_core = memory_manager.get_memory_core(self.history_profile_name)
         last_index = memory_manager.get_last_summarized_index(self.history_profile_name)
-        
+
         # Defensive check against mocks in unit tests
         if not isinstance(memory_core, str):
             memory_core = ""
@@ -724,7 +725,7 @@ class TaiMenu(App):
                 self.add_message("--- Recap: Memory Core (Loaded instantly) ---", role="system")
                 self.add_message(self.format_summary(memory_core), role="summary")
                 self.add_message("--- Recent Continuity ---", role="system")
-                
+
                 recent_history = messages_history[last_index:]
                 for offset, msg_data in enumerate(recent_history):
                     role = msg_data.get("role", "assistant")
@@ -733,7 +734,7 @@ class TaiMenu(App):
                         content = self.format_rp(content, role=role)
                     message_number = last_index + 1 + offset if role in ("user", "assistant") else None
                     self.add_message(content, role=role, msg_data=msg_data, message_number=message_number)
-                
+
                 self.add_message("--- Recap complete ---", role="system")
                 return
 
@@ -981,6 +982,11 @@ class TaiMenu(App):
         """Handles user input submission from ChatInput."""
         message = event.value.strip()
         if not message: return
+
+        import re
+        pattern = re.match(r'^/+', message.lower())
+        if pattern:
+            message = "//" + message[pattern.end():]
 
         # Handle commands (original message)
         if message.startswith("//"):
