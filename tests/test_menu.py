@@ -134,10 +134,10 @@ class TestMenu(unittest.TestCase):
         mock_container.mount.reset_mock()
         mock_set_timer.reset_mock()
         
-        # Test tip message -> 5.0s
+        # Test tip message -> 10.0s
         app.add_message("Tip Message", role="tip_message")
         self.assertTrue(mock_container.mount.called)
-        mock_set_timer.assert_called_with(5.0, unittest.mock.ANY)
+        mock_set_timer.assert_called_with(10.0, unittest.mock.ANY)
 
         # Reset mocks
         mock_container.mount.reset_mock()
@@ -147,6 +147,24 @@ class TestMenu(unittest.TestCase):
         app.add_message("Command Output", role="command")
         self.assertTrue(mock_container.mount.called)
         mock_set_timer.assert_called_with(10.0, unittest.mock.ANY)
+
+        # Reset mocks
+        mock_container.mount.reset_mock()
+        mock_set_timer.reset_mock()
+
+        # Test help command output -> no timer scheduled
+        app.add_message("[AVAILABLE COMMANDS]\n  //help", role="command")
+        self.assertTrue(mock_container.mount.called)
+        self.assertFalse(mock_set_timer.called)
+
+        # Reset mocks
+        mock_container.mount.reset_mock()
+        mock_set_timer.reset_mock()
+
+        # Test error command output -> no timer scheduled
+        app.add_message("[ERROR] Something failed", role="command")
+        self.assertTrue(mock_container.mount.called)
+        self.assertFalse(mock_set_timer.called)
 
     @patch('ui.menu.handle_command_input')
     @patch('ui.menu.memory_manager')

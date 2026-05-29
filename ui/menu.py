@@ -924,12 +924,14 @@ class TaiMenu(App):
         elif role == "command":
             widget = Static(text, markup=True, classes="command_msg")
             container.mount(widget)
-            def safe_remove_cmd():
-                try:
-                    widget.remove()
-                except Exception:
-                    pass
-            self.set_timer(10.0, safe_remove_cmd)
+            # Only pop out status messages; keep reference outputs like help menu and errors visible
+            if "[AVAILABLE COMMANDS]" not in text and "[ERROR]" not in text:
+                def safe_remove_cmd():
+                    try:
+                        widget.remove()
+                    except Exception:
+                        pass
+                self.set_timer(10.0, safe_remove_cmd)
         elif role == "summary":
             container.mount(Static(text, markup=True, classes="summary_msg"))
         elif role == "tip_message":
@@ -940,7 +942,7 @@ class TaiMenu(App):
                     widget.remove()
                 except Exception:
                     pass
-            self.set_timer(5.0, safe_remove_tip)
+            self.set_timer(10.0, safe_remove_tip)
         else:
             row_class = "user_row" if role == "user" else "ai_row"
             bubble_class = "user_bubble" if role == "user" else "ai_bubble"
