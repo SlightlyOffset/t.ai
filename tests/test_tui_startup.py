@@ -212,5 +212,25 @@ class TestTUIStartup(unittest.TestCase):
         with self.assertRaises(SystemExit):
             check_ollama_and_models()
 
+    @patch('ollama.list')
+    def test_check_ollama_and_models_force_argv(self, mock_ollama_list):
+        """Test check_ollama_and_models skips check when --force flag is passed in sys.argv."""
+        from main import check_ollama_and_models
+        with patch('sys.argv', ['main.py', '--force']):
+            check_ollama_and_models()
+        self.assertFalse(mock_ollama_list.called)
+
+    @patch('engines.config.get_setting')
+    @patch('ollama.list')
+    def test_check_ollama_and_models_force_setting(self, mock_ollama_list, mock_get_setting):
+        """Test check_ollama_and_models skips check when force_launch setting is enabled."""
+        from main import check_ollama_and_models
+        mock_get_setting.side_effect = lambda key, default=None: {
+            "force_launch": True
+        }.get(key, default)
+        
+        check_ollama_and_models()
+        self.assertFalse(mock_ollama_list.called)
+
 if __name__ == '__main__':
     unittest.main()

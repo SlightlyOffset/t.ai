@@ -64,6 +64,10 @@ def check_dependencies():
 
 def check_ollama_and_models():
     """If using local Ollama, verify it is running and the default model is pulled."""
+    if "--force" in sys.argv or "-f" in sys.argv:
+        print("[WARNING] Force launch requested. Skipping Ollama and model validations...")
+        return
+
     project_root = os.path.abspath(os.path.dirname(__file__))
     if project_root not in sys.path:
         sys.path.insert(0, project_root)
@@ -73,6 +77,10 @@ def check_ollama_and_models():
     except ImportError as e:
         print(f"[CRITICAL] Failed to load config engine: {e}")
         sys.exit(1)
+
+    if get_setting("force_launch", False):
+        print("[WARNING] force_launch is enabled in settings. Skipping Ollama and model validations...")
+        return
 
     remote_llm = get_setting("remote_llm_url")
     if remote_llm:
