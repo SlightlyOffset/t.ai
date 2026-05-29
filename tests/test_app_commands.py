@@ -173,6 +173,42 @@ class TestAppCommands(unittest.TestCase):
         output = strip_ansi(mock_stdout.getvalue())
         self.assertIn("[SYSTEM] Error messages will now be shown.", output)
 
+    @patch('sys.stdout', new_callable=StringIO)
+    @patch('engines.app_commands.update_setting')
+    def test_mode_display_when_no_args(self, mock_update, mock_stdout):
+        self.mock_get_setting.return_value = "rp"
+        result = app_commands("//mode")
+        self.assertTrue(result)
+        self.assertIn("[SYSTEM] Interaction mode is RP.", strip_ansi(mock_stdout.getvalue()))
+        mock_update.assert_not_called()
+
+    @patch('sys.stdout', new_callable=StringIO)
+    @patch('engines.app_commands.update_setting')
+    def test_mode_changes_to_rp(self, mock_update, mock_stdout):
+        self.mock_get_setting.return_value = "casual"
+        result = app_commands("//mode rp")
+        self.assertTrue(result)
+        self.assertIn("[SYSTEM] Interaction mode set to RP.", strip_ansi(mock_stdout.getvalue()))
+        mock_update.assert_called_with("interaction_mode", "rp")
+
+    @patch('sys.stdout', new_callable=StringIO)
+    @patch('engines.app_commands.update_setting')
+    def test_mode_changes_to_casual(self, mock_update, mock_stdout):
+        self.mock_get_setting.return_value = "rp"
+        result = app_commands("//mode casual")
+        self.assertTrue(result)
+        self.assertIn("[SYSTEM] Interaction mode set to CASUAL.", strip_ansi(mock_stdout.getvalue()))
+        mock_update.assert_called_with("interaction_mode", "casual")
+
+    @patch('sys.stdout', new_callable=StringIO)
+    @patch('engines.app_commands.update_setting')
+    def test_mode_changes_to_casual_misspelled(self, mock_update, mock_stdout):
+        self.mock_get_setting.return_value = "rp"
+        result = app_commands("//mode cassual")
+        self.assertTrue(result)
+        self.assertIn("[SYSTEM] Interaction mode set to CASUAL.", strip_ansi(mock_stdout.getvalue()))
+        mock_update.assert_called_with("interaction_mode", "casual")
+
 
 if __name__ == "__main__":
     unittest.main()

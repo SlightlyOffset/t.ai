@@ -71,5 +71,28 @@ class TestMenu(unittest.TestCase):
         mock_get_last.return_value = None
         self.assertEqual(app._resolve_regeneration_text("Previous"), "Previous")
 
+    @patch('ui.menu.update_setting')
+    def test_on_switch_changed_rp_mode(self, mock_update_setting):
+        """Test on_switch_changed updates interaction_mode when sw_rp_mode changes."""
+        app = MagicMock(spec=TaiMenu)
+        app.on_switch_changed = lambda event: TaiMenu.on_switch_changed(app, event)
+        app.add_message = MagicMock()
+
+        # Switch ON (RP Mode)
+        event_on = MagicMock()
+        event_on.switch.id = "sw_rp_mode"
+        event_on.value = True
+        app.on_switch_changed(event_on)
+        mock_update_setting.assert_any_call("interaction_mode", "rp")
+        app.add_message.assert_any_call("Interaction Mode: [bold]RP[/bold]", role="system")
+
+        # Switch OFF (Casual Mode)
+        event_off = MagicMock()
+        event_off.switch.id = "sw_rp_mode"
+        event_off.value = False
+        app.on_switch_changed(event_off)
+        mock_update_setting.assert_any_call("interaction_mode", "casual")
+        app.add_message.assert_any_call("Interaction Mode: [bold]CASUAL[/bold]", role="system")
+
 if __name__ == "__main__":
     unittest.main()

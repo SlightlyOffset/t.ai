@@ -334,6 +334,7 @@ class TaiMenu(App):
             self.query_one("#sw_dialogue", Switch).value = result.get("character_speak", True)
             self.query_one("#sw_narration", Switch).value = result.get("speak_narration", True)
             self.query_one("#sw_privacy", Switch).value = result.get("privacy_mode", False)
+            self.query_one("#sw_rp_mode", Switch).value = result.get("interaction_mode", "rp") == "rp"
 
             self.query_one("#model_select", Select).value = result.get("default_llm_model")
             self.query_one("#tts_engine_select", Select).value = result.get("default_tts_engine")
@@ -406,6 +407,10 @@ class TaiMenu(App):
                 with Horizontal(classes="setting_row"):
                     yield Label("Privacy Mode:", classes="setting_label")
                     yield Switch(value=get_setting("privacy_mode", False), id="sw_privacy")
+
+                with Horizontal(classes="setting_row"):
+                    yield Label("RP Mode:", classes="setting_label")
+                    yield Switch(value=get_setting("interaction_mode", "rp") == "rp", id="sw_rp_mode")
 
                 yield Label("Image Protocol:", classes="sidebar_label")
                 yield Select([], id="image_protocol_select", prompt="Select Image Protocol")
@@ -562,6 +567,10 @@ class TaiMenu(App):
         elif event.switch.id == "sw_privacy":
             update_setting("privacy_mode", event.value)
             self.add_message(f"Privacy Mode: {'[bold green]ON[/bold green]' if event.value else '[bold red]OFF[/bold red]'}", role="system")
+        elif event.switch.id == "sw_rp_mode":
+            new_mode = "rp" if event.value else "casual"
+            update_setting("interaction_mode", new_mode)
+            self.add_message(f"Interaction Mode: [bold]{new_mode.upper()}[/bold]", role="system")
 
     def on_select_changed(self, event: Select.Changed) -> None:
         """Update the character profile with selected LLM, Character Voice, or Narration Voice."""

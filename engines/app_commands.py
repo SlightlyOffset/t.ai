@@ -464,6 +464,23 @@ def app_commands(ops: str, suppress_output: bool = False):
         original_count, kept_count = memory_manager.rewind_history(profile_name, message_number)
         _log(f"[SYSTEM] Rewound conversation from {original_count} to {kept_count} messages.", Fore.GREEN)
 
+    def _mode(args=None):
+        """Displays or changes the interaction mode. Usage: //mode [rp|casual]"""
+        current_mode = get_setting("interaction_mode", "rp")
+        if not args or not args.strip():
+            _log(f"[SYSTEM] Interaction mode is {current_mode.upper()}.", Fore.GREEN)
+            return
+
+        choice = args.strip().lower()
+        if choice == "rp":
+            update_setting("interaction_mode", "rp")
+            _log("[SYSTEM] Interaction mode set to RP.", Fore.GREEN)
+        elif choice in ("casual", "cassual"):
+            update_setting("interaction_mode", "casual")
+            _log("[SYSTEM] Interaction mode set to CASUAL.", Fore.GREEN)
+        else:
+            _log("[ERROR] Invalid mode. Usage: //mode [rp|casual]", Fore.RED)
+
     def _import_card(args):
         """Imports a character card (PNG or JSON) from SillyTavern format."""
         if not args:
@@ -544,7 +561,7 @@ def app_commands(ops: str, suppress_output: bool = False):
 
     # Mapping of command strings to their respective functions
     cmds = {
-        "//mode": lambda: _toggle("mode"),
+        "//mode": _mode,
         "//exit": _exit,
         "//quit": _exit,
         "//help": _help,
