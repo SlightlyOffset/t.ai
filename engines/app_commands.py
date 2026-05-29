@@ -91,9 +91,6 @@ def app_commands(ops: str, suppress_output: bool = False):
             if not desc:
                 if cmd == "//mode":
                     desc = "Shortcut to toggle interaction mode (RP / Casual)."
-                elif cmd.startswith("//toggle_"):
-                    setting_name = cmd.replace("//toggle_", "")
-                    desc = f"Shortcut to toggle '{setting_name}' setting."
                 elif cmd == "//reset_all":
                     desc = "Shortcut to wipe all chat history files."
                 elif cmd == "//reset_rel":
@@ -558,14 +555,6 @@ def app_commands(ops: str, suppress_output: bool = False):
         "//reset_all": lambda: _reset("all"),
         "//reset_rel": lambda: _reset("rel"),
         "//restart": _restart,
-        "//toggle_tts_tag": lambda: _toggle("tts_tag"),
-        "//toggle_tts": lambda: _toggle("tts"),
-        "//toggle_speak": lambda: _toggle("speak"),
-        "//toggle_narration": lambda: _toggle("narration"),
-        "//toggle_command": lambda: _toggle("command"),
-        "//toggle_clear_on_start": lambda: _toggle("clear"),
-        "//toggle_recap_on_start": lambda: _toggle("recap"),
-        "//toggle_errors": lambda: _toggle("errors"),
         "//toggle": _toggle,
         "//show_settings": _show_settings,
         "//history": _history,
