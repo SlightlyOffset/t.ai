@@ -997,8 +997,9 @@ class TaiMenu(App):
                 return
 
             if command_action["type"] == "command_success":
-                for msg in command_action["messages"]:
-                    self.add_message(msg, role="command")
+                if command_action["messages"]:
+                    combined_msg = "\n".join(command_action["messages"])
+                    self.add_message(combined_msg, role="command")
                 self.update_sidebar()
                 return
 

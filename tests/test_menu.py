@@ -189,9 +189,9 @@ class TestMenu(unittest.TestCase):
         app.add_message.reset_mock()
 
         # 2. Command with command_success return
-        mock_handle_command.return_value = {"type": "command_success", "messages": ["Success message"]}
+        mock_handle_command.return_value = {"type": "command_success", "messages": ["Line 1", "Line 2"]}
         asyncio.run(app.on_chat_input_submitted(MockEvent("//toggle clear")))
-        app.add_message.assert_any_call("Success message", role="command")
+        app.add_message.assert_any_call("Line 1\nLine 2", role="command")
         for call in app.add_message.call_args_list:
             self.assertNotEqual(call[1].get("role"), "user")
 
