@@ -94,5 +94,22 @@ class TestMenu(unittest.TestCase):
         mock_update_setting.assert_any_call("interaction_mode", "casual")
         app.add_message.assert_any_call("Interaction mode set to [bold]CASUAL[/bold]", role="system")
 
+    @patch('ui.menu.get_setting')
+    def test_on_select_changed_interaction_mode_null_fallback(self, mock_get_setting):
+        """Test on_select_changed reverts interaction_mode_select when null is selected."""
+        app = MagicMock(spec=TaiMenu)
+        app.on_select_changed = lambda event: TaiMenu.on_select_changed(app, event)
+        
+        mock_get_setting.return_value = "casual"
+        
+        event_null = MagicMock()
+        event_null.select.id = "interaction_mode_select"
+        from textual.widgets import Select
+        event_null.value = Select.BLANK
+        
+        app.on_select_changed(event_null)
+        # Verify it reverted back to the previous mode
+        self.assertEqual(event_null.select.value, "casual")
+
 if __name__ == "__main__":
     unittest.main()

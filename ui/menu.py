@@ -581,35 +581,53 @@ class TaiMenu(App):
         # Handle cases where value might be Select.BLANK (NULL)
         val = event.value if event.value != Select.BLANK else None
 
-        if event.select.id == "model_select" and val is not None:
-            self.character_profile["llm_model"] = val
-            save_json_atomic(self.char_path, self.character_profile)
-            self.add_message(f"LLM model switched to [bold]{val}[/bold]", role="system")
-        elif event.select.id == "character_voice_select" and val is not None:
-            self.character_profile["preferred_edge_voice"] = val
-            save_json_atomic(self.char_path, self.character_profile)
-            self.add_message(f"Companion voice set to [bold]{val}[/bold]", role="system")
-        elif event.select.id == "narration_voice_select" and val is not None:
-            if update_setting("narration_tts_voice", val):
-                self.add_message(f"Narration voice set to [bold]{val}[/bold]", role="system")
+        if event.select.id == "model_select":
+            if val is not None:
+                self.character_profile["llm_model"] = val
+                save_json_atomic(self.char_path, self.character_profile)
+                self.add_message(f"LLM model switched to [bold]{val}[/bold]", role="system")
             else:
-                self.add_message(f"Failed to set narration voice to [bold]{val}[/bold]", role="system")
-        elif event.select.id == "tts_engine_select" and val is not None:
-            self.character_profile["tts_engine"] = val
-            save_json_atomic(self.char_path, self.character_profile)
-            self.add_message(f"TTS engine switched to [bold]{val}[/bold]", role="system")
-        elif event.select.id == "image_protocol_select" and val is not None:
-            valid_protocols = {value for _, value in self.IMAGE_PROTOCOLS}
-            if val in valid_protocols and update_setting("image_protocol", val):
-                self.remount_avatar_widgets()
-                self.add_message(f"Image protocol set to [bold]{val}[/bold]", role="system")
+                event.select.value = self.character_profile.get("llm_model") if self.character_profile else get_setting("default_llm_model", "llama3")
+        elif event.select.id == "character_voice_select":
+            if val is not None:
+                self.character_profile["preferred_edge_voice"] = val
+                save_json_atomic(self.char_path, self.character_profile)
+                self.add_message(f"Companion voice set to [bold]{val}[/bold]", role="system")
             else:
-                self.add_message(f"Failed to set image protocol to [bold]{val}[/bold]", role="system")
-        elif event.select.id == "interaction_mode_select" and val is not None:
-            if update_setting("interaction_mode", val):
-                self.add_message(f"Interaction mode set to [bold]{val.upper()}[/bold]", role="system")
+                event.select.value = self.character_profile.get("preferred_edge_voice") if self.character_profile else get_setting("narration_tts_voice", "en-US-AndrewNeural")
+        elif event.select.id == "narration_voice_select":
+            if val is not None:
+                if update_setting("narration_tts_voice", val):
+                    self.add_message(f"Narration voice set to [bold]{val}[/bold]", role="system")
+                else:
+                    self.add_message(f"Failed to set narration voice to [bold]{val}[/bold]", role="system")
             else:
-                self.add_message(f"Failed to set interaction mode to [bold]{val.upper()}[/bold]", role="system")
+                event.select.value = get_setting("narration_tts_voice", "en-US-AndrewNeural")
+        elif event.select.id == "tts_engine_select":
+            if val is not None:
+                self.character_profile["tts_engine"] = val
+                save_json_atomic(self.char_path, self.character_profile)
+                self.add_message(f"TTS engine switched to [bold]{val}[/bold]", role="system")
+            else:
+                event.select.value = self.character_profile.get("tts_engine") if self.character_profile else get_setting("default_tts_engine", "edge-tts")
+        elif event.select.id == "image_protocol_select":
+            if val is not None:
+                valid_protocols = {value for _, value in self.IMAGE_PROTOCOLS}
+                if val in valid_protocols and update_setting("image_protocol", val):
+                    self.remount_avatar_widgets()
+                    self.add_message(f"Image protocol set to [bold]{val}[/bold]", role="system")
+                else:
+                    self.add_message(f"Failed to set image protocol to [bold]{val}[/bold]", role="system")
+            else:
+                event.select.value = get_setting("image_protocol", "auto")
+        elif event.select.id == "interaction_mode_select":
+            if val is not None:
+                if update_setting("interaction_mode", val):
+                    self.add_message(f"Interaction mode set to [bold]{val.upper()}[/bold]", role="system")
+                else:
+                    self.add_message(f"Failed to set interaction mode to [bold]{val.upper()}[/bold]", role="system")
+            else:
+                event.select.value = get_setting("interaction_mode", "rp")
 
     def populate_image_protocols(self) -> None:
         """Populate image protocol selection and sync current setting."""
