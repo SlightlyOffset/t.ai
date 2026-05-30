@@ -1165,14 +1165,29 @@ class TaiMenu(App):
             elif event["type"] == "complete":
                 full_response = event["full_response"]
 
-        # Add pagination indicator if alternatives exist
-        full_history = memory_manager.load_history(self.history_profile_name)
-        if full_history and full_history[-1].get("role") == "assistant":
-            last_msg = full_history[-1]
-            alternatives = last_msg.get("alternatives", [])
-            if alternatives:
-                idx = last_msg.get("selected_index", 0)
-                indicator = f"\n\n[dim]< {idx + 1}/{len(alternatives)} >[/dim]"
+        # Add pagination indicator if alternatives exist and this is a regeneration event
+        if is_regeneration:
+            full_history = memory_manager.load_history(self.history_profile_name)
+            if full_history and full_history[-1].get("role") == "assistant":
+                last_msg = full_history[-1]
+                alternatives = last_msg.get("alternatives", [])
+                if alternatives:
+                    # Check if the post-processing thread has already appended this new response
+                    if alternatives[-1] == full_response.strip():
+                        total_alts = len(alternatives)
+                        idx = last_msg.get("selected_index", total_alts - 1)
+                    else:
+                        total_alts = len(alternatives) + 1
+                        idx = total_alts - 1
+                else:
+                    # Check if the content is already updated to the new response
+                    if last_msg.get("content", "").strip() == full_response.strip():
+                        total_alts = 1
+                        idx = 0
+                    else:
+                        total_alts = 2
+                        idx = 1
+                indicator = f"\n\n[dim]< {idx + 1}/{total_alts} >[/dim]"
                 self.app.call_from_thread(ai_msg.update, f"{header}\n{self.format_rp(full_response, role='assistant')}{indicator}")
 
         # Refresh score display

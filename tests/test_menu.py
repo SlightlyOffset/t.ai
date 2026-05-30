@@ -1,7 +1,7 @@
 import unittest
 import sys
 import os
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock, patch, mock_open
 
 # Add the project root to the Python path
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
@@ -275,6 +275,79 @@ class TestMenu(unittest.TestCase):
         self.assertTrue(mock_child.remove.called)
         self.assertTrue(app.print_starter_message.called)
         self.assertTrue(app.update_sidebar.called)
+
+    @patch('ui.menu.iterate_response_events')
+    @patch('ui.menu.memory_manager')
+    @patch('ui.menu.get_setting')
+    @patch('builtins.open', new_callable=mock_open, read_data='{"name": "Nova", "llm_model": "test"}')
+    def test_response_worker_pagination_logic(self, mock_file, mock_get_setting, mock_memory_manager, mock_iterate):
+        """Test that pagination indicator is only added if is_regeneration is True."""
+        class DummyMenu(TaiMenu):
+            def __init__(self):
+                self.history_profile_name = "test_profile"
+                self.user_profile = {"name": "TestUser"}
+                self.character_profile = {"name": "Nova", "llm_model": "test-model"}
+            
+            @property
+            def app(self):
+                mock_app = MagicMock()
+                mock_app.call_from_thread = lambda func, *args, **kwargs: func(*args, **kwargs)
+                return mock_app
+
+            def format_rp(self, text, role="user"):
+                return text
+
+        app = DummyMenu()
+        app.update_sidebar = MagicMock()
+        app.check_for_rolling_summary = MagicMock()
+
+        # Mock event stream: chunk, then complete
+        mock_iterate.return_value = [
+            {"type": "chunk", "full_response": "Hello!"},
+            {"type": "complete", "full_response": "Hello!"}
+        ]
+
+        # Mock history with alternatives
+        mock_history = [
+            {"role": "user", "content": "hi"},
+            {"role": "assistant", "content": "Hello!", "alternatives": ["Old content", "Hello!"], "selected_index": 1}
+        ]
+        mock_memory_manager.load_history.return_value = mock_history
+
+        # Mock widgets
+        container = MagicMock()
+        ai_msg = MagicMock()
+        header = " Nova:"
+
+        # Case 1: is_regeneration = False (should NOT update with pagination indicator)
+        TaiMenu.response_worker.__wrapped__(
+            app,
+            message="hi",
+            is_regeneration=False,
+            container=container,
+            ai_msg=ai_msg,
+            header=header
+        )
+        # Verify that ai_msg.update was called with the chunk but NEVER with "< 2/2 >" indicator
+        for call in ai_msg.update.call_args_list:
+            self.assertNotIn("<", call[0][0])
+            self.assertNotIn(">", call[0][0])
+
+        # Reset mock
+        ai_msg.reset_mock()
+
+        # Case 2: is_regeneration = True (should update with pagination indicator)
+        TaiMenu.response_worker.__wrapped__(
+            app,
+            message="hi",
+            is_regeneration=True,
+            container=container,
+            ai_msg=ai_msg,
+            header=header
+        )
+        # Verify that ai_msg.update was called with the pagination indicator at the end
+        # Since the mock database already has the new alternative in the mock history, it should show "< 2/2 >"
+        ai_msg.update.assert_called_with(" Nova:\nHello!\n\n[dim]< 2/2 >[/dim]")
 
 if __name__ == "__main__":
     unittest.main()
