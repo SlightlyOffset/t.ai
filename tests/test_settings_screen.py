@@ -14,7 +14,7 @@ class TestSettingsScreen(unittest.TestCase):
         from engines.config import SETTINGS_FILE
         self.backup_path = SETTINGS_FILE + ".bak"
         if os.path.exists(SETTINGS_FILE):
-            os.rename(SETTINGS_FILE, self.backup_path)
+            os.replace(SETTINGS_FILE, self.backup_path)
 
         self.screen = SettingsScreen()
         self.screen.dismiss = MagicMock()
@@ -70,7 +70,7 @@ class TestSettingsScreen(unittest.TestCase):
         if os.path.exists(SETTINGS_FILE):
             os.remove(SETTINGS_FILE)
         if os.path.exists(self.backup_path):
-            os.rename(self.backup_path, SETTINGS_FILE)
+            os.replace(self.backup_path, SETTINGS_FILE)
 
     def test_cancel_action(self):
         """Test that cancel action dismisses with None."""

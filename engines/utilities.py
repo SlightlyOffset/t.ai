@@ -51,9 +51,21 @@ def sanitize_profile_name(profile_name: str) -> str:
     safe_name = (profile_name or "").replace(" ", "_")
     return "".join(char for char in safe_name if char.isalnum() or char in ("_", "-", "(", ")")).rstrip()
 
+def hide_file(file_path):
+    """Hides a file on Windows by setting its file attributes."""
+    import os
+    if os.name == 'nt':
+        import ctypes
+        try:
+            # FILE_ATTRIBUTE_HIDDEN = 2
+            ctypes.windll.kernel32.SetFileAttributesW(str(file_path), 2)
+        except Exception:
+            pass
+
 def save_json_atomic(file_path, data, indent=4):
     """
     Saves a dictionary to a JSON file atomically to prevent corruption.
+    Creates a hidden backup of the previous file if it exists.
 
     Args:
         file_path (str): The destination file path.
@@ -63,17 +75,27 @@ def save_json_atomic(file_path, data, indent=4):
     Returns:
         bool: True if successful, False otherwise.
     """
+    # 1. Create a backup of the existing file before modifying it
+    if os.path.exists(file_path):
+        import shutil
+        bak_file = file_path + ".bak"
+        try:
+            shutil.copy2(file_path, bak_file)
+            hide_file(bak_file)
+        except Exception:
+            pass
+
     temp_file = file_path + ".tmp"
     try:
-        # 1. Serialize to string first to catch TypeErrors (non-serializable objects)
+        # 2. Serialize to string first to catch TypeErrors (non-serializable objects)
         # before we even touch the file system.
         json_data = json.dumps(data, indent=indent, ensure_ascii=False)
 
-        # 2. Write to a temporary file.
+        # 3. Write to a temporary file.
         with open(temp_file, "w", encoding="utf-8") as f:
             f.write(json_data)
 
-        # 3. Atomic rename (overwrites existing file).
+        # 4. Atomic rename (overwrites existing file).
         os.replace(temp_file, file_path)
         return True
     except (TypeError, IOError, OSError):

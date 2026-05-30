@@ -119,47 +119,69 @@ class HistoryManager:
             "history": []
         }
 
-        if not os.path.exists(filename):
+        bak_file = filename + ".bak"
+
+        def load_raw_data(path: str) -> dict | None:
+            if not os.path.exists(path):
+                return None
+            try:
+                with open(path, "r", encoding="UTF-8") as f:
+                    return json.load(f)
+            except Exception:
+                return None
+
+        # 1. Try loading primary file
+        data = load_raw_data(filename)
+        healed = False
+
+        # 2. Fall back to backup file if primary is missing or invalid
+        if data is None:
+            data = load_raw_data(bak_file)
+            if data is not None:
+                healed = True
+
+        if data is None:
             return default_data
 
         try:
-            with open(filename, "r", encoding="UTF-8") as f:
-                data = json.load(f)
+            # Handle old format (list)
+            if isinstance(data, list):
+                # Try to find the timestamp in the last message (legacy behavior)
+                last_time = None
+                for msg in reversed(data):
+                    if msg.get("role") == "system" and "Timestamp: " in msg.get("content", ""):
+                        last_time = msg["content"].replace("Timestamp: ", "").strip()
+                        break
 
-                # Handle old format (list)
-                if isinstance(data, list):
-                    # Try to find the timestamp in the last message (legacy behavior)
-                    last_time = None
-                    for msg in reversed(data):
-                        if msg.get("role") == "system" and "Timestamp: " in msg.get("content", ""):
-                            last_time = msg["content"].replace("Timestamp: ", "").strip()
-                            break
+                data = {
+                    "metadata": {
+                        "last_interaction": last_time,
+                        "relationship_score": 0,
+                        "current_scene": "Unknown Location",
+                        "memory_core": "",
+                        "last_summarized_index": 0,
+                        "narrative_state": {},
+                        "last_turn_metrics": {},
+                    },
+                    "history": [m for m in data if m.get("role") != "system"]
+                }
 
-                    return {
-                        "metadata": {
-                            "last_interaction": last_time,
-                            "relationship_score": 0,
-                            "current_scene": "Unknown Location",
-                            "memory_core": "",
-                            "last_summarized_index": 0,
-                            "narrative_state": {},
-                            "last_turn_metrics": {},
-                        },
-                        "history": [m for m in data if m.get("role") != "system"]
-                    }
+            # Ensure all metadata fields exist
+            if "metadata" not in data:
+                data["metadata"] = default_data["metadata"]
+            else:
+                if "relationship_score" not in data["metadata"] and "mood_score" in data["metadata"]:
+                    data["metadata"]["relationship_score"] = data["metadata"].pop("mood_score")
+                for key, val in default_data["metadata"].items():
+                    if key not in data["metadata"]:
+                        data["metadata"][key] = val
 
-                # Ensure all metadata fields exist
-                if "metadata" not in data:
-                    data["metadata"] = default_data["metadata"]
-                else:
-                    if "relationship_score" not in data["metadata"] and "mood_score" in data["metadata"]:
-                        data["metadata"]["relationship_score"] = data["metadata"].pop("mood_score")
-                    for key, val in default_data["metadata"].items():
-                        if key not in data["metadata"]:
-                            data["metadata"][key] = val
+            # Heal primary if loaded successfully from backup
+            if healed:
+                save_json_atomic(filename, data)
 
-                return data
-        except (json.JSONDecodeError, Exception):
+            return data
+        except Exception:
             return default_data
 
     def load_history(self, profile_name: str, limit: int = None) -> list:
