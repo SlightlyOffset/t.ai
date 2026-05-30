@@ -452,5 +452,58 @@ class TestMenu(unittest.TestCase):
         mock_thread_alive.join.assert_called_once_with(timeout=10.0)
         mock_thread_dead.join.assert_not_called()
 
+    @patch("engines.responses.active_post_process_threads")
+    def test_action_quit_with_no_alive_threads(self, mock_threads):
+        class DummyMenu(TaiMenu):
+            def __init__(self):
+                self.exit_called = False
+            def exit(self):
+                self.exit_called = True
+        app = DummyMenu()
+        mock_threads.__iter__.return_value = []
+        
+        import asyncio
+        asyncio.run(app.action_quit())
+        self.assertTrue(app.exit_called)
+
+    @patch("engines.responses.active_post_process_threads")
+    def test_action_quit_with_alive_threads(self, mock_threads):
+        class DummyMenu(TaiMenu):
+            def __init__(self):
+                self.pushed_screen = None
+                self.run_worker_called_with = None
+            def push_screen(self, screen):
+                self.pushed_screen = screen
+            def run_worker(self, coro):
+                self.run_worker_called_with = coro
+        app = DummyMenu()
+        mock_thread_alive = MagicMock()
+        mock_thread_alive.is_alive.return_value = True
+        mock_threads.__iter__.return_value = [mock_thread_alive]
+        
+        import asyncio
+        asyncio.run(app.action_quit())
+        
+        from ui.menu import ExitSavingScreen
+        self.assertIsInstance(app.pushed_screen, ExitSavingScreen)
+        self.assertIsNotNone(app.run_worker_called_with)
+        app.run_worker_called_with.close()
+
+    def test_wait_and_exit(self):
+        class DummyMenu(TaiMenu):
+            def __init__(self):
+                self.exit_called = False
+            def exit(self):
+                self.exit_called = True
+        app = DummyMenu()
+        mock_thread = MagicMock()
+        mock_thread.is_alive.return_value = True
+        
+        import asyncio
+        asyncio.run(app._wait_and_exit([mock_thread]))
+        
+        mock_thread.join.assert_called_once_with(timeout=10.0)
+        self.assertTrue(app.exit_called)
+
 if __name__ == "__main__":
     unittest.main()

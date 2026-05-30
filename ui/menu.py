@@ -14,6 +14,7 @@ import re
 # Third-party imports
 import ollama
 from textual.app import App, ComposeResult
+from textual.screen import ModalScreen
 from textual.widgets import Header, Footer, Input, Static, Label, Select, ProgressBar, Switch, TextArea
 from textual_image.widget import Image, SixelImage, TGPImage, HalfcellImage
 from textual.containers import Vertical, Horizontal, ScrollableContainer
@@ -107,6 +108,45 @@ class ChatInput(TextArea):
             # as a dedicated "Force Newline" shortcut.
             self.insert("\n")
             event.prevent_default()
+
+class ExitSavingScreen(ModalScreen):
+    """Modal screen displaying a message while saving history and exiting."""
+    DEFAULT_CSS = """
+    ExitSavingScreen {
+        align: center middle;
+        background: rgba(0, 0, 0, 0.75);
+    }
+    #saving_container {
+        width: 60;
+        height: 12;
+        border: thick $warning;
+        background: $panel;
+        padding: 2;
+        layout: vertical;
+        align: center middle;
+    }
+    #saving_title {
+        color: $warning;
+        text-style: bold;
+        width: 100%;
+        text-align: center;
+        margin-bottom: 1;
+    }
+    #saving_message {
+        color: $text;
+        width: 100%;
+        text-align: center;
+        margin-bottom: 1;
+    }
+    """
+
+    def compose(self) -> ComposeResult:
+        yield Vertical(
+            Label("⚠️ Saving & Exiting ⚠️", id="saving_title"),
+            Label("Please do not force-close the terminal.", id="saving_message"),
+            Label("Securing database, saving conversation history and metadata...", classes="sidebar_label"),
+            id="saving_container"
+        )
 
 class TaiMenu(App):
     """t.ai - Logic-focused TUI implementation."""
@@ -337,6 +377,26 @@ class TaiMenu(App):
         """Open the global settings screen."""
         from ui.SettingsScreen import SettingsScreen
         self.push_screen(SettingsScreen(), callback=self.on_settings_saved)
+
+    async def action_quit(self) -> None:
+        """Override quit action to show saving modal and wait for active background saving threads."""
+        from engines.responses import active_post_process_threads
+        alive_threads = [t for t in active_post_process_threads if t.is_alive()]
+        if alive_threads:
+            self.push_screen(ExitSavingScreen())
+            self.run_worker(self._wait_and_exit(alive_threads))
+        else:
+            self.exit()
+
+    async def _wait_and_exit(self, alive_threads: list) -> None:
+        """Asynchronously wait for active post-processing threads to finish, then exit."""
+        import asyncio
+        def join_all():
+            for t in alive_threads:
+                t.join(timeout=10.0)
+
+        await asyncio.to_thread(join_all)
+        self.exit()
 
     def on_settings_saved(self, result: dict | None) -> None:
         """Callback handled when SettingsScreen is dismissed with saved changes."""
