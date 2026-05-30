@@ -293,7 +293,7 @@ class TaiMenu(App):
 
         user_text = result.get("user_text")
         user_text = self._resolve_regeneration_text(user_text)
-        if user_text:
+        if user_text is not None:
             try:
                 ai_bubble = self.query(".ai_bubble").last()
                 ai_bubble.update(
@@ -362,6 +362,8 @@ class TaiMenu(App):
 
     def _resolve_regeneration_text(self, engine_text: str | None) -> str | None:
         """Resolve the text to use for regeneration, falling back to the UI's last user message if needed."""
+        if engine_text == "":
+            return ""
         ui_text = self.get_last_user_message_from_ui()
         if ui_text:
             if not engine_text or engine_text != ui_text:
@@ -1166,7 +1168,7 @@ class TaiMenu(App):
                     pass
                 user_text = command_action.get("user_text")
                 user_text = self._resolve_regeneration_text(user_text)
-                if user_text:
+                if user_text is not None:
                     self.stream_response(user_text, is_regeneration=True)
                 return
 

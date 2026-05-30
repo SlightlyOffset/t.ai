@@ -71,6 +71,10 @@ class TestMenu(unittest.TestCase):
         mock_get_last.return_value = None
         self.assertEqual(app._resolve_regeneration_text("Previous"), "Previous")
 
+        # Case 5: Engine text is empty string (continuation), should return empty string directly
+        mock_get_last.return_value = "Hello"
+        self.assertEqual(app._resolve_regeneration_text(""), "")
+
     @patch('ui.menu.update_setting')
     def test_on_select_changed_interaction_mode(self, mock_update_setting):
         """Test on_select_changed updates interaction_mode when interaction_mode_select changes."""
