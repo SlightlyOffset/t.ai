@@ -682,14 +682,37 @@ class TaiMenu(App):
             self.audio_file_queue.task_done()
 
     def print_starter_message(self) -> None:
-        """Prints starter messages to the chat list."""
+        """Prints starter messages to the chat list and extracts the initial scene in the background."""
         starter_messages = self.character_profile.get("starter_messages", [])
         if starter_messages:
             random.shuffle(starter_messages)
-            self.add_message(self.format_rp(starter_messages[0], role="assistant"), role="assistant", message_number=1)
+            starter_text = starter_messages[0]
+            self.add_message(self.format_rp(starter_text, role="assistant"), role="assistant", message_number=1)
+            rel_score = self.character_profile.get("relationship_score", 0)
             memory_manager.save_history(self.history_profile_name, [{"role": "assistant",
-                                                                     "content": starter_messages[0]}],
-                                        relationship_score=self.character_profile.get("relationship_score", 0))
+                                                                     "content": starter_text}],
+                                         relationship_score=rel_score)
+
+            def extract_and_save_starter_scene():
+                try:
+                    from engines.responses import extract_scene_from_starter
+                    scene = extract_scene_from_starter(starter_text)
+                    if scene:
+                        full_data = memory_manager.get_full_data(self.history_profile_name)
+                        history = full_data.get("history", [])
+                        metadata = full_data.get("metadata", {})
+                        memory_manager.save_history(
+                            self.history_profile_name,
+                            history,
+                            relationship_score=metadata.get("relationship_score", rel_score),
+                            current_scene=scene,
+                            memory_core=metadata.get("memory_core", ""),
+                            last_summarized_index=metadata.get("last_summarized_index", 0)
+                        )
+                except Exception:
+                    pass
+
+            threading.Thread(target=extract_and_save_starter_scene, daemon=True).start()
 
     def run_recap(self):
         messages_history = memory_manager.load_history(self.history_profile_name)

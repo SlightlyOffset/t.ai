@@ -167,6 +167,92 @@ def get_sentiment_score(user_input: str, model: str, remote_url: str = None, pro
         log_debug("SENTIMENT_ERROR", {"error": str(e)})
     return 0
 
+
+def extract_scene_from_text(user_input: str, reply: str) -> str | None:
+    """
+    Makes a quick lightweight utility LLM call to extract the current scene/location/activity
+    from the user input and assistant reply.
+    """
+    utility_model = get_setting("local_utility_model", "llama3.2")
+    # Clean tags/markup from input/reply
+    cleaned_input = re.sub(r'\[.*?\]', '', user_input).strip()
+    cleaned_reply = re.sub(r'\[.*?\]', '', reply).strip()
+    
+    prompt = (
+        "Based on the following conversation turn, identify the current physical location or scene. "
+        "Provide ONLY a short 1-4 word name of the location or activity (e.g. 'A Cozy Cafe', 'Dark Forest', 'City Streets'). "
+        "Do not write explanations, sentences, markdown, or punctuation. "
+        "If the location/scene cannot be determined or hasn't changed, output 'Unknown'.\n\n"
+        f"User Message: {cleaned_input}\n"
+        f"Assistant Message: {cleaned_reply}"
+    )
+    
+    messages = [
+        {
+            "role": "system",
+            "content": "You are a scene/location extraction utility. Output ONLY the short scene name or 'Unknown'."
+        },
+        {"role": "user", "content": prompt}
+    ]
+    try:
+        log_debug("SCENE_EXTRACTION_START", {"model": utility_model})
+        result = ollama.chat(
+            model=utility_model,
+            messages=messages,
+            stream=False,
+            options={"temperature": 0.1}
+        )
+        scene = result['message']['content'].strip()
+        log_debug("SCENE_EXTRACTION_RESPONSE", {"scene": scene})
+        scene = re.sub(r'^[\'"`\s\-\[\]]+|[\'"`\s\-\[\]]+$', '', scene).strip()
+        if scene and scene.lower() not in ("unknown", "unknown location", "unknown.") and len(scene) < 40:
+            return scene
+    except Exception as e:
+        log_debug("SCENE_EXTRACTION_ERROR", {"error": str(e)})
+    return None
+
+
+def extract_scene_from_starter(starter_text: str) -> str | None:
+    """
+    Makes a quick lightweight utility LLM call to extract the initial scene/location/activity
+    from the character's starter message.
+    """
+    utility_model = get_setting("local_utility_model", "llama3.2")
+    cleaned_text = re.sub(r'\[.*?\]', '', starter_text).strip()
+    
+    prompt = (
+        "Based on the following starter roleplay message, identify the physical location or scene. "
+        "Provide ONLY a short 1-4 word name of the location or activity (e.g. 'A Cozy Cafe', 'Dark Forest', 'City Streets'). "
+        "Do not write explanations, sentences, markdown, or punctuation. "
+        "If the location/scene cannot be determined, output 'Unknown'.\n\n"
+        f"Starter Message: {cleaned_text}"
+    )
+    
+    messages = [
+        {
+            "role": "system",
+            "content": "You are a scene/location extraction utility. Output ONLY the short scene name or 'Unknown'."
+        },
+        {"role": "user", "content": prompt}
+    ]
+    try:
+        log_debug("SCENE_STARTER_START", {"model": utility_model})
+        result = ollama.chat(
+            model=utility_model,
+            messages=messages,
+            stream=False,
+            options={"temperature": 0.1}
+        )
+        scene = result['message']['content'].strip()
+        log_debug("SCENE_STARTER_RESPONSE", {"scene": scene})
+        scene = re.sub(r'^[\'"`\s\-\[\]]+|[\'"`\s\-\[\]]+$', '', scene).strip()
+        if scene and scene.lower() not in ("unknown", "unknown location", "unknown.") and len(scene) < 40:
+            return scene
+    except Exception as e:
+        log_debug("SCENE_STARTER_ERROR", {"error": str(e)})
+    return None
+
+
 def generate_summary(messages: list, model: str, remote_url: str = None, user_name: str = "User", char_name: str = "Assistant") -> str:
     """
     Generates a concise summary of the provided conversation history.
@@ -438,6 +524,11 @@ def _perform_post_processing(
         if scene_match:
             new_scene = scene_match.group(1).strip()
             reply = re.sub(r'\[SCENE:\s*.*?\]', '', reply).strip()
+        else:
+            # Attempt to extract scene dynamically from current turn
+            extracted = extract_scene_from_text(user_input, reply)
+            if extracted:
+                new_scene = extracted
 
         # Score sentiment
         if is_regeneration:

@@ -425,7 +425,7 @@ class TestResponsesPipeline(unittest.TestCase):
         # Popping 0 (A) leaves: B (1500), C (1500), D (1500), E (1500) -> 6000 tokens.
         # So it should pop exactly 1 turn, leaving B, C, D, E.
         self.assertTrue(mock_ollama_chat.called)
-        sent_messages = mock_ollama_chat.call_args.kwargs["messages"]
+        sent_messages = mock_ollama_chat.call_args_list[0].kwargs["messages"]
         
         # Extract the content of the history turns sent to the LLM (skipping system prompt and user input)
         history_contents = [m["content"] for m in sent_messages if m["role"] != "system" and m["content"] != "User prompt"]
@@ -494,7 +494,7 @@ class TestResponsesPipeline(unittest.TestCase):
         list(get_respond_stream(user_input, profile, history_profile_name="test_profile"))
         
         self.assertTrue(mock_ollama_chat.called)
-        sent_messages = mock_ollama_chat.call_args.kwargs["messages"]
+        sent_messages = mock_ollama_chat.call_args_list[0].kwargs["messages"]
         
         # Extract the content of the history turns sent to the LLM (skipping system prompt and user input)
         history_contents = [m["content"] for m in sent_messages if m["role"] != "system" and m["content"] != user_input]
