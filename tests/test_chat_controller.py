@@ -11,9 +11,14 @@ from engines.chat_controller import (
 
 
 class TestChatController(unittest.TestCase):
-    @patch("engines.chat_controller.memory_manager.get_history_length", return_value=4)
-    def test_get_user_message_number_non_command(self, _mock_len):
-        self.assertEqual(get_user_message_number("hello", "profile"), 5)
+    @patch("engines.chat_controller.memory_manager.load_history", return_value=[
+        {"role": "user", "content": "hello"},
+        {"role": "assistant", "content": "hi"},
+        {"role": "user", "content": ""},
+        {"role": "assistant", "content": "howdy"}
+    ])
+    def test_get_user_message_number_non_command(self, _mock_load):
+        self.assertEqual(get_user_message_number("hello", "profile"), 4)
         self.assertIsNone(get_user_message_number("//help", "profile"))
 
     @patch("engines.chat_controller.memory_manager.load_history")

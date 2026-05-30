@@ -371,6 +371,7 @@ class TestMenu(unittest.TestCase):
                 self.value = value
 
         mock_memory_manager.get_history_length.return_value = 5
+        mock_memory_manager.load_history.return_value = [{"role": "user", "content": "msg"}] * 6
 
         # Call on_chat_input_submitted with empty message
         asyncio.run(app.on_chat_input_submitted(MockEvent("   ")))

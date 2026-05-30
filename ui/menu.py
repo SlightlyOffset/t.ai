@@ -277,11 +277,23 @@ class TaiMenu(App):
             return f"[bold {color}]{name}:[/bold {color}]"
         return f"[dim]#{message_number}[/dim] [bold {color}]{name}:[/bold {color}]"
 
+    def get_visible_message_count(self) -> int:
+        """Calculate the number of user/assistant messages in history that are actually visible in the UI."""
+        history = memory_manager.load_history(self.history_profile_name)
+        count = 0
+        for msg in history:
+            role = msg.get("role", "assistant")
+            content = msg.get("content", "")
+            if role in ("user", "assistant"):
+                if not (role == "user" and not content):
+                    count += 1
+        return count
+
     def _current_assistant_message_number(self) -> int | None:
         """Return the 1-based history index for the latest assistant message, if available."""
         full_history = memory_manager.load_history(self.history_profile_name)
         if full_history and full_history[-1].get("role") == "assistant":
-            return len(full_history)
+            return self.get_visible_message_count()
         return None
 
     def refresh_last_ai_message(self, content: str, index: int, total: int) -> None:
@@ -969,12 +981,17 @@ class TaiMenu(App):
             child.remove()
 
         history = memory_manager.load_history(self.history_profile_name)
+        visible_count = 0
         for index, msg_data in enumerate(history, start=1):
             role = msg_data.get("role", "assistant")
             content = msg_data.get("content", "")
             if role != "system":
                 content = self.format_rp(content, role=role)
-            message_number = index if role in ("user", "assistant") else None
+            message_number = None
+            if role in ("user", "assistant"):
+                if not (role == "user" and not content):
+                    visible_count += 1
+                    message_number = visible_count
             self.add_message(content, role=role, msg_data=msg_data, message_number=message_number)
 
     async def on_chat_input_submitted(self, event: ChatInput.Submitted) -> None:
@@ -983,8 +1000,7 @@ class TaiMenu(App):
         if not message:
             # Let the bot continue to generate!
             memory_manager.set_pending_user_message(self.history_profile_name, "")
-            user_message_number = memory_manager.get_history_length(self.history_profile_name) + 1
-            assistant_message_number = user_message_number + 1
+            assistant_message_number = self.get_visible_message_count() + 1
             self.stream_response("", message_number=assistant_message_number)
             return
 
@@ -1110,10 +1126,10 @@ class TaiMenu(App):
     ) -> tuple[ScrollableContainer, Static, str]:
         """Resolve chat widgets on the main thread before background streaming starts."""
         container = self.query_one("#chat_list", ScrollableContainer)
-        history_len = memory_manager.get_history_length(self.history_profile_name)
         assistant_message_number = message_number
         if assistant_message_number is None:
-            assistant_message_number = history_len if is_regeneration else history_len + 2
+            visible_len = self.get_visible_message_count()
+            assistant_message_number = visible_len if is_regeneration else visible_len + 2
         header = self._message_header("assistant", assistant_message_number)
 
         if is_regeneration:
