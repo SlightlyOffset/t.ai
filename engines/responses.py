@@ -278,9 +278,10 @@ def update_rolling_summary(existing_core: str, new_messages: list, model: str,
 
 
 
-def _call_llm_once(messages: list, model: str, remote_url: str = None, temperature: float = 0.8, max_tokens: int = 1024, user_name: str = "User", char_name: str = "Assistant") -> str:
+def _call_llm_once(messages: list, model: str, remote_url: str = None, temperature: float = 0.8, max_tokens: int = 1024, user_name: str = "User", char_name: str = "Assistant", repetition_penalty: float = None) -> str:
     """Single-turn non-streaming helper used by candidate/reranker pipeline stages."""
-    repetition_penalty = _get_repetition_penalty()
+    if repetition_penalty is None:
+        repetition_penalty = _get_repetition_penalty()
     try:
         if remote_url:
             log_debug("LLM_REMOTE_START", {"model": model, "temp": temperature, "max_tokens": max_tokens})
@@ -318,7 +319,7 @@ def _call_llm_once(messages: list, model: str, remote_url: str = None, temperatu
         return ""
 
 
-def _generate_candidate_replies(messages: list, model: str, remote_url: str | None = None, candidate_count: int = 1, user_name: str = "User", char_name: str = "Assistant") -> list[str]:
+def _generate_candidate_replies(messages: list, model: str, remote_url: str | None = None, candidate_count: int = 1, user_name: str = "User", char_name: str = "Assistant", temp_offset: float = 0.0, repetition_penalty: float = None) -> list[str]:
     candidate_count = max(1, candidate_count)
 
     # Optimization: Batch remote call for Colab/Kaggle
@@ -332,13 +333,13 @@ def _generate_candidate_replies(messages: list, model: str, remote_url: str | No
                 ]
 
             full_url = f"{remote_url.rstrip('/')}/chat"
-            repetition_penalty = _get_repetition_penalty()
+            rep_penalty = repetition_penalty if repetition_penalty is not None else _get_repetition_penalty()
             # Temperature average for the batch
             payload = {
                 "messages": messages,
-                "temperature": 0.85,
+                "temperature": min(1.3, 0.85 + temp_offset),
                 "max_tokens": 1024,
-                "repetition_penalty": repetition_penalty,
+                "repetition_penalty": rep_penalty,
                 "n": candidate_count,
                 "use_rag": True
             }
@@ -357,9 +358,9 @@ def _generate_candidate_replies(messages: list, model: str, remote_url: str | No
                 print(f"Batch remote candidate generation failed: {e}. Falling back to sequential.")
 
     def generate_task(idx):
-        temperature = min(1.0, 0.75 + (0.08 * idx))
+        temperature = min(1.4, 0.75 + (0.08 * idx) + temp_offset)
         try:
-            return _call_llm_once(messages, model=model, remote_url=remote_url, temperature=temperature, user_name=user_name, char_name=char_name)
+            return _call_llm_once(messages, model=model, remote_url=remote_url, temperature=temperature, user_name=user_name, char_name=char_name, repetition_penalty=repetition_penalty)
         except Exception:
             return ""
 
@@ -620,6 +621,10 @@ def get_respond_stream(user_input: str, profile: dict, profile_path: str = None,
     # Compile message list for the LLM
     messages = [{'role': 'system', 'content': system_content}]
     regeneration_previous_replies = []
+    
+    # Calculate regeneration parameters
+    temp_offset = 0.0
+    repetition_penalty_override = None
 
     if is_regeneration:
         # If regenerating, we want the LLM to provide a new response to the LAST user message.
@@ -632,6 +637,12 @@ def get_respond_stream(user_input: str, profile: dict, profile_path: str = None,
             elif prior_assistant.get("content"):
                 regeneration_previous_replies = [prior_assistant.get("content")]
             prompt_history.pop()
+
+        n_regen = len(regeneration_previous_replies)
+        if n_regen >= 1:
+            # Raise temperature and repetition penalty dynamically with each regeneration
+            temp_offset = 0.15 + (0.05 * (n_regen - 1))
+            repetition_penalty_override = _get_repetition_penalty() + 0.05 + (0.02 * (n_regen - 1))
 
     # Dynamic Token-Aware Truncation of prompt_history
     def est_tokens(t: str) -> int:
@@ -673,13 +684,18 @@ def get_respond_stream(user_input: str, profile: dict, profile_path: str = None,
 
         if regeneration_previous_replies:
             replay_block = "\n".join(f"- {reply[:220]}" for reply in regeneration_previous_replies[-3:])
-            messages[0]["content"] = (
-                f"{messages[0]['content']}\n\n"
+            instruction = (
                 "[REGENERATION DIVERSITY CONSTRAINT]\n"
                 "Generate a substantially different alternative response while preserving canon and scene continuity.\n"
                 "Do not paraphrase the same response structure.\n"
-                f"Previous assistant attempts:\n{replay_block}\n"
             )
+            if len(regeneration_previous_replies) == 1:
+                instruction += (
+                    "Ensure this new response is completely different in starting words, phrasing, tone, "
+                    "and narrative progression compared to the previous attempt. Be creative and explore a different approach.\n"
+                )
+            instruction += f"Previous assistant attempts:\n{replay_block}\n"
+            messages[0]["content"] = f"{messages[0]['content']}\n\n{instruction}"
     else:
         messages.extend(prompt_history)
         messages.append({'role': 'user', 'content': user_input})
@@ -714,9 +730,11 @@ def get_respond_stream(user_input: str, profile: dict, profile_path: str = None,
                     candidate_count=pipeline_flags["candidate_count"],
                     user_name=user_name,
                     char_name=char_name,
+                    temp_offset=temp_offset,
+                    repetition_penalty=repetition_penalty_override,
                 )
                 if not candidate_replies:
-                    candidate_replies = [_call_llm_once(messages, model=model, remote_url=remote_url, temperature=0.8, user_name=user_name, char_name=char_name)]
+                    candidate_replies = [_call_llm_once(messages, model=model, remote_url=remote_url, temperature=min(1.4, 0.8 + temp_offset), user_name=user_name, char_name=char_name, repetition_penalty=repetition_penalty_override)]
 
                 ranked = rank_candidates(candidate_replies, canonical_state, narrative_plan, interaction_mode)
                 best = ranked[0]
@@ -741,9 +759,10 @@ def get_respond_stream(user_input: str, profile: dict, profile_path: str = None,
                             diversify_messages,
                             model=model,
                             remote_url=remote_url,
-                            temperature=1.05,
+                            temperature=min(1.4, 1.05 + temp_offset),
                             user_name=user_name,
                             char_name=char_name,
+                            repetition_penalty=repetition_penalty_override,
                         ).strip()
                         if diversified:
                             best = {
@@ -757,7 +776,7 @@ def get_respond_stream(user_input: str, profile: dict, profile_path: str = None,
                 selected_metrics = best["metrics"]
                 candidate_metrics = [row["metrics"] for row in ranked]
             else:
-                reply = _call_llm_once(messages, model=model, remote_url=remote_url, temperature=0.8, user_name=user_name, char_name=char_name).strip()
+                reply = _call_llm_once(messages, model=model, remote_url=remote_url, temperature=min(1.4, 0.8 + temp_offset), user_name=user_name, char_name=char_name, repetition_penalty=repetition_penalty_override).strip()
                 selected_metrics = score_candidate(reply, canonical_state, narrative_plan, interaction_mode)
                 candidate_metrics = [selected_metrics]
 
@@ -780,8 +799,9 @@ def get_respond_stream(user_input: str, profile: dict, profile_path: str = None,
                 yield reply[index : index + sim_chunk_size]
                 time.sleep(SIM_STREAM_DELAY_SECONDS)
         else:
-            # Handle Remote LLM Request
-            generation_temperature = 0.95 if is_regeneration else 0.8
+            # Handle Remote/Local LLM Request
+            generation_temperature = min(1.4, 0.8 + temp_offset) if is_regeneration else 0.8
+            generation_repetition_penalty = repetition_penalty_override if repetition_penalty_override is not None else repetition_penalty
             if remote_url:
                 # Redact PII for remote requests if Privacy Mode is active (VULN-004)
                 if get_setting("privacy_mode", False):
@@ -795,7 +815,7 @@ def get_respond_stream(user_input: str, profile: dict, profile_path: str = None,
                     "messages": messages, 
                     "temperature": generation_temperature, 
                     "max_tokens": 512,
-                    "repetition_penalty": repetition_penalty,
+                    "repetition_penalty": generation_repetition_penalty,
                     "use_rag": True
                 }
                 response = requests.post(full_url, json=payload, stream=True, timeout=60)
@@ -807,7 +827,7 @@ def get_respond_stream(user_input: str, profile: dict, profile_path: str = None,
                     model=model,
                     messages=messages,
                     stream=True,
-                    options={"temperature": generation_temperature, "repeat_penalty": repetition_penalty},
+                    options={"temperature": generation_temperature, "repeat_penalty": generation_repetition_penalty},
                 )
 
                 def ollama_gen():
