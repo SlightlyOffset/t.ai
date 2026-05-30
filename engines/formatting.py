@@ -36,10 +36,42 @@ class TextFormatter:
     @staticmethod
     def format_summary(summary: str) -> str:
         """Format summary markdown-like text into safe Rich markup."""
-        text = escape(summary)
+        if not summary:
+            return ""
+
+        # 1. Strip any legacy/hallucinated tags, headers, or bracket formatting
+        cleaned = summary
+        cleaned = re.sub(
+            r"\[bold yellow\]\s*Memory Core Summary\s*\[/bold yellow\]",
+            "",
+            cleaned,
+            flags=re.IGNORECASE
+        )
+        cleaned = re.sub(
+            r"\[/?(?:bold|yellow|b|u|i|dim|color|red|green|cyan|magenta|orange|blue|white|black|/color|/b|/u|/i|/dim)[^\]]*\]",
+            "",
+            cleaned,
+            flags=re.IGNORECASE
+        )
+        cleaned = re.sub(
+            r"^(?:#+\s*)?Memory\s*Core\s*Summary\s*[:\-]*\s*$",
+            "",
+            cleaned,
+            flags=re.MULTILINE | re.IGNORECASE
+        )
+        cleaned = cleaned.strip()
+
+        # 2. Escape the clean text to prevent any LLM-hallucinated brackets from causing Rich markup errors
+        text = escape(cleaned)
+
+        # 3. Apply safe formatting for markdown headers and bullet points
         text = re.sub(r"^##\s+(.*)$", r"[b][u]\1[/u][/b]", text, flags=re.MULTILINE)
         text = re.sub(r"\*\*(.*?)\*\*", r"[b]\1[/b]", text, flags=re.DOTALL)
-        return text.replace("*", "•")
+        text = text.replace("*", "•")
+
+        # 4. Prepend the official correctly-formatted header
+        header = "[bold yellow]Memory Core Summary[/bold yellow]\n\n"
+        return header + text
 
     @staticmethod
     def get_tts_split_points(text: str) -> list[int]:

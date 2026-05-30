@@ -7,9 +7,27 @@ class TestFormatting(unittest.TestCase):
     def test_format_summary_text(self):
         summary = "## Header\n**Bold**\n* item"
         result = format_summary_text(summary)
+        self.assertIn("[bold yellow]Memory Core Summary[/bold yellow]", result)
         self.assertIn("[b][u]Header[/u][/b]", result)
         self.assertIn("[b]Bold[/b]", result)
         self.assertIn("• item", result)
+
+    def test_format_summary_cleans_legacy_tags(self):
+        summary = "[bold yellow] Memory Core Summary [/bold yellow]\n## Header\n* item"
+        result = format_summary_text(summary)
+        # Check that [bold yellow] Memory Core Summary [/bold yellow] is stripped and prepended exactly once
+        self.assertEqual(result.count("Memory Core Summary"), 1)
+        self.assertIn("[bold yellow]Memory Core Summary[/bold yellow]\n\n", result)
+        self.assertIn("• item", result)
+
+    def test_format_summary_cleans_stray_tags(self):
+        summary = "## Header\n[bold]Some bold[/bold]\n* item [yellow]tag[/yellow]"
+        result = format_summary_text(summary)
+        # Brackets inside summary should be stripped/escaped, not parsed as tags except for supported markdown
+        self.assertNotIn("[bold]", result)
+        self.assertNotIn("[yellow]", result)
+        self.assertIn("Some bold", result)
+        self.assertIn("tag", result)
 
     def test_format_roleplay_text_replaces_placeholders_and_styles(self):
         text = '{{user}} says "Hello" to *{{char}}*'
