@@ -349,5 +349,52 @@ class TestMenu(unittest.TestCase):
         # Since the mock database already has the new alternative in the mock history, it should show "< 2/2 >"
         ai_msg.update.assert_called_with(" Nova:\nHello!\n\n[dim]< 2/2 >[/dim]")
 
+    @patch('ui.menu.memory_manager')
+    @patch('ui.menu.TaiMenu.stream_response')
+    def test_empty_chat_input_submitted_triggers_continuation(self, mock_stream, mock_memory_manager):
+        """Verify that submitting an empty chat input triggers bot continuation."""
+        import asyncio
+        class DummyMenu(TaiMenu):
+            def __init__(self):
+                self.history_profile_name = "test_profile"
+                self.char_path = "profiles/test.json"
+                self.user_path = "user_profiles/test.json"
+            def format_rp(self, text, role="user"):
+                return text
+
+        app = DummyMenu()
+        app.add_message = MagicMock()
+
+        # Mock Event with empty value
+        class MockEvent:
+            def __init__(self, value):
+                self.value = value
+
+        mock_memory_manager.get_history_length.return_value = 5
+
+        # Call on_chat_input_submitted with empty message
+        asyncio.run(app.on_chat_input_submitted(MockEvent("   ")))
+
+        # Check that user bubble was NEVER added
+        app.add_message.assert_not_called()
+
+        # Check that memory_manager set pending user message to empty string
+        mock_memory_manager.set_pending_user_message.assert_called_once_with("test_profile", "")
+
+        # Check that stream_response was called with empty message and Turn 7
+        mock_stream.assert_called_once_with("", message_number=7)
+
+    def test_add_message_hides_empty_user_messages(self):
+        class DummyMenu(TaiMenu):
+            def __init__(self):
+                pass
+        app = DummyMenu()
+        app.query_one = MagicMock()
+        
+        # Call add_message with empty text for user
+        app.add_message("", role="user")
+        # If it returns early, query_one should NOT be called (no widget mounted)
+        app.query_one.assert_not_called()
+
 if __name__ == "__main__":
     unittest.main()

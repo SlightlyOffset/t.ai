@@ -896,6 +896,10 @@ class TaiMenu(App):
             self.remote_status = ""
 
     def add_message(self, text, role="user", msg_data=None, message_number: int | None = None, raw_text: str | None = None):
+        if role == "user" and not text:
+            # Skip empty user messages to keep UI clean of empty bubble boxes
+            return
+
         if role not in ("system", "command", "tip_message"):
             import re
             is_formatted = False
@@ -977,7 +981,13 @@ class TaiMenu(App):
     async def on_chat_input_submitted(self, event: ChatInput.Submitted) -> None:
         """Handles user input submission from ChatInput."""
         message = event.value.strip()
-        if not message: return
+        if not message:
+            # Let the bot continue to generate!
+            memory_manager.set_pending_user_message(self.history_profile_name, "")
+            user_message_number = memory_manager.get_history_length(self.history_profile_name) + 1
+            assistant_message_number = user_message_number + 1
+            self.stream_response("", message_number=assistant_message_number)
+            return
 
         normalized = normalize_command_prefix(message)
         if normalized:
