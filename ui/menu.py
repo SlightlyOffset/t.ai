@@ -99,10 +99,9 @@ class ChatInput(TextArea):
             # they will fall through to the default TextArea behavior (newline).
             event.prevent_default()
             text = self.text.strip()
-            if text:
-                self.post_message(self.Submitted(text))
-                self.text = ""
-                self.height = 3
+            self.post_message(self.Submitted(text))
+            self.text = ""
+            self.height = 3
         elif event.key == "ctrl+j":
             # Fallback: Many terminals send Ctrl+J for newline or can be used
             # as a dedicated "Force Newline" shortcut.

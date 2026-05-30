@@ -396,5 +396,38 @@ class TestMenu(unittest.TestCase):
         # If it returns early, query_one should NOT be called (no widget mounted)
         app.query_one.assert_not_called()
 
+    def test_chat_input_on_key_posts_empty_submitted_event(self):
+        """Verify that pressing Enter when ChatInput is empty posts a Submitted event with an empty string."""
+        from textual.events import Key
+        from ui.menu import ChatInput
+        
+        input_widget = ChatInput()
+        input_widget.text = "   "  # whitespace only
+        input_widget.post_message = MagicMock()
+        
+        # Simulate pressing "enter"
+        mock_event = MagicMock(spec=Key)
+        mock_event.key = "enter"
+        
+        input_widget.on_key(mock_event)
+        
+        # Verify that prevent_default was called on the event
+        mock_event.prevent_default.assert_called_once()
+        
+        # Verify that post_message was called with a Submitted message with empty value
+        # It may also post other messages like TextArea.Changed when setting self.text = ""
+        submitted_msg = None
+        for call_args in input_widget.post_message.call_args_list:
+            msg = call_args[0][0]
+            if isinstance(msg, ChatInput.Submitted):
+                submitted_msg = msg
+                break
+        self.assertIsNotNone(submitted_msg, "ChatInput.Submitted was not posted")
+        self.assertEqual(submitted_msg.value, "")
+        
+        # Verify that text is cleared and height is reset to 3
+        self.assertEqual(input_widget.text, "")
+        self.assertEqual(input_widget.height, 3)
+
 if __name__ == "__main__":
     unittest.main()
