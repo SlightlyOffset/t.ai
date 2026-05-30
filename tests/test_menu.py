@@ -430,5 +430,27 @@ class TestMenu(unittest.TestCase):
         self.assertEqual(input_widget.text, "")
         self.assertEqual(input_widget.height, 3)
 
+    @patch("engines.responses.active_post_process_threads")
+    def test_on_unmount_joins_alive_threads(self, mock_threads):
+        class DummyMenu(TaiMenu):
+            def __init__(self):
+                pass
+        app = DummyMenu()
+        
+        # Mock active thread
+        mock_thread_alive = MagicMock()
+        mock_thread_alive.is_alive.return_value = True
+        mock_thread_dead = MagicMock()
+        mock_thread_dead.is_alive.return_value = False
+        
+        # Populate mock active_post_process_threads
+        mock_threads.__iter__.return_value = [mock_thread_alive, mock_thread_dead]
+        
+        app.on_unmount()
+        
+        # Verify that only the alive thread was joined
+        mock_thread_alive.join.assert_called_once_with(timeout=3.0)
+        mock_thread_dead.join.assert_not_called()
+
 if __name__ == "__main__":
     unittest.main()

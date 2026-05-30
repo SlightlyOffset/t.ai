@@ -32,6 +32,12 @@ from engines.lorebook import load_lorebook, scan_for_lore, sync_lore_to_remote
 from engines.utilities import redact_pii, log_debug
 
 MAX_CANDIDATE_WORKERS = 4
+active_post_process_threads = []
+
+def track_thread(thread: threading.Thread) -> None:
+    """Track a background thread so we can join it on shutdown/exit."""
+    active_post_process_threads.append(thread)
+
 SIM_STREAM_CHUNK_SIZE = 32
 SIM_STREAM_DELAY_SECONDS = 0.001
 SIM_STREAM_REGEN_CHUNK_SIZE = 32
@@ -977,6 +983,7 @@ def get_respond_stream(user_input: str, profile: dict, profile_path: str = None,
             },
             daemon=True,
         )
+        track_thread(post_process_thread)
         post_process_thread.start()
 
     except Exception as e:

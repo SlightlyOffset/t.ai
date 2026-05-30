@@ -451,6 +451,14 @@ class TaiMenu(App):
         # Start usage metrics update loop
         self.set_interval(2.0, self.update_usage_metrics)
 
+    def on_unmount(self) -> None:
+        """Wait for any active background post-processing threads to finish saving history before exiting."""
+        from engines.responses import active_post_process_threads
+        alive_threads = [t for t in active_post_process_threads if t.is_alive()]
+        if alive_threads:
+            for t in alive_threads:
+                t.join(timeout=3.0)
+
     def on_profile_selected(self, result: dict) -> None:
         """Callback handled when ProfileSelect screen is dismissed."""
         if result:
@@ -712,7 +720,10 @@ class TaiMenu(App):
                 except Exception:
                     pass
 
-            threading.Thread(target=extract_and_save_starter_scene, daemon=True).start()
+            t = threading.Thread(target=extract_and_save_starter_scene, daemon=True)
+            from engines.responses import track_thread
+            track_thread(t)
+            t.start()
 
     def run_recap(self):
         messages_history = memory_manager.load_history(self.history_profile_name)
