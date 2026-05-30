@@ -457,7 +457,7 @@ class TaiMenu(App):
         alive_threads = [t for t in active_post_process_threads if t.is_alive()]
         if alive_threads:
             for t in alive_threads:
-                t.join(timeout=3.0)
+                t.join(timeout=10.0)
 
     def on_profile_selected(self, result: dict) -> None:
         """Callback handled when ProfileSelect screen is dismissed."""

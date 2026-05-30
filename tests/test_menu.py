@@ -449,7 +449,7 @@ class TestMenu(unittest.TestCase):
         app.on_unmount()
         
         # Verify that only the alive thread was joined
-        mock_thread_alive.join.assert_called_once_with(timeout=3.0)
+        mock_thread_alive.join.assert_called_once_with(timeout=10.0)
         mock_thread_dead.join.assert_not_called()
 
 if __name__ == "__main__":
