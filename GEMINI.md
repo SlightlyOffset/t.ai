@@ -60,4 +60,17 @@ The codebase is strictly divided into two layers:
   - When loading character/user portraits or chat bubble images, downscale them asynchronously (e.g. max dimension 500px to 800px) in a background Textual worker or thread.
   - Cache optimized copies in a local hidden directory (e.g. `.cache/optimized_images/`) to ensure fast loads on subsequent reads/scrolling.
   - Primary tool: **Pillow** (pre-installed, fast, cross-platform).
-  - Secondary/Optional tool: **FFmpeg** via background `subprocess` for animated GIF formats.
+  - Secondary/Optional tool: **FFmpeg** via background `subprocess` for animated GIF formats.
+
+### Proposed: AI-Assisted Character Card Refinement & Guardrails
+- **Objective:** Utilize local LLMs (e.g. `llama3.2`, `dolphin-mistral`) to extract structured fields and clean up raw character data imported from external cards (e.g. SillyTavern JSON/PNG format).
+- **Core Architecture:**
+  - Execute a structured JSON schema extraction prompt against the local utility model.
+  - Parse extracted data to fill in structured fields: `alt_names`, `personality_type`, `backstory`, `character_info` (gender, age, appearance, likes, dislikes), and conversational `rp_mannerisms`.
+- **Implementation & Safety Guardrails:**
+  - **JSON Enforcement:** Call local models with `format="json"` and sanitize outputs to prevent malformed bracket parsing errors.
+  - **Strict Hallucination Grounding:** Direct the LLM in the system prompt to use "Unknown" or empty lists for unmentioned details instead of inventing them.
+  - **Censorship Refusal Fail-Safe:** Detect refusal triggers ("I cannot fulfill", "Against safety guidelines") and fallback gracefully to the standard rule-based parse.
+  - **Preserve Prompt Integrity:** Never let the AI modify core system instructions (`system_prompt`) or starter messages (`starter_messages`) to prevent loss of design intent.
+  - **Async/Non-blocking Execution:** Execute the LLM queries inside background Textual workers/threads to keep the UI fully responsive with a non-blocking progress spinner/indicator.
+
