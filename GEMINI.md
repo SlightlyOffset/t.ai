@@ -48,3 +48,16 @@ The codebase is strictly divided into two layers:
 - `/lorebooks`: World-info triggers.
 - `/tcss`: Stylesheets for the Textual UI.
 - `/colab_bridge`: Notebooks for offloading inference to GPU-enabled cloud environments.
+
+## Future Features & Memory
+### Proposed: Image Bubble Support & Asynchronous Image Optimizer
+- **Objective:** Add support for rendering image links/URLs directly in the chat interface using `textual-image` while preventing UI/rendering lag from large/high-res images.
+- **Image Parsing & Rendering:**
+  - Parse markdown image syntax `![alt](url)` and raw image links in messages.
+  - Render dynamically using Sixel, Kitty, or Blocky protocol via `_resolve_image_widget_type()`.
+  - Fall back gracefully to standard text layout (`🖼️ [Image: description]`) if terminal graphics are unsupported or turned off.
+- **Async Optimizer Engine:**
+  - When loading character/user portraits or chat bubble images, downscale them asynchronously (e.g. max dimension 500px to 800px) in a background Textual worker or thread.
+  - Cache optimized copies in a local hidden directory (e.g. `.cache/optimized_images/`) to ensure fast loads on subsequent reads/scrolling.
+  - Primary tool: **Pillow** (pre-installed, fast, cross-platform).
+  - Secondary/Optional tool: **FFmpeg** via background `subprocess` for animated GIF formats.
