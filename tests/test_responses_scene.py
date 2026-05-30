@@ -6,10 +6,10 @@ class TestResponsesScene(unittest.TestCase):
     @patch("engines.responses.ollama.chat")
     @patch("engines.responses.get_setting", return_value="llama3.2")
     def test_extract_scene_from_text_success(self, mock_setting, mock_chat):
-        # Set up mock response from ollama
+        # Set up mock response from ollama with High confidence
         mock_chat.return_value = {
             "message": {
-                "content": "  'Dark Forest'  "
+                "content": "  'Dark Forest' | High  "
             }
         }
         
@@ -24,10 +24,22 @@ class TestResponsesScene(unittest.TestCase):
 
     @patch("engines.responses.ollama.chat")
     @patch("engines.responses.get_setting", return_value="llama3.2")
+    def test_extract_scene_from_text_low_confidence(self, mock_setting, mock_chat):
+        # Set up mock response from ollama with Low confidence
+        mock_chat.return_value = {
+            "message": {
+                "content": "Dark Forest | Low"
+            }
+        }
+        scene = extract_scene_from_text("Let's go into the woods.", "*rustling leaves*")
+        self.assertIsNone(scene)
+
+    @patch("engines.responses.ollama.chat")
+    @patch("engines.responses.get_setting", return_value="llama3.2")
     def test_extract_scene_from_text_unknown(self, mock_setting, mock_chat):
         mock_chat.return_value = {
             "message": {
-                "content": "Unknown"
+                "content": "Unknown | Low"
             }
         }
         scene = extract_scene_from_text("Hello", "Hi there")
@@ -38,7 +50,7 @@ class TestResponsesScene(unittest.TestCase):
     def test_extract_scene_from_starter_success(self, mock_setting, mock_chat):
         mock_chat.return_value = {
             "message": {
-                "content": "A Cozy Cafe"
+                "content": "A Cozy Cafe | Medium"
             }
         }
         scene = extract_scene_from_starter("You find yourself sitting in a cozy coffee shop...")

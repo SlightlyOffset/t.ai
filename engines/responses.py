@@ -177,7 +177,7 @@ def get_sentiment_score(user_input: str, model: str, remote_url: str = None, pro
 def extract_scene_from_text(user_input: str, reply: str) -> str | None:
     """
     Makes a quick lightweight utility LLM call to extract the current scene/location/activity
-    from the user input and assistant reply.
+    from the user input and assistant reply. Requires a High or Medium confidence score.
     """
     utility_model = get_setting("local_utility_model", "llama3.2")
     # Clean tags/markup from input/reply
@@ -186,9 +186,10 @@ def extract_scene_from_text(user_input: str, reply: str) -> str | None:
     
     prompt = (
         "Based on the following conversation turn, identify the current physical location or scene. "
-        "Provide ONLY a short 1-4 word name of the location or activity (e.g. 'A Cozy Cafe', 'Dark Forest', 'City Streets'). "
+        "Provide ONLY a short 1-4 word name of the location or activity, followed by a confidence score of High, Medium, or Low, "
+        "in the format: 'Location | Confidence' (e.g. 'A Cozy Cafe | High', 'Dark Forest | High', 'City Streets | Medium'). "
         "Do not write explanations, sentences, markdown, or punctuation. "
-        "If the location/scene cannot be determined or hasn't changed, output 'Unknown'.\n\n"
+        "If the location/scene cannot be determined or hasn't changed, output 'Unknown | Low'.\n\n"
         f"User Message: {cleaned_input}\n"
         f"Assistant Message: {cleaned_reply}"
     )
@@ -196,7 +197,7 @@ def extract_scene_from_text(user_input: str, reply: str) -> str | None:
     messages = [
         {
             "role": "system",
-            "content": "You are a scene/location extraction utility. Output ONLY the short scene name or 'Unknown'."
+            "content": "You are a scene/location extraction utility. Output ONLY the short scene name and confidence score in the format: Location | Confidence."
         },
         {"role": "user", "content": prompt}
     ]
@@ -211,8 +212,20 @@ def extract_scene_from_text(user_input: str, reply: str) -> str | None:
         scene = result['message']['content'].strip()
         log_debug("SCENE_EXTRACTION_RESPONSE", {"scene": scene})
         scene = re.sub(r'^[\'"`\s\-\[\]]+|[\'"`\s\-\[\]]+$', '', scene).strip()
-        if scene and scene.lower() not in ("unknown", "unknown location", "unknown.") and len(scene) < 40:
-            return scene
+        
+        if "|" in scene:
+            parts = scene.split("|", 1)
+            scene_name = parts[0].strip()
+            confidence = parts[1].strip().lower()
+        else:
+            scene_name = scene
+            confidence = "high"
+            
+        scene_name = re.sub(r'^[\'"`\s\-\[\]]+|[\'"`\s\-\[\]]+$', '', scene_name).strip()
+        
+        if scene_name and scene_name.lower() not in ("unknown", "unknown location", "unknown.") and len(scene_name) < 40:
+            if confidence in ("high", "medium"):
+                return scene_name
     except Exception as e:
         log_debug("SCENE_EXTRACTION_ERROR", {"error": str(e)})
     return None
@@ -221,23 +234,24 @@ def extract_scene_from_text(user_input: str, reply: str) -> str | None:
 def extract_scene_from_starter(starter_text: str) -> str | None:
     """
     Makes a quick lightweight utility LLM call to extract the initial scene/location/activity
-    from the character's starter message.
+    from the character's starter message. Requires a High or Medium confidence score.
     """
     utility_model = get_setting("local_utility_model", "llama3.2")
     cleaned_text = re.sub(r'\[.*?\]', '', starter_text).strip()
     
     prompt = (
         "Based on the following starter roleplay message, identify the physical location or scene. "
-        "Provide ONLY a short 1-4 word name of the location or activity (e.g. 'A Cozy Cafe', 'Dark Forest', 'City Streets'). "
+        "Provide ONLY a short 1-4 word name of the location or activity, followed by a confidence score of High, Medium, or Low, "
+        "in the format: 'Location | Confidence' (e.g. 'A Cozy Cafe | High', 'Dark Forest | High', 'City Streets | Medium'). "
         "Do not write explanations, sentences, markdown, or punctuation. "
-        "If the location/scene cannot be determined, output 'Unknown'.\n\n"
+        "If the location/scene cannot be determined, output 'Unknown | Low'.\n\n"
         f"Starter Message: {cleaned_text}"
     )
     
     messages = [
         {
             "role": "system",
-            "content": "You are a scene/location extraction utility. Output ONLY the short scene name or 'Unknown'."
+            "content": "You are a scene/location extraction utility. Output ONLY the short scene name and confidence score in the format: Location | Confidence."
         },
         {"role": "user", "content": prompt}
     ]
@@ -252,8 +266,20 @@ def extract_scene_from_starter(starter_text: str) -> str | None:
         scene = result['message']['content'].strip()
         log_debug("SCENE_STARTER_RESPONSE", {"scene": scene})
         scene = re.sub(r'^[\'"`\s\-\[\]]+|[\'"`\s\-\[\]]+$', '', scene).strip()
-        if scene and scene.lower() not in ("unknown", "unknown location", "unknown.") and len(scene) < 40:
-            return scene
+        
+        if "|" in scene:
+            parts = scene.split("|", 1)
+            scene_name = parts[0].strip()
+            confidence = parts[1].strip().lower()
+        else:
+            scene_name = scene
+            confidence = "high"
+            
+        scene_name = re.sub(r'^[\'"`\s\-\[\]]+|[\'"`\s\-\[\]]+$', '', scene_name).strip()
+        
+        if scene_name and scene_name.lower() not in ("unknown", "unknown location", "unknown.") and len(scene_name) < 40:
+            if confidence in ("high", "medium"):
+                return scene_name
     except Exception as e:
         log_debug("SCENE_STARTER_ERROR", {"error": str(e)})
     return None
