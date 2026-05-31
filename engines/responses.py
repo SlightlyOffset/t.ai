@@ -958,12 +958,27 @@ def get_respond_stream(user_input: str, profile: dict, profile_path: str = None,
 
                 def ollama_gen():
                     for chunk in ollama_stream:
+                        if not chunk:
+                            continue
+                        # Handle dictionary format
                         if isinstance(chunk, dict):
                             message = chunk.get("message", {})
                             if isinstance(message, dict):
                                 content = message.get("content", "")
                                 if content:
                                     yield content
+                        # Handle newer Ollama Pydantic object format
+                        elif hasattr(chunk, "message"):
+                            message = chunk.message
+                            if hasattr(message, "content"):
+                                content = getattr(message, "content", "")
+                                if content:
+                                    yield content
+                            elif isinstance(message, dict):
+                                content = message.get("content", "")
+                                if content:
+                                    yield content
+                        # Handle list format fallback
                         elif isinstance(chunk, list):
                             for nested in chunk:
                                 if isinstance(nested, dict):
