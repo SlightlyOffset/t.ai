@@ -71,6 +71,25 @@ class TestFormatting(unittest.TestCase):
         points = formatter.get_tts_split_points("Hi. Hello!")
         self.assertIn(3, points)
 
+    def test_format_roleplay_text_escapes_brackets(self):
+        text = 'Hello [friend], "[BRAIN ERROR] [type=None]" *smiles [brightly]*'
+        result = format_roleplay_text(
+            text=text,
+            role="assistant",
+            user_name="Alex",
+            character_name="Nova",
+            user_speech_color="cyan",
+            assistant_speech_color="magenta",
+        )
+        # Verify that all opening brackets are successfully escaped to "\["
+        self.assertIn("Hello \\[friend]", result)
+        self.assertIn('\\[BRAIN ERROR]', result)
+        self.assertIn('\\[type=None]', result)
+        self.assertIn('smiles \\[brightly]', result)
+        # Verify it still applies style tags correctly around the escaped brackets
+        self.assertIn('[magenta]"\\[BRAIN ERROR] \\[type=None]"[/magenta]', result)
+        self.assertIn('[i][dim]smiles \\[brightly][/dim][/i]', result)
+
 
 if __name__ == "__main__":
     unittest.main()
