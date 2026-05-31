@@ -416,6 +416,7 @@ def _call_llm_once(messages: list, model: str, remote_url: str = None, temperatu
                 "temperature": temperature,
                 "max_tokens": max_tokens,
                 "repetition_penalty": repetition_penalty,
+                "model": model or "default",
             }
             response = requests.post(full_url, json=payload, stream=False, timeout=90)
             content = _extract_remote_message_content(response).strip()
@@ -459,7 +460,8 @@ def _generate_candidate_replies(messages: list, model: str, remote_url: str | No
                 "max_tokens": 1024,
                 "repetition_penalty": rep_penalty,
                 "n": candidate_count,
-                "use_rag": True
+                "use_rag": True,
+                "model": model or "default",
             }
             response = requests.post(full_url, json=payload, stream=False, timeout=120)
             response.raise_for_status()
@@ -939,7 +941,8 @@ def get_respond_stream(user_input: str, profile: dict, profile_path: str = None,
                     "temperature": generation_temperature, 
                     "max_tokens": 512,
                     "repetition_penalty": generation_repetition_penalty,
-                    "use_rag": True
+                    "use_rag": True,
+                    "model": model or "default",
                 }
                 response = requests.post(full_url, json=payload, stream=True, timeout=60)
                 response.raise_for_status()
