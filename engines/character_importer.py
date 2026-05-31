@@ -130,6 +130,168 @@ class CharacterImporter:
         return profile
 
     @staticmethod
+    def refine_character_profile(profile, raw_st_data=None, model=None):
+        """
+        Uses a local LLM to refine and clean character profile metadata fields.
+        Returns the updated profile (modifying fields like alt_names, character_info, backstory, rp_mannerisms).
+        """
+        import ollama
+        from engines.config import get_setting
+
+        if not profile:
+            return profile
+
+        refine_model = model or get_setting("local_utility_model", "llama3.2")
+        char_name = profile.get("name", "Unknown")
+
+        # 1. Gather all raw context from raw_st_data or the profile
+        raw_personality = ""
+        raw_description = ""
+        raw_scenario = ""
+        raw_mes_example = ""
+
+        if raw_st_data:
+            raw_personality = raw_st_data.get("personality", "")
+            raw_description = raw_st_data.get("description", "")
+            raw_scenario = raw_st_data.get("scenario", "")
+            raw_mes_example = raw_st_data.get("mes_example", "")
+
+        # Fallback to existing profile fields if raw_st_data is missing
+        if not raw_personality:
+            raw_personality = profile.get("personality_type", "")
+        if not raw_description:
+            raw_description = profile.get("backstory", "")
+        if not raw_scenario:
+            raw_scenario = profile.get("character_info", {}).get("other", "")
+
+        # 2. Formulate prompt
+        system_prompt = (
+            "You are an expert character profile extraction and cleaning assistant.\n"
+            "Analyze the provided raw character information and extract structured details strictly based on the text.\n"
+            "Respond ONLY with a valid JSON object matching the following schema. "
+            "Do not include any conversational intro/outro text, explanations, or code blocks.\n\n"
+            "{\n"
+            '  "alt_names": "Comma-separated string of nicknames, aliases or alternative names, or empty string",\n'
+            '  "gender": "Character gender (e.g. Male, Female, Non-binary, Unknown)",\n'
+            '  "age": "Character age (e.g. 24, Unknown)",\n'
+            '  "appearance": "Short description of appearance, height, hair, clothing, eyes",\n'
+            '  "likes": ["list of strings containing likes/hobbies, or empty list"],\n'
+            '  "dislikes": ["list of strings containing dislikes/aversions, or empty list"],\n'
+            '  "rp_mannerisms": ["List of 3-5 specific conversational traits, e.g. \'frequently stutters when nervous\', \'speaks in a polite, formal tone\'"],\n'
+            '  "personality_type": "Concise 1-3 sentence summary of personality",\n'
+            '  "backstory": "Clean, narrative biography summary of history and origin"\n'
+            "}"
+        )
+
+        user_content = (
+            f"Character Name: {char_name}\n"
+            f"Raw Personality:\n{raw_personality}\n\n"
+            f"Raw Description/Backstory:\n{raw_description}\n\n"
+            f"Raw Scenario/Other Details:\n{raw_scenario}\n\n"
+            f"Raw Dialogue Examples:\n{raw_mes_example}\n\n"
+            "Strict Instructions:\n"
+            "1. Extract only facts directly mentioned or clearly implied.\n"
+            "2. If age or gender are not mentioned or cannot be inferred, use 'Unknown'.\n"
+            "3. Do not invent backstory details. Keep it grounded.\n"
+            "4. Return ONLY valid JSON."
+        )
+
+        messages = [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": user_content}
+        ]
+
+        try:
+            # Enforce JSON formatting
+            result = ollama.chat(
+                model=refine_model,
+                messages=messages,
+                stream=False,
+                format="json",
+                options={"temperature": 0.1}
+            )
+
+            response_content = result.get("message", {}).get("content", "").strip()
+
+            # Refusal detection: check for common safety guidelines / refusal templates
+            refusal_triggers = [
+                "i cannot fulfill", "against safety guidelines", "i am unable to",
+                "cannot generate content", "against policy", "cannot assist with this"
+            ]
+            if any(trigger in response_content.lower() for trigger in refusal_triggers):
+                print(f"{Fore.YELLOW}[WARNING] Local model refused to process character card due to safety constraints. Falling back to rule-based import.")
+                return profile
+
+            # Parse JSON
+            refined_data = None
+            try:
+                refined_data = json.loads(response_content)
+            except json.JSONDecodeError:
+                # Attempt regex-based cleanup of markdown code block
+                match = re.search(r'```(?:json)?\s*(\{.*?\})\s*```', response_content, re.DOTALL | re.IGNORECASE)
+                if match:
+                    try:
+                        refined_data = json.loads(match.group(1))
+                    except json.JSONDecodeError:
+                        pass
+                
+                # Fallback to finding first/last brackets
+                if not refined_data:
+                    start = response_content.find('{')
+                    end = response_content.rfind('}')
+                    if start != -1 and end != -1 and end > start:
+                        try:
+                            refined_data = json.loads(response_content[start:end+1])
+                        except json.JSONDecodeError:
+                            pass
+
+            if not refined_data:
+                print(f"{Fore.YELLOW}[WARNING] Failed to parse AI refinement JSON response. Falling back to rule-based values.")
+                return profile
+
+            # Merge refined fields into the profile
+            if "alt_names" in refined_data and isinstance(refined_data["alt_names"], str):
+                profile["alt_names"] = refined_data["alt_names"].strip()
+            
+            if "personality_type" in refined_data and isinstance(refined_data["personality_type"], str):
+                profile["personality_type"] = refined_data["personality_type"].strip()
+                
+            if "backstory" in refined_data and isinstance(refined_data["backstory"], str):
+                profile["backstory"] = refined_data["backstory"].strip()
+                
+            if "rp_mannerisms" in refined_data and isinstance(refined_data["rp_mannerisms"], list):
+                cleaned_mannerisms = [m.strip() for m in refined_data["rp_mannerisms"] if isinstance(m, str) and m.strip()]
+                if cleaned_mannerisms:
+                    profile["rp_mannerisms"] = cleaned_mannerisms
+
+            # Update character_info dict safely
+            if "character_info" not in profile:
+                profile["character_info"] = {}
+                
+            info = profile["character_info"]
+            
+            if "gender" in refined_data and isinstance(refined_data["gender"], str):
+                info["gender"] = refined_data["gender"].strip()
+                
+            if "age" in refined_data and isinstance(refined_data["age"], str):
+                info["age"] = refined_data["age"].strip()
+                
+            if "appearance" in refined_data and isinstance(refined_data["appearance"], str):
+                info["appearance"] = refined_data["appearance"].strip()
+                
+            if "likes" in refined_data and isinstance(refined_data["likes"], list):
+                info["likes"] = [x.strip() for x in refined_data["likes"] if isinstance(x, str) and x.strip()]
+                
+            if "dislikes" in refined_data and isinstance(refined_data["dislikes"], list):
+                info["dislikes"] = [x.strip() for x in refined_data["dislikes"] if isinstance(x, str) and x.strip()]
+
+            return profile
+
+        except Exception as e:
+            print(f"{Fore.YELLOW}[WARNING] AI refinement failed: {e}. Falling back to rule-based values.")
+            return profile
+
+    @staticmethod
     def save_profile(profile, filename=None):
         """Saves the converted profile to the profiles/ directory."""
         if not profile or not profile.get("name"):
@@ -168,8 +330,8 @@ class CharacterImporter:
             print(f"{Fore.RED}[ERROR] Failed to save profile: {e}")
             return False
 
-def import_character(source_path):
-    """Main entry point for importing a character."""
+def import_character(source_path, refine=False, model=None):
+    """Main entry point for importing a character with optional AI refinement."""
     data = None
     avatar_path = "img/No_Image_Error.png"
 
@@ -206,12 +368,20 @@ def import_character(source_path):
         return None
 
     new_profile = CharacterImporter.convert_to_project_format(data, avatar_path=avatar_path)
+    
+    if refine:
+        from engines.config import get_setting
+        refine_model = model or get_setting("local_utility_model", "llama3.2")
+        print(Fore.CYAN + f"[SYSTEM] Running AI profile refinement using local model '{refine_model}'...")
+        new_profile = CharacterImporter.refine_character_profile(new_profile, raw_st_data=data, model=refine_model)
+
     save_path = CharacterImporter.save_profile(new_profile)
 
     if save_path:
         print(f"{Fore.GREEN}[SUCCESS] Imported {new_profile['name']} to {save_path}")
         if avatar_path != "img/No_Image_Error.png":
              print(f"{Fore.GREEN}[SUCCESS] Saved avatar to {avatar_path}")
-        print(f"{Fore.YELLOW}[INFO] Conversion may be imperfect. It is recommended to review the profile and adjust any fields as necessary.")
+        if not refine:
+            print(f"{Fore.YELLOW}[INFO] Conversion may be imperfect. It is recommended to run AI refinement or review the profile.")
         return save_path
     return None
