@@ -398,19 +398,33 @@ def import_character(source_path, refine=False, model=None):
 
     new_profile = CharacterImporter.convert_to_project_format(data, avatar_path=avatar_path)
     
-    if refine:
-        from engines.config import get_setting
-        refine_model = model or get_setting("local_utility_model", "llama3.2")
-        print(Fore.CYAN + f"[SYSTEM] Running AI profile refinement using local model '{refine_model}'...")
-        new_profile = CharacterImporter.refine_character_profile(new_profile, raw_st_data=data, model=refine_model)
-
+    # 1. Save the basic rule-based profile first to ensure critical fields are saved
     save_path = CharacterImporter.save_profile(new_profile)
 
     if save_path:
         print(f"{Fore.GREEN}[SUCCESS] Imported {new_profile['name']} to {save_path}")
         if avatar_path != "img/No_Image_Error.png":
              print(f"{Fore.GREEN}[SUCCESS] Saved avatar to {avatar_path}")
-        if not refine:
+             
+        # 2. Run AI refinement on top of the saved profile if requested
+        if refine:
+            from engines.config import get_setting
+            refine_model = model or get_setting("local_utility_model", "llama3.2")
+            print(Fore.CYAN + f"[SYSTEM] Running AI profile refinement using local model '{refine_model}'...")
+            
+            try:
+                with open(save_path, "r", encoding="utf-8") as f:
+                    saved_profile = json.load(f)
+                
+                refined_profile = CharacterImporter.refine_character_profile(saved_profile, raw_st_data=data, model=refine_model)
+                
+                # Overwrite the saved profile with refined contents
+                CharacterImporter.save_profile(refined_profile, filename=os.path.basename(save_path))
+                print(f"{Fore.GREEN}[SUCCESS] AI refinement complete. Refined fields merged successfully.")
+            except Exception as e:
+                print(f"{Fore.YELLOW}[WARNING] AI refinement failed: {e}. Keeping the baseline rule-based profile.")
+        else:
             print(f"{Fore.YELLOW}[INFO] Conversion may be imperfect. It is recommended to run AI refinement or review the profile.")
+            
         return save_path
     return None
