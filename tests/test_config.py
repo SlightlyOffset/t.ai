@@ -2,29 +2,44 @@
 import unittest
 import os
 import json
-from engines.config import get_setting, update_setting, SETTINGS_FILE
+from engines.config import get_setting, update_setting
+import engines.config
 
 class TestConfig(unittest.TestCase):
     def setUp(self):
-        # Backup existing settings
-        self.backup_path = SETTINGS_FILE + ".bak"
-        if os.path.exists(SETTINGS_FILE):
-            os.replace(SETTINGS_FILE, self.backup_path)
+        # Redirect config file reference to settings_test.json for testing
+        import engines.config
+        self.original_settings_file = engines.config.SETTINGS_FILE
+        engines.config.SETTINGS_FILE = "settings_test.json"
         
-        # Create a fresh settings file for testing
+        self.backup_path = engines.config.SETTINGS_FILE + ".bak"
+        
         self.test_settings = {
             "tts_enabled": True,
             "suppress_errors": False
         }
-        with open(SETTINGS_FILE, "w") as f:
+        with open(engines.config.SETTINGS_FILE, "w", encoding="utf-8") as f:
             json.dump(self.test_settings, f)
 
     def tearDown(self):
-        # Restore backup
-        if os.path.exists(SETTINGS_FILE):
-            os.remove(SETTINGS_FILE)
-        if os.path.exists(self.backup_path):
-            os.replace(self.backup_path, SETTINGS_FILE)
+        import engines.config
+        test_file = engines.config.SETTINGS_FILE
+        test_bak = test_file + ".bak"
+        
+        # Cleanup temporary files
+        if os.path.exists(test_file):
+            try:
+                os.remove(test_file)
+            except Exception:
+                pass
+        if os.path.exists(test_bak):
+            try:
+                os.remove(test_bak)
+            except Exception:
+                pass
+                
+        # Restore original reference
+        engines.config.SETTINGS_FILE = self.original_settings_file
 
     def test_get_setting_exists(self):
         val = get_setting("tts_enabled", False)
@@ -72,7 +87,7 @@ class TestConfig(unittest.TestCase):
 
         try:
             # 1. Corrupt primary settings file
-            with open(SETTINGS_FILE, "w") as f:
+            with open(engines.config.SETTINGS_FILE, "w") as f:
                 f.write("invalid json contents")
 
             # 2. Write a test backup file
@@ -86,7 +101,7 @@ class TestConfig(unittest.TestCase):
             self.assertEqual(result.get("suppress_errors"), True)
 
             # 4. Verify primary settings file was healed/restored
-            with open(SETTINGS_FILE, "r") as f:
+            with open(engines.config.SETTINGS_FILE, "r") as f:
                 healed = json.load(f)
             self.assertEqual(healed.get("tts_enabled"), False)
         finally:

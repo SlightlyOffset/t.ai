@@ -10,11 +10,15 @@ from ui.SettingsScreen import SettingsScreen
 
 class TestSettingsScreen(unittest.TestCase):
     def setUp(self):
-        # Backup global settings file to prevent test pollution
-        from engines.config import SETTINGS_FILE
-        self.backup_path = SETTINGS_FILE + ".bak"
-        if os.path.exists(SETTINGS_FILE):
-            os.replace(SETTINGS_FILE, self.backup_path)
+        # Redirect config file reference to settings_test.json for testing to avoid touching production settings
+        import engines.config
+        import json
+        self.original_settings_file = engines.config.SETTINGS_FILE
+        engines.config.SETTINGS_FILE = "settings_test.json"
+        
+        # Write clean starting state to the test file
+        with open(engines.config.SETTINGS_FILE, "w", encoding="utf-8") as f:
+            json.dump({}, f)
 
         self.screen = SettingsScreen()
         self.screen.dismiss = MagicMock()
@@ -65,12 +69,24 @@ class TestSettingsScreen(unittest.TestCase):
         self.screen.query_one = mock_query_one
 
     def tearDown(self):
-        # Restore global settings file
-        from engines.config import SETTINGS_FILE
-        if os.path.exists(SETTINGS_FILE):
-            os.remove(SETTINGS_FILE)
-        if os.path.exists(self.backup_path):
-            os.replace(self.backup_path, SETTINGS_FILE)
+        import engines.config
+        test_file = engines.config.SETTINGS_FILE
+        test_bak = test_file + ".bak"
+        
+        # Cleanup temporary files
+        if os.path.exists(test_file):
+            try:
+                os.remove(test_file)
+            except Exception:
+                pass
+        if os.path.exists(test_bak):
+            try:
+                os.remove(test_bak)
+            except Exception:
+                pass
+                
+        # Restore original reference
+        engines.config.SETTINGS_FILE = self.original_settings_file
 
     def test_cancel_action(self):
         """Test that cancel action dismisses with None."""
