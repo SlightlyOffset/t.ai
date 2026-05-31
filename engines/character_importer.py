@@ -79,9 +79,9 @@ class CharacterImporter:
         # Conditional extraction of other fields
         preferred_edge_voice = st_data.get("preferred_edge_voice") or st_data.get("preferred_tts_voice") or "en-US-AvaMultilingualNeural"
         tts_engine = st_data.get("tts_engine") or "edge-tts"
-        voice_clone_ref = st_data.get("voice_clone_ref")
+        voice_clone_ref = st_data.get("voice_clone_ref") or ""
         tts_language = st_data.get("tts_language") or "en"
-        llm_model = st_data.get("llm_model")
+        llm_model = st_data.get("llm_model") or ""
         
         try:
             relationship_score = int(st_data.get("relationship_score", 0))
@@ -101,21 +101,21 @@ class CharacterImporter:
         else:
             # Merge with default to ensure no missing keys
             colors = {**default_colors, **colors}
-
+ 
         # Basic mapping with fallback conditional extraction
         profile = {
             "name": char_name,
             "avatar_path": avatar_path or st_data.get("avatar_path") or "img/No_Image_Error.png",
-            "alt_names": st_data.get("alt_names", ""),
+            "alt_names": st_data.get("alt_names") or "",
             "personality_type": replace_placeholders(g("personality")),
             "backstory": replace_placeholders(g("description")),
             "rp_mannerisms": [],
             "character_info": {
-                "gender": st_data.get("character_info", {}).get("gender") if isinstance(st_data.get("character_info"), dict) else st_data.get("gender") or "Unknown",
-                "age": st_data.get("character_info", {}).get("age") if isinstance(st_data.get("character_info"), dict) else st_data.get("age") or "Unknown",
-                "appearance": st_data.get("character_info", {}).get("appearance") if isinstance(st_data.get("character_info"), dict) else st_data.get("appearance") or "",
-                "likes": st_data.get("character_info", {}).get("likes") if isinstance(st_data.get("character_info"), dict) else st_data.get("likes") or [],
-                "dislikes": st_data.get("character_info", {}).get("dislikes") if isinstance(st_data.get("character_info"), dict) else st_data.get("dislikes") or [],
+                "gender": (st_data.get("character_info", {}).get("gender") if isinstance(st_data.get("character_info"), dict) else st_data.get("gender")) or "Unknown",
+                "age": (st_data.get("character_info", {}).get("age") if isinstance(st_data.get("character_info"), dict) else st_data.get("age")) or "Unknown",
+                "appearance": (st_data.get("character_info", {}).get("appearance") if isinstance(st_data.get("character_info"), dict) else st_data.get("appearance")) or "",
+                "likes": (st_data.get("character_info", {}).get("likes") if isinstance(st_data.get("character_info"), dict) else st_data.get("likes")) or [],
+                "dislikes": (st_data.get("character_info", {}).get("dislikes") if isinstance(st_data.get("character_info"), dict) else st_data.get("dislikes")) or [],
                 "other": replace_placeholders(g("scenario"))
             },
             "starter_messages": st_data.get("starter_messages") if isinstance(st_data.get("starter_messages"), list) else ([replace_placeholders(g("first_mes"))] if g("first_mes") else []),
@@ -125,6 +125,7 @@ class CharacterImporter:
             "voice_clone_ref": voice_clone_ref,
             "tts_language": tts_language,
             "llm_model": llm_model,
+            "lorebook_path": st_data.get("lorebook_path") or "",
             "relationship_score": relationship_score,
             "colors": colors
         }
