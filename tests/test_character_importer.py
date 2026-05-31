@@ -42,7 +42,9 @@ class TestCharacterImporterRefine(unittest.TestCase):
             "dislikes": ["Bugs"],
             "rp_mannerisms": ["speaks with code snippets"],
             "personality_type": "Curious and analytical",
-            "backstory": "An AI assistant created to help write code."
+            "backstory": "An AI assistant created to help write code.",
+            "other": "Optimized programming scenario",
+            "system_prompt": "You are Lily, a smart AI coder."
         }
         mock_chat.return_value = {
             "message": {
@@ -60,6 +62,7 @@ class TestCharacterImporterRefine(unittest.TestCase):
         self.assertEqual(refined["alt_names"], "Lily, Lilith")
         self.assertEqual(refined["personality_type"], "Curious and analytical")
         self.assertEqual(refined["backstory"], "An AI assistant created to help write code.")
+        self.assertEqual(refined["system_prompt"], "You are Lily, a smart AI coder.")
         self.assertEqual(refined["rp_mannerisms"], ["speaks with code snippets"])
         
         info = refined["character_info"]
@@ -68,6 +71,7 @@ class TestCharacterImporterRefine(unittest.TestCase):
         self.assertEqual(info["appearance"], "Silver hair, blue eyes")
         self.assertEqual(info["likes"], ["Coding", "Coffee"])
         self.assertEqual(info["dislikes"], ["Bugs"])
+        self.assertEqual(info["other"], "Optimized programming scenario")
 
         # Check call arguments
         mock_chat.assert_called_once()

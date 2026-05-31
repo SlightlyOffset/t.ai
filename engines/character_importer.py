@@ -76,36 +76,57 @@ class CharacterImporter:
             text = text.replace("\r\n", "\n").replace("\r", "\n")
             return text.strip()
 
-        # Basic mapping
+        # Conditional extraction of other fields
+        preferred_edge_voice = st_data.get("preferred_edge_voice") or st_data.get("preferred_tts_voice") or "en-US-AvaMultilingualNeural"
+        tts_engine = st_data.get("tts_engine") or "edge-tts"
+        voice_clone_ref = st_data.get("voice_clone_ref")
+        tts_language = st_data.get("tts_language") or "en"
+        llm_model = st_data.get("llm_model")
+        
+        try:
+            relationship_score = int(st_data.get("relationship_score", 0))
+        except (ValueError, TypeError):
+            relationship_score = 0
+            
+        # Colors conditional extraction
+        default_colors = {
+            "text": "WHITE",
+            "label": "NORMAL",
+            "name_lbl": "magenta",
+            "speech_highlight": "yellow"
+        }
+        colors = st_data.get("colors")
+        if not colors or not isinstance(colors, dict):
+            colors = default_colors
+        else:
+            # Merge with default to ensure no missing keys
+            colors = {**default_colors, **colors}
+
+        # Basic mapping with fallback conditional extraction
         profile = {
             "name": char_name,
-            "avatar_path": avatar_path or "img/No_Image_Error.png",
-            "alt_names": "",
+            "avatar_path": avatar_path or st_data.get("avatar_path") or "img/No_Image_Error.png",
+            "alt_names": st_data.get("alt_names", ""),
             "personality_type": replace_placeholders(g("personality")),
             "backstory": replace_placeholders(g("description")),
             "rp_mannerisms": [],
             "character_info": {
-                "gender": "Unknown",
-                "age": "Unknown",
-                "appearance": "",
-                "likes": [],
-                "dislikes": [],
+                "gender": st_data.get("character_info", {}).get("gender") if isinstance(st_data.get("character_info"), dict) else st_data.get("gender") or "Unknown",
+                "age": st_data.get("character_info", {}).get("age") if isinstance(st_data.get("character_info"), dict) else st_data.get("age") or "Unknown",
+                "appearance": st_data.get("character_info", {}).get("appearance") if isinstance(st_data.get("character_info"), dict) else st_data.get("appearance") or "",
+                "likes": st_data.get("character_info", {}).get("likes") if isinstance(st_data.get("character_info"), dict) else st_data.get("likes") or [],
+                "dislikes": st_data.get("character_info", {}).get("dislikes") if isinstance(st_data.get("character_info"), dict) else st_data.get("dislikes") or [],
                 "other": replace_placeholders(g("scenario"))
             },
-            "starter_messages": [replace_placeholders(g("first_mes"))] if g("first_mes") else [],
-            "system_prompt": f"Character: {char_name}\nPersonality: {replace_placeholders(g('personality'))}\nDescription: {replace_placeholders(g('description'))}\nScenario: {replace_placeholders(g('scenario'))}\n{replace_placeholders(g('system_prompt'))}",
-            "preferred_edge_voice": "en-US-AvaMultilingualNeural",
-            "tts_engine": "edge-tts",
-            "voice_clone_ref": None,
-            "tts_language": "en",
-            "llm_model": None,
-            "relationship_score": 0,
-            "colors": {
-                "text": "WHITE",
-                "label": "NORMAL",
-                "name_lbl": "magenta",
-                "speech_highlight": "yellow"
-            }
+            "starter_messages": st_data.get("starter_messages") if isinstance(st_data.get("starter_messages"), list) else ([replace_placeholders(g("first_mes"))] if g("first_mes") else []),
+            "system_prompt": st_data.get("system_prompt") or f"Character: {char_name}\nPersonality: {replace_placeholders(g('personality'))}\nDescription: {replace_placeholders(g('description'))}\nScenario: {replace_placeholders(g('scenario'))}",
+            "preferred_edge_voice": preferred_edge_voice,
+            "tts_engine": tts_engine,
+            "voice_clone_ref": voice_clone_ref,
+            "tts_language": tts_language,
+            "llm_model": llm_model,
+            "relationship_score": relationship_score,
+            "colors": colors
         }
 
         # Attempt to extract mannerisms from message examples
@@ -179,7 +200,9 @@ class CharacterImporter:
             '  "dislikes": ["list of strings containing dislikes/aversions, or empty list"],\n'
             '  "rp_mannerisms": ["List of 3-5 specific conversational traits, e.g. \'frequently stutters when nervous\', \'speaks in a polite, formal tone\'"],\n'
             '  "personality_type": "Concise 1-3 sentence summary of personality",\n'
-            '  "backstory": "Clean, narrative biography summary of history and origin"\n'
+            '  "backstory": "Clean, narrative biography summary of history and origin",\n'
+            '  "other": "Refined description of the roleplay scenario or other setting details",\n'
+            '  "system_prompt": "A highly immersive, detailed system prompt for the roleplay. It should write instructions on how the AI should roleplay as this character (e.g. \'You are [Name], a... Describe actions in asterisks... Use a stuttering tone...\'). Keep it in the second person (\'You are...\')."\n'
             "}"
         )
 
@@ -259,6 +282,9 @@ class CharacterImporter:
             if "backstory" in refined_data and isinstance(refined_data["backstory"], str):
                 profile["backstory"] = refined_data["backstory"].strip()
                 
+            if "system_prompt" in refined_data and isinstance(refined_data["system_prompt"], str):
+                profile["system_prompt"] = refined_data["system_prompt"].strip()
+
             if "rp_mannerisms" in refined_data and isinstance(refined_data["rp_mannerisms"], list):
                 cleaned_mannerisms = [m.strip() for m in refined_data["rp_mannerisms"] if isinstance(m, str) and m.strip()]
                 if cleaned_mannerisms:
@@ -284,6 +310,9 @@ class CharacterImporter:
                 
             if "dislikes" in refined_data and isinstance(refined_data["dislikes"], list):
                 info["dislikes"] = [x.strip() for x in refined_data["dislikes"] if isinstance(x, str) and x.strip()]
+
+            if "other" in refined_data and isinstance(refined_data["other"], str):
+                info["other"] = refined_data["other"].strip()
 
             return profile
 
