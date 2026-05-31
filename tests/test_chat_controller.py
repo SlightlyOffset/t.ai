@@ -7,6 +7,7 @@ from engines.chat_controller import (
     handle_command_input,
     next_response_variant_or_regen,
     previous_response_variant,
+    get_latest_regeneration_prompt,
 )
 
 
@@ -63,6 +64,17 @@ class TestChatController(unittest.TestCase):
         self.assertEqual(nxt["type"], "next")
         self.assertEqual(nxt["content"], "c")
         self.assertTrue(mock_save_history.called)
+
+    @patch("engines.chat_controller.memory_manager.load_history")
+    def test_get_latest_regeneration_prompt_consecutive_assistant(self, mock_load_history):
+        history = [
+            {"role": "user", "content": "hello"},
+            {"role": "assistant", "content": "hi"},
+            {"role": "assistant", "content": "how are you?"}
+        ]
+        mock_load_history.return_value = history
+        prompt = get_latest_regeneration_prompt("profile")
+        self.assertEqual(prompt, "")
 
 
 if __name__ == "__main__":

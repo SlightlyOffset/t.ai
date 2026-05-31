@@ -585,7 +585,8 @@ def _perform_post_processing(
                 last_msg["selected_index"] = len(last_msg["alternatives"]) - 1
                 last_msg["content"] = reply
         else:
-            full_history.append({'role': 'user', 'content': user_input})
+            if user_input.strip():
+                full_history.append({'role': 'user', 'content': user_input})
             full_history.append({'role': 'assistant', 'content': reply})
 
         memory_manager.save_history(
@@ -679,8 +680,13 @@ def get_respond_stream(user_input: str, profile: dict, profile_path: str = None,
     # for a failed turn, so we treat it as is_regeneration = False for history saving and prompting.
     is_regenerating_existing = False
     if is_regeneration:
-        if len(prompt_history) >= 2 and prompt_history[-1].get("role") == "assistant" and prompt_history[-2].get("role") == "user" and prompt_history[-2].get("content") == user_input:
-            is_regenerating_existing = True
+        if len(prompt_history) >= 2 and prompt_history[-1].get("role") == "assistant":
+            last_user_or_assistant = prompt_history[-2]
+            if (
+                (last_user_or_assistant.get("role") == "user" and last_user_or_assistant.get("content") == user_input)
+                or (last_user_or_assistant.get("role") == "assistant" and user_input == "")
+            ):
+                is_regenerating_existing = True
         if not is_regenerating_existing:
             is_regeneration = False
 
