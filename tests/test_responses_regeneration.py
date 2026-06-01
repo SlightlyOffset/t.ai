@@ -5,6 +5,19 @@ from engines.responses import get_respond_stream
 
 
 class TestResponsesRegeneration(unittest.TestCase):
+    def setUp(self):
+        # Force all background threads to run synchronously during tests to prevent race conditions
+        self.thread_patcher = patch("threading.Thread.start", autospec=True)
+        self.mock_thread_start = self.thread_patcher.start()
+        
+        def run_sync(mock_self):
+            if mock_self._target:
+                mock_self._target(*mock_self._args, **mock_self._kwargs)
+                
+        self.mock_thread_start.side_effect = run_sync
+
+    def tearDown(self):
+        self.thread_patcher.stop()
     @patch("engines.responses.get_pipeline_flags", return_value={
         "enabled": False,
         "instrumentation": False,
@@ -319,6 +332,103 @@ class TestResponsesRegeneration(unittest.TestCase):
         self.assertEqual(saved_history[3], {"role": "assistant", "content": "New response"})
         mock_get_sentiment.assert_called_once()
         mock_memory_manager.clear_pending_user_message.assert_called_once_with("test_profile")
+
+    @patch("engines.responses.get_pipeline_flags", return_value={
+        "enabled": False,
+        "instrumentation": False,
+        "state": False,
+        "memory": False,
+        "planner": False,
+        "candidates": False,
+        "critic": False,
+        "candidate_count": 1,
+        "style_profile": "balanced",
+    })
+    @patch("engines.responses.get_sentiment_score", return_value=0)
+    @patch("engines.responses.build_system_prompt", return_value="SYSTEM_PROMPT")
+    @patch("engines.responses.get_setting")
+    @patch("engines.responses.memory_manager")
+    @patch("engines.responses.ollama.chat")
+    def test_regeneration_dynamic_temperature_and_repetition_penalty(
+        self,
+        mock_ollama_chat,
+        mock_memory_manager,
+        mock_get_setting,
+        _mock_build_system_prompt,
+        _mock_get_sentiment,
+        _mock_pipeline_flags,
+    ):
+        profile = {"name": "TestAI", "llm_model": "test-model", "relationship_score": 0}
+        
+        # Test Case 1: First regeneration (n_regen = 1, since there's 1 alternative in history)
+        prompt_history = [
+            {"role": "user", "content": "Question"},
+            {"role": "assistant", "content": "Old answer", "alternatives": ["Old answer"], "selected_index": 0},
+        ]
+        full_history = list(prompt_history)
+
+        mock_get_setting.side_effect = lambda key, default=None: {
+            "default_llm_model": "test-model",
+            "remote_llm_url": None,
+            "interaction_mode": "rp",
+            "memory_limit": 15,
+            "repetition_penalty": 1.15,
+        }.get(key, default)
+        
+        mock_memory_manager.get_full_data.return_value = {
+            "metadata": {"current_scene": "Room", "memory_core": ""}
+        }
+        mock_memory_manager.load_history.side_effect = [prompt_history, full_history]
+        mock_ollama_chat.return_value = [{"message": {"content": "New answer"}}]
+
+        list(
+            get_respond_stream(
+                "Question",
+                profile,
+                history_profile_name="test_profile",
+                is_regeneration=True,
+            )
+        )
+
+        # Verify that temperature is 0.8 + 0.15 = 0.95 and repetition penalty is 1.15 + 0.05 = 1.20
+        called_options = mock_ollama_chat.call_args_list[0][1]["options"]
+        self.assertAlmostEqual(called_options["temperature"], 0.95)
+        self.assertAlmostEqual(called_options["repeat_penalty"], 1.20)
+        
+        # Verify the first regeneration diversity constraint is in the system prompt
+        called_messages = mock_ollama_chat.call_args_list[0][1]["messages"]
+        self.assertIn("Ensure this new response is completely different", called_messages[0]["content"])
+
+        # Test Case 2: Third regeneration (n_regen = 3)
+        prompt_history2 = [
+            {"role": "user", "content": "Question"},
+            {"role": "assistant", "content": "Old answer", "alternatives": ["Ans 1", "Ans 2", "Ans 3"], "selected_index": 2},
+        ]
+        full_history2 = list(prompt_history2)
+        mock_memory_manager.load_history.side_effect = [prompt_history2, full_history2]
+        mock_ollama_chat.reset_mock()
+        mock_ollama_chat.return_value = [{"message": {"content": "Ans 4"}}]
+
+        list(
+            get_respond_stream(
+                "Question",
+                profile,
+                history_profile_name="test_profile",
+                is_regeneration=True,
+            )
+        )
+
+        # For n_regen = 3:
+        # temp_offset = 0.15 + (0.05 * 2) = 0.25
+        # temperature = 0.8 + 0.25 = 1.05
+        # penalty = 1.15 + 0.05 + (0.02 * 2) = 1.24
+        called_options2 = mock_ollama_chat.call_args_list[0][1]["options"]
+        self.assertAlmostEqual(called_options2["temperature"], 1.05)
+        self.assertAlmostEqual(called_options2["repeat_penalty"], 1.24)
+
+        # Verify first-regeneration prompt is NOT in the system prompt because n_regen = 3 != 1
+        called_messages2 = mock_ollama_chat.call_args_list[0][1]["messages"]
+        self.assertNotIn("Ensure this new response is completely different", called_messages2[0]["content"])
 
 
 if __name__ == "__main__":

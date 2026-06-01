@@ -7,9 +7,27 @@ class TestFormatting(unittest.TestCase):
     def test_format_summary_text(self):
         summary = "## Header\n**Bold**\n* item"
         result = format_summary_text(summary)
+        self.assertIn("[bold yellow]Memory Core Summary[/bold yellow]", result)
         self.assertIn("[b][u]Header[/u][/b]", result)
         self.assertIn("[b]Bold[/b]", result)
         self.assertIn("• item", result)
+
+    def test_format_summary_cleans_legacy_tags(self):
+        summary = "[bold yellow] Memory Core Summary [/bold yellow]\n## Header\n* item"
+        result = format_summary_text(summary)
+        # Check that [bold yellow] Memory Core Summary [/bold yellow] is stripped and prepended exactly once
+        self.assertEqual(result.count("Memory Core Summary"), 1)
+        self.assertIn("[bold yellow]Memory Core Summary[/bold yellow]\n\n", result)
+        self.assertIn("• item", result)
+
+    def test_format_summary_cleans_stray_tags(self):
+        summary = "## Header\n[bold]Some bold[/bold]\n* item [yellow]tag[/yellow]"
+        result = format_summary_text(summary)
+        # Brackets inside summary should be stripped/escaped, not parsed as tags except for supported markdown
+        self.assertNotIn("[bold]", result)
+        self.assertNotIn("[yellow]", result)
+        self.assertIn("Some bold", result)
+        self.assertIn("tag", result)
 
     def test_format_roleplay_text_replaces_placeholders_and_styles(self):
         text = '{{user}} says "Hello" to *{{char}}*'
@@ -52,6 +70,25 @@ class TestFormatting(unittest.TestCase):
         # Test get_tts_split_points
         points = formatter.get_tts_split_points("Hi. Hello!")
         self.assertIn(3, points)
+
+    def test_format_roleplay_text_escapes_brackets(self):
+        text = 'Hello [friend], "[BRAIN ERROR] [type=None]" *smiles [brightly]*'
+        result = format_roleplay_text(
+            text=text,
+            role="assistant",
+            user_name="Alex",
+            character_name="Nova",
+            user_speech_color="cyan",
+            assistant_speech_color="magenta",
+        )
+        # Verify that all opening brackets are successfully escaped to "\["
+        self.assertIn("Hello \\[friend]", result)
+        self.assertIn('\\[BRAIN ERROR]', result)
+        self.assertIn('\\[type=None]', result)
+        self.assertIn('smiles \\[brightly]', result)
+        # Verify it still applies style tags correctly around the escaped brackets
+        self.assertIn('[magenta]"\\[BRAIN ERROR] \\[type=None]"[/magenta]', result)
+        self.assertIn('[i][dim]smiles \\[brightly][/dim][/i]', result)
 
 
 if __name__ == "__main__":

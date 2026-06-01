@@ -6,17 +6,28 @@ def get_user_message_number(message: str, history_profile_name: str) -> int | No
     """Compute the display/history number for a user message."""
     if message.startswith("//"):
         return None
-    return memory_manager.get_history_length(history_profile_name) + 1
+    history = memory_manager.load_history(history_profile_name)
+    visible_count = 0
+    for msg in history:
+        r = msg.get("role", "assistant")
+        c = msg.get("content", "")
+        if r in ("user", "assistant"):
+            if not (r == "user" and not c):
+                visible_count += 1
+    return visible_count + 1
 
 
 def get_latest_regeneration_prompt(history_profile_name: str) -> str | None:
     """Return the most recent user message text that can drive a regeneration."""
     pending = memory_manager.get_pending_user_message(history_profile_name)
-    if pending:
+    if pending is not None:
         return pending
     full_history = memory_manager.load_history(history_profile_name)
-    if len(full_history) >= 2 and full_history[-2].get("role") == "user":
-        return full_history[-2].get("content", "")
+    if len(full_history) >= 2:
+        if full_history[-1].get("role") == "assistant" and full_history[-2].get("role") == "assistant":
+            return ""
+        if full_history[-2].get("role") == "user":
+            return full_history[-2].get("content", "")
     return None
 
 

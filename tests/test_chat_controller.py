@@ -7,13 +7,19 @@ from engines.chat_controller import (
     handle_command_input,
     next_response_variant_or_regen,
     previous_response_variant,
+    get_latest_regeneration_prompt,
 )
 
 
 class TestChatController(unittest.TestCase):
-    @patch("engines.chat_controller.memory_manager.get_history_length", return_value=4)
-    def test_get_user_message_number_non_command(self, _mock_len):
-        self.assertEqual(get_user_message_number("hello", "profile"), 5)
+    @patch("engines.chat_controller.memory_manager.load_history", return_value=[
+        {"role": "user", "content": "hello"},
+        {"role": "assistant", "content": "hi"},
+        {"role": "user", "content": ""},
+        {"role": "assistant", "content": "howdy"}
+    ])
+    def test_get_user_message_number_non_command(self, _mock_load):
+        self.assertEqual(get_user_message_number("hello", "profile"), 4)
         self.assertIsNone(get_user_message_number("//help", "profile"))
 
     @patch("engines.chat_controller.memory_manager.load_history")
@@ -58,6 +64,17 @@ class TestChatController(unittest.TestCase):
         self.assertEqual(nxt["type"], "next")
         self.assertEqual(nxt["content"], "c")
         self.assertTrue(mock_save_history.called)
+
+    @patch("engines.chat_controller.memory_manager.load_history")
+    def test_get_latest_regeneration_prompt_consecutive_assistant(self, mock_load_history):
+        history = [
+            {"role": "user", "content": "hello"},
+            {"role": "assistant", "content": "hi"},
+            {"role": "assistant", "content": "how are you?"}
+        ]
+        mock_load_history.return_value = history
+        prompt = get_latest_regeneration_prompt("profile")
+        self.assertEqual(prompt, "")
 
 
 if __name__ == "__main__":

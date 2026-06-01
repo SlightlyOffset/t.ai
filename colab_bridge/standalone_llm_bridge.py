@@ -643,7 +643,7 @@ def create_app(
     llm_engine: Optional[LLMEngine] = None,
 ) -> FastAPI:
     """Create FastAPI app for the bridge."""
-    app = FastAPI(title="LLM Bridge", version="1.0.0")
+    app = FastAPI(title="LLM Bridge", version="1.0.1")
 
     if lore_manager is None:
         lore_manager = LoreManager()

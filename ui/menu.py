@@ -14,6 +14,7 @@ import re
 # Third-party imports
 import ollama
 from textual.app import App, ComposeResult
+from textual.screen import ModalScreen
 from textual.widgets import Header, Footer, Input, Static, Label, Select, ProgressBar, Switch, TextArea
 from textual_image.widget import Image, SixelImage, TGPImage, HalfcellImage
 from textual.containers import Vertical, Horizontal, ScrollableContainer
@@ -99,15 +100,53 @@ class ChatInput(TextArea):
             # they will fall through to the default TextArea behavior (newline).
             event.prevent_default()
             text = self.text.strip()
-            if text:
-                self.post_message(self.Submitted(text))
-                self.text = ""
-                self.height = 3
+            self.post_message(self.Submitted(text))
+            self.text = ""
+            self.height = 3
         elif event.key == "ctrl+j":
             # Fallback: Many terminals send Ctrl+J for newline or can be used
             # as a dedicated "Force Newline" shortcut.
             self.insert("\n")
             event.prevent_default()
+
+class ExitSavingScreen(ModalScreen):
+    """Modal screen displaying a message while saving history and exiting."""
+    DEFAULT_CSS = """
+    ExitSavingScreen {
+        align: center middle;
+        background: rgba(0, 0, 0, 0.75);
+    }
+    #saving_container {
+        width: 60;
+        height: 12;
+        border: thick $warning;
+        background: $panel;
+        padding: 2;
+        layout: vertical;
+        align: center middle;
+    }
+    #saving_title {
+        color: $warning;
+        text-style: bold;
+        width: 100%;
+        text-align: center;
+        margin-bottom: 1;
+    }
+    #saving_message {
+        color: $text;
+        width: 100%;
+        text-align: center;
+        margin-bottom: 1;
+    }
+    """
+
+    def compose(self) -> ComposeResult:
+        yield Vertical(
+            Label("⚠️ Saving & Exiting ⚠️", id="saving_title"),
+            Label("Please do not force-close the terminal.", id="saving_message"),
+            Label("Securing database, saving conversation history and metadata...", classes="sidebar_label"),
+            id="saving_container"
+        )
 
 class TaiMenu(App):
     """t.ai - Logic-focused TUI implementation."""
@@ -254,7 +293,7 @@ class TaiMenu(App):
 
         user_text = result.get("user_text")
         user_text = self._resolve_regeneration_text(user_text)
-        if user_text:
+        if user_text is not None:
             try:
                 ai_bubble = self.query(".ai_bubble").last()
                 ai_bubble.update(
@@ -278,11 +317,23 @@ class TaiMenu(App):
             return f"[bold {color}]{name}:[/bold {color}]"
         return f"[dim]#{message_number}[/dim] [bold {color}]{name}:[/bold {color}]"
 
+    def get_visible_message_count(self) -> int:
+        """Calculate the number of user/assistant messages in history that are actually visible in the UI."""
+        history = memory_manager.load_history(self.history_profile_name)
+        count = 0
+        for msg in history:
+            role = msg.get("role", "assistant")
+            content = msg.get("content", "")
+            if role in ("user", "assistant"):
+                if not (role == "user" and not content):
+                    count += 1
+        return count
+
     def _current_assistant_message_number(self) -> int | None:
         """Return the 1-based history index for the latest assistant message, if available."""
         full_history = memory_manager.load_history(self.history_profile_name)
         if full_history and full_history[-1].get("role") == "assistant":
-            return len(full_history)
+            return self.get_visible_message_count()
         return None
 
     def refresh_last_ai_message(self, content: str, index: int, total: int) -> None:
@@ -311,6 +362,8 @@ class TaiMenu(App):
 
     def _resolve_regeneration_text(self, engine_text: str | None) -> str | None:
         """Resolve the text to use for regeneration, falling back to the UI's last user message if needed."""
+        if engine_text == "":
+            return ""
         ui_text = self.get_last_user_message_from_ui()
         if ui_text:
             if not engine_text or engine_text != ui_text:
@@ -326,6 +379,26 @@ class TaiMenu(App):
         """Open the global settings screen."""
         from ui.SettingsScreen import SettingsScreen
         self.push_screen(SettingsScreen(), callback=self.on_settings_saved)
+
+    async def action_quit(self) -> None:
+        """Override quit action to show saving modal and wait for active background saving threads."""
+        from engines.responses import active_post_process_threads
+        alive_threads = [t for t in active_post_process_threads if t.is_alive()]
+        if alive_threads:
+            self.push_screen(ExitSavingScreen())
+            self.run_worker(self._wait_and_exit(alive_threads))
+        else:
+            self.exit()
+
+    async def _wait_and_exit(self, alive_threads: list) -> None:
+        """Asynchronously wait for active post-processing threads to finish, then exit."""
+        import asyncio
+        def join_all():
+            for t in alive_threads:
+                t.join()
+
+        await asyncio.to_thread(join_all)
+        self.exit()
 
     def on_settings_saved(self, result: dict | None) -> None:
         """Callback handled when SettingsScreen is dismissed with saved changes."""
@@ -439,6 +512,14 @@ class TaiMenu(App):
 
         # Start usage metrics update loop
         self.set_interval(2.0, self.update_usage_metrics)
+
+    def on_unmount(self) -> None:
+        """Wait for any active background post-processing threads to finish saving history before exiting."""
+        from engines.responses import active_post_process_threads
+        alive_threads = [t for t in active_post_process_threads if t.is_alive()]
+        if alive_threads:
+            for t in alive_threads:
+                t.join()
 
     def on_profile_selected(self, result: dict) -> None:
         """Callback handled when ProfileSelect screen is dismissed."""
@@ -671,14 +752,40 @@ class TaiMenu(App):
             self.audio_file_queue.task_done()
 
     def print_starter_message(self) -> None:
-        """Prints starter messages to the chat list."""
+        """Prints starter messages to the chat list and extracts the initial scene in the background."""
         starter_messages = self.character_profile.get("starter_messages", [])
         if starter_messages:
             random.shuffle(starter_messages)
-            self.add_message(self.format_rp(starter_messages[0], role="assistant"), role="assistant", message_number=1)
+            starter_text = starter_messages[0]
+            self.add_message(self.format_rp(starter_text, role="assistant"), role="assistant", message_number=1)
+            rel_score = self.character_profile.get("relationship_score", 0)
             memory_manager.save_history(self.history_profile_name, [{"role": "assistant",
-                                                                     "content": starter_messages[0]}],
-                                        relationship_score=self.character_profile.get("relationship_score", 0))
+                                                                     "content": starter_text}],
+                                         relationship_score=rel_score)
+
+            def extract_and_save_starter_scene():
+                try:
+                    from engines.responses import extract_scene_from_starter
+                    scene = extract_scene_from_starter(starter_text)
+                    if scene:
+                        full_data = memory_manager.get_full_data(self.history_profile_name)
+                        history = full_data.get("history", [])
+                        metadata = full_data.get("metadata", {})
+                        memory_manager.save_history(
+                            self.history_profile_name,
+                            history,
+                            relationship_score=metadata.get("relationship_score", rel_score),
+                            current_scene=scene,
+                            memory_core=metadata.get("memory_core", ""),
+                            last_summarized_index=metadata.get("last_summarized_index", 0)
+                        )
+                except Exception:
+                    pass
+
+            t = threading.Thread(target=extract_and_save_starter_scene, daemon=True)
+            from engines.responses import track_thread
+            track_thread(t)
+            t.start()
 
     def run_recap(self):
         messages_history = memory_manager.load_history(self.history_profile_name)
@@ -896,6 +1003,10 @@ class TaiMenu(App):
             self.remote_status = ""
 
     def add_message(self, text, role="user", msg_data=None, message_number: int | None = None, raw_text: str | None = None):
+        if role == "user" and not text:
+            # Skip empty user messages to keep UI clean of empty bubble boxes
+            return
+
         if role not in ("system", "command", "tip_message"):
             import re
             is_formatted = False
@@ -966,18 +1077,28 @@ class TaiMenu(App):
             child.remove()
 
         history = memory_manager.load_history(self.history_profile_name)
+        visible_count = 0
         for index, msg_data in enumerate(history, start=1):
             role = msg_data.get("role", "assistant")
             content = msg_data.get("content", "")
             if role != "system":
                 content = self.format_rp(content, role=role)
-            message_number = index if role in ("user", "assistant") else None
+            message_number = None
+            if role in ("user", "assistant"):
+                if not (role == "user" and not content):
+                    visible_count += 1
+                    message_number = visible_count
             self.add_message(content, role=role, msg_data=msg_data, message_number=message_number)
 
     async def on_chat_input_submitted(self, event: ChatInput.Submitted) -> None:
         """Handles user input submission from ChatInput."""
         message = event.value.strip()
-        if not message: return
+        if not message:
+            # Let the bot continue to generate!
+            memory_manager.set_pending_user_message(self.history_profile_name, "")
+            assistant_message_number = self.get_visible_message_count() + 1
+            self.stream_response("", message_number=assistant_message_number)
+            return
 
         normalized = normalize_command_prefix(message)
         if normalized:
@@ -1047,7 +1168,7 @@ class TaiMenu(App):
                     pass
                 user_text = command_action.get("user_text")
                 user_text = self._resolve_regeneration_text(user_text)
-                if user_text:
+                if user_text is not None:
                     self.stream_response(user_text, is_regeneration=True)
                 return
 
@@ -1101,10 +1222,10 @@ class TaiMenu(App):
     ) -> tuple[ScrollableContainer, Static, str]:
         """Resolve chat widgets on the main thread before background streaming starts."""
         container = self.query_one("#chat_list", ScrollableContainer)
-        history_len = memory_manager.get_history_length(self.history_profile_name)
         assistant_message_number = message_number
         if assistant_message_number is None:
-            assistant_message_number = history_len if is_regeneration else history_len + 2
+            visible_len = self.get_visible_message_count()
+            assistant_message_number = visible_len if is_regeneration else visible_len + 2
         header = self._message_header("assistant", assistant_message_number)
 
         if is_regeneration:
@@ -1165,14 +1286,29 @@ class TaiMenu(App):
             elif event["type"] == "complete":
                 full_response = event["full_response"]
 
-        # Add pagination indicator if alternatives exist
-        full_history = memory_manager.load_history(self.history_profile_name)
-        if full_history and full_history[-1].get("role") == "assistant":
-            last_msg = full_history[-1]
-            alternatives = last_msg.get("alternatives", [])
-            if alternatives:
-                idx = last_msg.get("selected_index", 0)
-                indicator = f"\n\n[dim]< {idx + 1}/{len(alternatives)} >[/dim]"
+        # Add pagination indicator if alternatives exist and this is a regeneration event
+        if is_regeneration:
+            full_history = memory_manager.load_history(self.history_profile_name)
+            if full_history and full_history[-1].get("role") == "assistant":
+                last_msg = full_history[-1]
+                alternatives = last_msg.get("alternatives", [])
+                if alternatives:
+                    # Check if the post-processing thread has already appended this new response
+                    if alternatives[-1] == full_response.strip():
+                        total_alts = len(alternatives)
+                        idx = last_msg.get("selected_index", total_alts - 1)
+                    else:
+                        total_alts = len(alternatives) + 1
+                        idx = total_alts - 1
+                else:
+                    # Check if the content is already updated to the new response
+                    if last_msg.get("content", "").strip() == full_response.strip():
+                        total_alts = 1
+                        idx = 0
+                    else:
+                        total_alts = 2
+                        idx = 1
+                indicator = f"\n\n[dim]< {idx + 1}/{total_alts} >[/dim]"
                 self.app.call_from_thread(ai_msg.update, f"{header}\n{self.format_rp(full_response, role='assistant')}{indicator}")
 
         # Refresh score display

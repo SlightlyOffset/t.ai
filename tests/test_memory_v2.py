@@ -147,6 +147,60 @@ class TestHistoryManager(unittest.TestCase):
         self.assertEqual(data["metadata"]["memory_core"], "")
         self.assertEqual(data["metadata"]["last_summarized_index"], 0)
 
+    def test_history_save_creates_hidden_backup(self):
+        profile = "BackupProfile"
+        history = [{"role": "user", "content": "Hello backup"}]
+        self.manager.save_history(profile, history)
+        
+        filename = self.manager._get_filename(profile)
+        bak_file = filename + ".bak"
+        self.assertTrue(os.path.exists(filename))
+        
+        # Save a second time to trigger backup creation of the first run
+        self.manager.save_history(profile, history)
+        self.assertTrue(os.path.exists(bak_file))
+
+        # Check Windows hidden attribute if on Windows
+        if os.name == 'nt':
+            import ctypes
+            # GetFileAttributesW returns attributes bitmask; FILE_ATTRIBUTE_HIDDEN is 0x2
+            attrs = ctypes.windll.kernel32.GetFileAttributesW(bak_file)
+            self.assertTrue(bool(attrs & 2))
+
+    def test_history_load_corrupted_fallback(self):
+        profile = "CorruptHistoryProfile"
+        filename = self.manager._get_filename(profile)
+        bak_file = filename + ".bak"
+
+        # 1. Create backup with valid data
+        valid_data = {
+            "metadata": {
+                "relationship_score": 42,
+                "current_scene": "School",
+                "memory_core": "Old Memory",
+                "last_summarized_index": 1,
+            },
+            "history": [{"role": "user", "content": "Hello"}]
+        }
+        with open(bak_file, "w", encoding="utf-8") as f:
+            json.dump(valid_data, f)
+
+        # 2. Create corrupted primary file
+        with open(filename, "w", encoding="utf-8") as f:
+            f.write("invalid json contents")
+
+        # 3. Load history/full data and check fallback
+        loaded_data = self.manager.get_full_data(profile)
+        self.assertEqual(loaded_data["metadata"]["relationship_score"], 42)
+        self.assertEqual(loaded_data["metadata"]["current_scene"], "School")
+        self.assertEqual(len(loaded_data["history"]), 1)
+        self.assertEqual(loaded_data["history"][0]["content"], "Hello")
+
+        # 4. Verify primary file was healed/restored
+        with open(filename, "r", encoding="utf-8") as f:
+            healed = json.load(f)
+        self.assertEqual(healed["metadata"]["relationship_score"], 42)
+
 if __name__ == "__main__":
     unittest.main()
 

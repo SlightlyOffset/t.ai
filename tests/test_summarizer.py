@@ -57,5 +57,30 @@ class TestSummarizer(unittest.TestCase):
             self.assertIn(existing_core, call_args['messages'][1]['content'])
             self.assertIn("Whiskers caught a bird today.", call_args['messages'][1]['content'])
 
+    def test_generate_summary_strips_tags_and_headers(self):
+        messages = [{"role": "user", "content": "hello"}]
+        mock_response = {
+            'message': {
+                'content': '[bold yellow] Memory Core Summary [/bold yellow]\nMemory Core Summary:\n- Conversed with user.\n[yellow]stray[/yellow]'
+            }
+        }
+        with patch('ollama.chat', return_value=mock_response):
+            summary = generate_summary(messages, model="phi3")
+            # Should strip tags, headers, and colon
+            self.assertEqual(summary, '- Conversed with user.\nstray')
+
+    def test_update_rolling_summary_strips_tags_and_headers(self):
+        from engines.responses import update_rolling_summary
+        existing_core = "old"
+        new_messages = [{"role": "user", "content": "new"}]
+        mock_response = {
+            'message': {
+                'content': '[bold yellow] Memory Core Summary [/bold yellow]\n- updated info'
+            }
+        }
+        with patch('ollama.chat', return_value=mock_response):
+            new_summary = update_rolling_summary(existing_core, new_messages, model="phi3")
+            self.assertEqual(new_summary, '- updated info')
+
 if __name__ == '__main__':
     unittest.main()

@@ -425,7 +425,7 @@ class TestResponsesPipeline(unittest.TestCase):
         # Popping 0 (A) leaves: B (1500), C (1500), D (1500), E (1500) -> 6000 tokens.
         # So it should pop exactly 1 turn, leaving B, C, D, E.
         self.assertTrue(mock_ollama_chat.called)
-        sent_messages = mock_ollama_chat.call_args.kwargs["messages"]
+        sent_messages = mock_ollama_chat.call_args_list[0].kwargs["messages"]
         
         # Extract the content of the history turns sent to the LLM (skipping system prompt and user input)
         history_contents = [m["content"] for m in sent_messages if m["role"] != "system" and m["content"] != "User prompt"]
@@ -494,7 +494,7 @@ class TestResponsesPipeline(unittest.TestCase):
         list(get_respond_stream(user_input, profile, history_profile_name="test_profile"))
         
         self.assertTrue(mock_ollama_chat.called)
-        sent_messages = mock_ollama_chat.call_args.kwargs["messages"]
+        sent_messages = mock_ollama_chat.call_args_list[0].kwargs["messages"]
         
         # Extract the content of the history turns sent to the LLM (skipping system prompt and user input)
         history_contents = [m["content"] for m in sent_messages if m["role"] != "system" and m["content"] != user_input]
@@ -505,6 +505,57 @@ class TestResponsesPipeline(unittest.TestCase):
         self.assertNotIn("A" * 6000, history_contents)
         self.assertIn("B" * 6000, history_contents)
         self.assertIn("C" * 6000, history_contents)
+
+    @patch("engines.responses.get_sentiment_score", return_value=0)
+    @patch("engines.responses.build_system_prompt", return_value="SYSTEM_PROMPT")
+    @patch("engines.responses.load_lorebook", return_value={})
+    @patch("engines.responses.get_pipeline_flags")
+    @patch("engines.responses.memory_manager")
+    @patch("engines.responses.get_setting")
+    @patch("engines.responses.ollama.chat")
+    def test_get_respond_stream_parses_ollama_object_chunks(
+        self,
+        mock_ollama_chat,
+        mock_get_setting,
+        mock_memory_manager,
+        mock_get_pipeline_flags,
+        _mock_lorebook,
+        _mock_build_system_prompt,
+        _mock_sentiment,
+    ):
+        class MockMessage:
+            def __init__(self, content):
+                self.content = content
+
+        class MockChatResponse:
+            def __init__(self, content):
+                self.message = MockMessage(content)
+
+        profile = {"name": "TestAI", "llm_model": "test-model"}
+        history = []
+        full_data = {"metadata": {"current_scene": "Room", "memory_core": ""}}
+
+        mock_get_setting.side_effect = lambda key, default=None: {
+            "default_llm_model": "test-model",
+            "remote_llm_url": None,
+            "interaction_mode": "rp",
+            "memory_limit": 15,
+        }.get(key, default)
+
+        mock_get_pipeline_flags.return_value = {
+            "enabled": False,
+        }
+        mock_memory_manager.get_full_data.return_value = full_data
+        mock_memory_manager.load_history.side_effect = [history, list(history)]
+
+        # Mock the stream yielding ChatResponse objects (as in ollama v0.3.0+)
+        mock_ollama_chat.return_value = [
+            MockChatResponse("Hello "),
+            MockChatResponse("world!"),
+        ]
+
+        result_chunks = list(get_respond_stream("Hi", profile, history_profile_name="test_profile"))
+        self.assertEqual(result_chunks, ["Hello ", "world!"])
 
 
 if __name__ == "__main__":

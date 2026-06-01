@@ -16,17 +16,37 @@ SETTINGS_FILE = "settings.json"
 def load_settings():
     """
     Loads all settings from the JSON file.
+    Falls back to settings.json.bak and heals settings.json if the primary file is missing or invalid.
     
     Returns:
         dict: The loaded settings, or an empty dict if the file is missing/invalid.
     """
-    if not os.path.exists(SETTINGS_FILE):
-        return {}
+    settings = None
+    # 1. Try loading primary file
     try:
         with open(SETTINGS_FILE, "r", encoding="utf-8") as f:
-            return json.load(f)
+            settings = json.load(f)
+    except FileNotFoundError:
+        pass
     except (json.JSONDecodeError, IOError):
-        return {}
+        pass
+
+    # 2. Try loading backup file and heal if primary failed/missing
+    if settings is None:
+        bak_file = SETTINGS_FILE + ".bak"
+        try:
+            with open(bak_file, "r", encoding="utf-8") as f:
+                settings = json.load(f)
+            
+            # Heal primary
+            from engines.utilities import save_json_atomic
+            save_json_atomic(SETTINGS_FILE, settings)
+        except FileNotFoundError:
+            pass
+        except (json.JSONDecodeError, IOError):
+            pass
+
+    return settings if settings is not None else {}
 
 def get_setting(key, default=None):
     """
