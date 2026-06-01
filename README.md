@@ -32,7 +32,9 @@ A lightweight, highly immersive, profile-based AI companion that lives in your t
 
 * **Rolling Summarization & Memory Core**: Automatically condenses long histories (>15 messages) into a "Memory Core" injected into every interaction to preserve long-term narrative recall.
 * **Dynamic Lorebook (World Info)**: Efficiently injects relevant world or character facts into the LLM context based on keywords detected in the conversation.
-* **Persistent History & Recaps**: Saves chat history persistently per profile and automatically generates a recap of your previous session on startup.
+* **Character-Scoped Session Management**: Organizes history into character-scoped subfolders (`history/<character>/<session>_history.json`). Features a comprehensive session manager (TUI via `Ctrl+T` or CLI via `//session`) to load, create, branch (optionally from a specific message index), rename, and delete sessions.
+* **User Profile-Session Binding**: Sessions automatically bind to the user profile that was active during the conversation, seamlessly switching profiles when reloading past sessions.
+* **Legacy Auto-Migration**: Automatically and transparently migrates legacy flat history and backup files into the character-scoped directory structure on launch.
 
 ### 🎭 Creating & Importing Characters
 
@@ -154,12 +156,14 @@ Inside the chat, you can use operational commands or keyboard shortcuts:
 
 * `Ctrl+B`: Toggle sidebar visibility.
 * `Ctrl+S`: Open settings configuration window.
+* `Ctrl+T`: Open the session selection and management modal screen.
 * `//help`: Show all commands.
 * `//settings`: Open the tabbed configuration settings screen.
 * `//mode [rp|casual]`: Displays or changes the active interaction mode.
 * `//toggle <setting>`: Toggles a boolean setting (e.g., `tts`, `speak`, `narration`, `errors`, `privacy`, `debug`).
 * `//change <char|user> <name>`: Swap to a different character or user profile.
-* `//reset [all|rel]`: Reset chat history (all) or relationship scores (rel).
+* `//session [list|current|new|load|branch|rename|delete]`: Command-line session manager to list, load, create, branch, rename, or delete conversation sessions.
+* `//reset [all|rel]`: Reset chat history recursively across all sessions (all) or reset relationship scores (rel).
 * `//import_card <path>`: Imports a SillyTavern character card.
 
 ---

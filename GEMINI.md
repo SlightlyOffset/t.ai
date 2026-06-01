@@ -18,7 +18,7 @@ The codebase is strictly divided into two layers:
 2.  **Engine Layer (`engines/`):** Contains the business logic:
     - `responses.py`: LLM interaction, sentiment analysis, and relationship scoring.
     - `response_orchestrator.py`: Orchestrates parallel LLM streaming and TTS queuing.
-    - `memory_v2.py`: Manages persistent conversation history and state.
+    - `memory_v2.py`: Manages persistent, session-aware conversation history, character-scoped subdirectories, and auto-migration from legacy files.
     - `tts_module.py`: Handles audio generation and hardware-specific playback.
     - `lorebook.py`: Dynamic context injection based on keyword triggers.
     - `config.py`: Global settings management via `settings.json`.
@@ -36,10 +36,10 @@ The codebase is strictly divided into two layers:
 - **Environment:** Requires Python 3.10+.
 
 ## Coding Conventions
-- **UI/Logic Separation:** Never mix UI-specific code (Textual widgets/actions) directly into the `engines/` modules. Use events or orchestrators to bridge them.
+- **UI/Logic Separation:** Never mix UI-specific code (Textual widgets/actions) directly into the `engines/` modules. Use events or orchestrators to bridge them (e.g. raising `SessionChangedRequested` or `SessionNewRequested` exceptions to propagate back to the UI).
 - **Atomic Persistence:** Use `engines.utilities.save_json_atomic` for saving profiles and history to prevent corruption.
 - **Async & Threading:** The app relies heavily on `textual.work` and `threading.Thread` for non-blocking TTS and LLM operations. Ensure thread safety when modifying shared state.
-- **Profile Scope:** All history, memory, and settings should be scoped to the active `history_profile_name` or `user_profile`.
+- **Profile & Session Scope:** All history, memory, and settings should be scoped to the active `history_profile_name` or `user_profile`. History files must be saved under character-scoped directories with unique session identifiers.
 
 ## File Structure Highlights
 - `/profiles`: Character `.json` definitions.
