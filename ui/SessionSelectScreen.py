@@ -18,7 +18,7 @@ class SessionSelectScreen(ModalScreen):
     }
 
     #session_container {
-        width: 75;
+        width: 80;
         height: 32;
         border: thick $primary;
         background: $panel;
@@ -74,7 +74,10 @@ class SessionSelectScreen(ModalScreen):
     }
 
     #session_actions Button {
-        margin: 0 1;
+        width: 1fr;
+        min-width: 8;
+        margin: 0 1 0 0;
+        padding: 0;
     }
     """
 
