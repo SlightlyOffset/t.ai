@@ -1,7 +1,0 @@
-{
-    "id": "vuln_005_info_exposure_20260513",
-    "title": "Remediation of VULN-005 (Information Exposure of Sensitive Settings)",
-    "status": "pending",
-    "created_at": "2026-05-13",
-    "type": "security"
-}

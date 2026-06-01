@@ -1,8 +1,0 @@
-{
-  "track_id": "persist_mem_mood_20260218",
-  "type": "feature",
-  "status": "new",
-  "created_at": "2026-02-18T03:10:00Z",
-  "updated_at": "2026-02-18T03:10:00Z",
-  "description": "Implement persistent chat history and mood adjustment system"
-}

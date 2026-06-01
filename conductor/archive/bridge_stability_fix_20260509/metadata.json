@@ -1,7 +1,0 @@
-{
-  "id": "bridge_stability_fix_20260509",
-  "title": "Bridge Stability & Thread-Safety Fix",
-  "status": "completed",
-  "created_at": "2026-05-09",
-  "type": "bugfix"
-}

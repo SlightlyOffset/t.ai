@@ -1,8 +1,0 @@
-{
-  "track_id": "config_scope_20260218",
-  "type": "feature",
-  "status": "new",
-  "created_at": "2026-02-18T23:46:00Z",
-  "updated_at": "2026-02-18T23:46:00Z",
-  "description": "Improving on setting and config scope, like suppressing error message or properly toggling TTS"
-}

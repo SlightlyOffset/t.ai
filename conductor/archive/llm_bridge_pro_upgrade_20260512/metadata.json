@@ -1,8 +1,0 @@
-{
-    "id": "llm_bridge_pro_upgrade_20260512",
-    "title": "LLM Bridge \"Pro\" Upgrade (Parity with Standalone)",
-    "description": "Port advanced logic (OOM retries, Context Truncation, Semantic RAG) from standalone_llm_bridge.py to LLM_Bridge.ipynb.",
-    "status": "completed",
-    "created_at": "2026-05-12",
-    "updated_at": "2026-05-12"
-}
