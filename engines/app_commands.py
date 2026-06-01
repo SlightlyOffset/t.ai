@@ -67,6 +67,12 @@ class SessionChangedRequested(Exception):
         super().__init__(f"Session changed to {session_name}")
         self.session_name = session_name
 
+class SessionNewRequested(Exception):
+    """Exception raised to signal that a new session has been created and user profile selection is requested."""
+    def __init__(self, session_name: str):
+        super().__init__(f"New session {session_name} requested")
+        self.session_name = session_name
+
 
 def normalize_command_prefix(ops: str) -> str | None:
     """
@@ -661,7 +667,7 @@ def app_commands(ops: str, suppress_output: bool = False):
             memory_manager.save_history(character_name, [], session_name=name)
             update_setting("current_history_session", name)
             _log(f"[SYSTEM] Created and switched to new session: {name}", Fore.GREEN)
-            raise SessionChangedRequested(name)
+            raise SessionNewRequested(name)
             
         elif subcmd == "load":
             if not sub_args:
@@ -850,6 +856,8 @@ def app_commands(ops: str, suppress_output: bool = False):
         except RestartRequested:
             raise
         except SessionChangedRequested:
+            raise
+        except SessionNewRequested:
             raise
         except RegenerateRequested:
             if suppress_output:

@@ -11,6 +11,11 @@ class ProfileSelect(Screen):
     PROFILES_DIR = "profiles"
     USER_PROFILES_DIR = "user_profiles"
 
+    def __init__(self, choose_user_only: bool = False, **kwargs):
+        super().__init__(**kwargs)
+        self.choose_user_only = choose_user_only
+        self.selected_character = None
+
     def compose(self) -> ComposeResult:
         yield Header(show_clock=True)
         with Container(id="selection_container"):
@@ -23,8 +28,11 @@ class ProfileSelect(Screen):
         yield Footer()
 
     def on_mount(self) -> None:
-        """Load available character profiles and display them."""
-        self.load_character_profiles()
+        """Load available profiles and display them."""
+        if self.choose_user_only:
+            self.load_user_profiles()
+        else:
+            self.load_character_profiles()
 
     def load_character_profiles(self) -> None:
         """Populate the OptionList with character profiles."""

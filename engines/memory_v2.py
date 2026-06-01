@@ -120,13 +120,17 @@ class HistoryManager:
             now = datetime.now()
             current_time = now.strftime("%Y-%m-%d | %H:%M:%S")
 
+            from engines.config import get_setting
+            user_profile = get_setting("current_user_profile")
+
             data_to_save = {
                 "metadata": {
                     "last_interaction": current_time,
                     "relationship_score": relationship_score,
                     "current_scene": current_scene,
                     "memory_core": memory_core,
-                    "last_summarized_index": last_summarized_index
+                    "last_summarized_index": last_summarized_index,
+                    "user_profile": user_profile
                 },
                 "history": history
             }
@@ -146,6 +150,7 @@ class HistoryManager:
                 "current_scene": "Unknown Location",
                 "memory_core": "",
                 "last_summarized_index": 0,
+                "user_profile": None,
                 "narrative_state": {},
                 "last_turn_metrics": {},
             },

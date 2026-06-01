@@ -286,6 +286,17 @@ class TestHistoryManager(unittest.TestCase):
         self.assertTrue(os.path.exists(new_path))
         self.assertFalse(os.path.exists(legacy_bak_path))
 
+    @patch('engines.config.get_setting')
+    def test_user_profile_in_metadata(self, mock_get_setting):
+        profile = "UserMetadataProfile"
+        mock_get_setting.return_value = "Aiko.json"
+        
+        self.manager.save_history(profile, [{"role": "user", "content": "hello meta"}], session_name="default")
+        
+        # Verify metadata has user_profile
+        full_data = self.manager.get_full_data(profile, session_name="default")
+        self.assertEqual(full_data["metadata"].get("user_profile"), "Aiko.json")
+
 if __name__ == "__main__":
     unittest.main()
 

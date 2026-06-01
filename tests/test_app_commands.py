@@ -216,8 +216,8 @@ class TestAppCommands(unittest.TestCase):
             return default
         self.mock_get_setting.side_effect = get_setting_mock
 
-        from engines.app_commands import SessionChangedRequested
-        with self.assertRaises(SessionChangedRequested) as cm:
+        from engines.app_commands import SessionNewRequested
+        with self.assertRaises(SessionNewRequested) as cm:
             app_commands("//session new adventure", suppress_output=True)
         self.assertEqual(cm.exception.session_name, "adventure")
         mock_update.assert_called_with("current_history_session", "adventure")

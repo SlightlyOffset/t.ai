@@ -1,4 +1,4 @@
-from engines.app_commands import app_commands, RegenerateRequested, RestartRequested, RewindRequested, CompressRequested, SettingsRequested, SessionChangedRequested
+from engines.app_commands import app_commands, RegenerateRequested, RestartRequested, RewindRequested, CompressRequested, SettingsRequested, SessionChangedRequested, SessionNewRequested
 from engines.memory_v2 import memory_manager
 
 
@@ -47,6 +47,8 @@ def handle_command_input(message: str, history_profile_name: str) -> dict | None
         raise
     except SessionChangedRequested as scr:
         return {"type": "session_changed", "session_name": scr.session_name}
+    except SessionNewRequested as snr:
+        return {"type": "session_new_requested", "session_name": snr.session_name}
     except RegenerateRequested:
         return {"type": "regenerate", "user_text": get_latest_regeneration_prompt(history_profile_name)}
     except CompressRequested:
