@@ -9,14 +9,21 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')
 
 from engines.memory_v2 import HistoryManager
 
+from unittest.mock import patch
+
 class TestHistoryManager(unittest.TestCase):
     def setUp(self):
+        self.patcher = patch('engines.config.get_setting')
+        self.mock_get_setting = self.patcher.start()
+        self.mock_get_setting.return_value = "default"
+
         self.test_dir = "test_history"
         self.manager = HistoryManager(history_dir=self.test_dir)
         if not os.path.exists(self.test_dir):
             os.makedirs(self.test_dir)
 
     def tearDown(self):
+        self.patcher.stop()
         if os.path.exists(self.test_dir):
             shutil.rmtree(self.test_dir)
 
@@ -54,14 +61,14 @@ class TestHistoryManager(unittest.TestCase):
         self.manager.save_history("ProfileA", [{"role": "user", "content": "A"}])
         self.manager.save_history("ProfileB", [{"role": "user", "content": "B"}])
         
-        self.assertTrue(os.path.exists(os.path.join(self.test_dir, "ProfileA_history.json")))
-        self.assertTrue(os.path.exists(os.path.join(self.test_dir, "ProfileB_history.json")))
+        self.assertTrue(os.path.exists(os.path.join(self.test_dir, "ProfileA", "default_history.json")))
+        self.assertTrue(os.path.exists(os.path.join(self.test_dir, "ProfileB", "default_history.json")))
 
     def test_special_characters_in_filename(self):
         profile = "Ria(polite)-Variant_1"
         self.manager.save_history(profile, [{"role": "user", "content": "test"}])
         
-        expected_path = os.path.join(self.test_dir, "Ria(polite)-Variant_1_history.json")
+        expected_path = os.path.join(self.test_dir, "Ria(polite)-Variant_1", "default_history.json")
         self.assertTrue(os.path.exists(expected_path))
         
         loaded = self.manager.load_history(profile)
@@ -200,6 +207,110 @@ class TestHistoryManager(unittest.TestCase):
         with open(filename, "r", encoding="utf-8") as f:
             healed = json.load(f)
         self.assertEqual(healed["metadata"]["relationship_score"], 42)
+
+    def test_session_support(self):
+        profile = "MultiSessionProfile"
+        self.manager.save_history(profile, [{"role": "user", "content": "hello default"}], session_name="default")
+        self.manager.save_history(profile, [{"role": "user", "content": "hello custom"}], session_name="custom")
+        
+        default_loaded = self.manager.load_history(profile, session_name="default")
+        custom_loaded = self.manager.load_history(profile, session_name="custom")
+        
+        self.assertEqual(len(default_loaded), 1)
+        self.assertEqual(default_loaded[0]["content"], "hello default")
+        self.assertEqual(len(custom_loaded), 1)
+        self.assertEqual(custom_loaded[0]["content"], "hello custom")
+        
+    def test_legacy_migration(self):
+        profile = "LegacyProfile"
+        # 1. Create a legacy flat file manually
+        legacy_path = os.path.join(self.test_dir, f"{profile}_history.json")
+        legacy_bak_path = legacy_path + ".bak"
+        
+        legacy_data = {
+            "metadata": {
+                "relationship_score": 50,
+                "current_scene": "Library",
+                "memory_core": "Some legacy summary",
+                "last_summarized_index": 2,
+            },
+            "history": [{"role": "user", "content": "Legacy message"}]
+        }
+        
+        with open(legacy_path, "w", encoding="utf-8") as f:
+            json.dump(legacy_data, f)
+        with open(legacy_bak_path, "w", encoding="utf-8") as f:
+            json.dump(legacy_data, f)
+            
+        # 2. Access it via the manager under the default session name
+        loaded = self.manager.load_history(profile, session_name="default")
+        
+        # 3. Assert transparent migration happened
+        self.assertEqual(len(loaded), 1)
+        self.assertEqual(loaded[0]["content"], "Legacy message")
+        
+        new_path = os.path.join(self.test_dir, profile, "default_history.json")
+        new_bak_path = new_path + ".bak"
+        
+        self.assertTrue(os.path.exists(new_path))
+        self.assertTrue(os.path.exists(new_bak_path))
+        self.assertFalse(os.path.exists(legacy_path))
+        self.assertFalse(os.path.exists(legacy_bak_path))
+
+    def test_legacy_migration_only_backup_exists(self):
+        profile = "LegacyBackupProfile"
+        # 1. Create a legacy backup file only
+        legacy_bak_path = os.path.join(self.test_dir, f"{profile}_history.json.bak")
+        
+        legacy_data = {
+            "metadata": {
+                "relationship_score": 75,
+                "current_scene": "Park",
+                "memory_core": "Backup recovery",
+                "last_summarized_index": 1,
+            },
+            "history": [{"role": "user", "content": "Backup legacy message"}]
+        }
+        
+        with open(legacy_bak_path, "w", encoding="utf-8") as f:
+            json.dump(legacy_data, f)
+            
+        # 2. Access it via the manager under the default session name
+        loaded = self.manager.load_history(profile, session_name="default")
+        
+        # 3. Assert transparent migration from backup happened
+        self.assertEqual(len(loaded), 1)
+        self.assertEqual(loaded[0]["content"], "Backup legacy message")
+        
+        new_path = os.path.join(self.test_dir, profile, "default_history.json")
+        self.assertTrue(os.path.exists(new_path))
+        self.assertFalse(os.path.exists(legacy_bak_path))
+
+    @patch('engines.config.get_setting')
+    def test_user_profile_in_metadata(self, mock_get_setting):
+        profile = "UserMetadataProfile"
+        mock_get_setting.return_value = "Aiko.json"
+        
+        self.manager.save_history(profile, [{"role": "user", "content": "hello meta"}], session_name="default")
+        
+        # Verify metadata has user_profile
+        full_data = self.manager.get_full_data(profile, session_name="default")
+        self.assertEqual(full_data["metadata"].get("user_profile"), "Aiko.json")
+
+    @patch('engines.config.update_setting')
+    @patch('engines.config.get_setting')
+    def test_get_filename_fallback_and_setting_update(self, mock_get_setting, mock_update_setting):
+        profile = "FallbackProfile"
+        # Return non-existent session
+        mock_get_setting.return_value = "nonexistent_session"
+        
+        # Calling get_filename or using it should fallback to default and update setting
+        filename = self.manager._get_filename(profile, session_name=None)
+        
+        # The filename should point to default
+        self.assertTrue(filename.endswith("default_history.json"))
+        # update_setting should be called to update "current_history_session" to "default"
+        mock_update_setting.assert_called_with("current_history_session", "default")
 
 if __name__ == "__main__":
     unittest.main()

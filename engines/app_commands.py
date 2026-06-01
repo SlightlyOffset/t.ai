@@ -61,6 +61,19 @@ class SettingsRequested(Exception):
     """Exception raised to signal the TUI to open the settings screen."""
     pass
 
+class SessionChangedRequested(Exception):
+    """Exception raised to signal that the active session has changed."""
+    def __init__(self, session_name: str):
+        super().__init__(f"Session changed to {session_name}")
+        self.session_name = session_name
+
+class SessionNewRequested(Exception):
+    """Exception raised to signal that a new session has been created and user profile selection is requested."""
+    def __init__(self, session_name: str):
+        super().__init__(f"New session {session_name} requested")
+        self.session_name = session_name
+
+
 def normalize_command_prefix(ops: str) -> str | None:
     """
     If the input is a command (starts with one or more slashes), return the
@@ -276,26 +289,41 @@ def app_commands(ops: str, suppress_output: bool = False):
 
         # Case 2: //reset all -> clear all history files
         if subcommand == "all":
+            import glob
+            history_files = glob.glob(os.path.join(HISTORY_PATH, "**", "*_history.json"), recursive=True)
             if suppress_output:
-                for filename in os.listdir(HISTORY_PATH):
-                    if filename.endswith(".json"):
-                        profile_name = filename.replace("_history.json", "")
-                        memory_manager.save_history(profile_name, [])
+                for file_path in history_files:
+                    rel = os.path.relpath(file_path, HISTORY_PATH)
+                    parts = rel.split(os.sep)
+                    if len(parts) >= 2:
+                        prof = parts[0]
+                        sess = parts[1].replace("_history.json", "")
+                    else:
+                        prof = parts[0].replace("_history.json", "")
+                        sess = "default"
+                    memory_manager.save_history(prof, [], session_name=sess)
                 _log("[SYSTEM] All history files have been wiped.", Fore.GREEN)
                 return
 
             confirm = input(Fore.RED + "Are you sure you want to reset ALL history files? (y/n): ").strip().lower()
             if confirm == 'y':
-                for filename in os.listdir(HISTORY_PATH):
-                    if filename.endswith(".json"):
-                        profile_name = filename.replace("_history.json", "")
-                        memory_manager.save_history(profile_name, [])
+                for file_path in history_files:
+                    rel = os.path.relpath(file_path, HISTORY_PATH)
+                    parts = rel.split(os.sep)
+                    if len(parts) >= 2:
+                        prof = parts[0]
+                        sess = parts[1].replace("_history.json", "")
+                    else:
+                        prof = parts[0].replace("_history.json", "")
+                        sess = "default"
+                    memory_manager.save_history(prof, [], session_name=sess)
                 _log("[SYSTEM] All history files have been wiped.", Fore.GREEN)
             else:
                 _log("[SYSTEM] Reset cancelled.", Fore.YELLOW)
             return
 
         # Case 3: //reset [profile_name] -> clear history of specific or active profile
+        session_name = None
         if subcommand:
             profile_name = subcommand.replace("_history.json", "").replace(".json", "")
         else:
@@ -309,17 +337,24 @@ def app_commands(ops: str, suppress_output: bool = False):
                 else:
                     history_path = pick_history()
                     if history_path:
-                        profile_name = os.path.basename(history_path).replace("_history.json", "")
+                        rel = os.path.relpath(history_path, HISTORY_PATH)
+                        parts = rel.split(os.sep)
+                        if len(parts) >= 2:
+                            profile_name = parts[0]
+                            session_name = parts[1].replace("_history.json", "")
+                        else:
+                            profile_name = parts[0].replace("_history.json", "")
+                            session_name = "default"
                     else:
                         _log("[SYSTEM] No history selected.", Fore.RED)
                         return
 
         if profile_name:
-            memory_manager.save_history(profile_name, [])
+            memory_manager.save_history(profile_name, [], session_name=session_name)
             if not subcommand:
-                _log(f"[SYSTEM] History cleared for current profile: {profile_name}.", Fore.GREEN)
+                _log(f"[SYSTEM] History cleared for current profile (session: {session_name or 'active'}): {profile_name}.", Fore.GREEN)
             else:
-                _log(f"[SYSTEM] History cleared for profile: {profile_name}.", Fore.GREEN)
+                _log(f"[SYSTEM] History cleared for profile: {profile_name} (session: {session_name or 'active'}).", Fore.GREEN)
 
     def _clear():
         """Clears the terminal screen (CLI only)."""
@@ -572,6 +607,222 @@ def app_commands(ops: str, suppress_output: bool = False):
         else:
             _log(f"[ERROR] Unknown lore command: {subcommand}", Fore.RED)
 
+    def _session(args=None):
+        """Manages conversation sessions. Usage: //session [list|current|new|load|branch|rename|delete]"""
+        from engines.utilities import sanitize_profile_name
+        
+        char_profile_setting = get_setting("current_character_profile")
+        if not char_profile_setting:
+            _log("[ERROR] No active character profile. Cannot manage sessions.", Fore.RED)
+            return
+
+        character_name = os.path.basename(char_profile_setting).replace(".json", "")
+        char_dir = os.path.join(HISTORY_PATH, sanitize_profile_name(character_name))
+        
+        if not args or not args.strip():
+            _log("[SYSTEM] Usage: //session [list|current|new|load|branch|rename|delete]", Fore.YELLOW)
+            _log("Subcommands:", Fore.YELLOW)
+            _log("  current                     - Show active session name", Fore.CYAN)
+            _log("  list                        - List sessions for this character", Fore.CYAN)
+            _log("  new <name>                  - Start a new empty session", Fore.CYAN)
+            _log("  load <name>                 - Switch to an existing session", Fore.CYAN)
+            _log("  branch <name> [msg_index]   - Branch current session to <name> (at optional message index)", Fore.CYAN)
+            _log("  rename [old] <new>          - Rename session to <new>", Fore.CYAN)
+            _log("  delete <name>               - Delete session and backup", Fore.CYAN)
+            return
+
+        parts = args.strip().split(None, 2)
+        subcmd = parts[0].lower()
+        sub_args = parts[1:]
+
+        active_session = get_setting("current_history_session", "default")
+
+        if subcmd == "current":
+            _log(f"[SYSTEM] Currently active session: {active_session}", Fore.GREEN)
+            
+        elif subcmd == "list":
+            if not os.path.exists(char_dir):
+                os.makedirs(char_dir)
+            files = [f for f in os.listdir(char_dir) if f.endswith("_history.json")]
+            if not files:
+                files = ["default_history.json"]
+                # Create the file on the fly
+                memory_manager.save_history(character_name, [], session_name="default")
+            
+            _log(f"[SESSIONS FOR {character_name.upper()}]", Fore.YELLOW)
+            for f in sorted(files):
+                sname = f.replace("_history.json", "")
+                if sname == active_session:
+                    _log(f"  * {sname} (active)", Fore.GREEN)
+                else:
+                    _log(f"    {sname}", Fore.CYAN)
+                    
+        elif subcmd == "new":
+            if not sub_args:
+                _log("[ERROR] Usage: //session new <name>", Fore.RED)
+                return
+            name = sanitize_profile_name(sub_args[0])
+            if not name:
+                _log("[ERROR] Invalid session name.", Fore.RED)
+                return
+            
+            # Existence check to prevent data loss
+            session_file = os.path.join(char_dir, f"{name}_history.json")
+            if os.path.exists(session_file):
+                _log(f"[ERROR] Session '{name}' already exists.", Fore.RED)
+                return
+            
+            memory_manager.save_history(character_name, [], session_name=name)
+            update_setting("current_history_session", name)
+            _log(f"[SYSTEM] Created and switched to new session: {name}", Fore.GREEN)
+            raise SessionNewRequested(name)
+            
+        elif subcmd == "load":
+            if not sub_args:
+                _log("[ERROR] Usage: //session load <name>", Fore.RED)
+                return
+            name = sanitize_profile_name(sub_args[0])
+            if not name:
+                _log("[ERROR] Invalid session name.", Fore.RED)
+                return
+                
+            session_file = os.path.join(char_dir, f"{name}_history.json")
+            if not os.path.exists(session_file):
+                if name == "default":
+                    # Create empty default session on the fly
+                    memory_manager.save_history(character_name, [], session_name="default")
+                else:
+                    _log(f"[ERROR] Session '{name}' does not exist.", Fore.RED)
+                    return
+                
+            update_setting("current_history_session", name)
+            _log(f"[SYSTEM] Switched to session: {name}", Fore.GREEN)
+            raise SessionChangedRequested(name)
+            
+        elif subcmd == "branch":
+            if not sub_args:
+                _log("[ERROR] Usage: //session branch <name> [message_index]", Fore.RED)
+                return
+            name = sanitize_profile_name(sub_args[0])
+            if not name:
+                _log("[ERROR] Invalid session name.", Fore.RED)
+                return
+
+            # Existence check to prevent data loss
+            session_file = os.path.join(char_dir, f"{name}_history.json")
+            if os.path.exists(session_file):
+                _log(f"[ERROR] Session '{name}' already exists.", Fore.RED)
+                return
+
+            msg_index = None
+            if len(sub_args) > 1:
+                try:
+                    msg_index = int(sub_args[1])
+                except ValueError:
+                    _log(f"[WARNING] Invalid message index: '{sub_args[1]}'. Branching entire history.", Fore.YELLOW)
+
+            current_data = memory_manager.get_full_data(character_name)
+            history = current_data.get("history", [])
+            metadata = current_data.get("metadata", {}).copy()
+
+            if msg_index is not None:
+                keep_count = max(0, min(len(history), msg_index))
+                removed_count = len(history) - keep_count
+                old_last_summarized = int(metadata.get("last_summarized_index", 0) or 0)
+                if removed_count >= memory_manager.REWIND_MEMORY_CORE_RESET_THRESHOLD or keep_count < old_last_summarized:
+                    metadata["memory_core"] = ""
+                    metadata["last_summarized_index"] = 0
+                else:
+                    metadata["last_summarized_index"] = min(old_last_summarized, keep_count)
+                
+                history = history[:keep_count]
+                _log(f"[SYSTEM] Branching {keep_count} messages from index {msg_index}.", Fore.GREEN)
+
+            memory_manager.save_history(
+                character_name,
+                history,
+                relationship_score=metadata.get("relationship_score", 0),
+                current_scene=metadata.get("current_scene", "Unknown Location"),
+                memory_core=metadata.get("memory_core", ""),
+                last_summarized_index=metadata.get("last_summarized_index", 0),
+                session_name=name
+            )
+            
+            update_setting("current_history_session", name)
+            _log(f"[SYSTEM] Branched current session to: {name}", Fore.GREEN)
+            raise SessionChangedRequested(name)
+            
+        elif subcmd == "rename":
+            if not sub_args:
+                _log("[ERROR] Usage: //session rename [old_name] <new_name>", Fore.RED)
+                return
+            if len(sub_args) == 1:
+                old_name = active_session
+                new_name = sanitize_profile_name(sub_args[0])
+            else:
+                old_name = sanitize_profile_name(sub_args[0])
+                new_name = sanitize_profile_name(sub_args[1])
+                
+            if not old_name or not new_name:
+                _log("[ERROR] Invalid session names.", Fore.RED)
+                return
+                
+            old_file = os.path.join(char_dir, f"{old_name}_history.json")
+            new_file = os.path.join(char_dir, f"{new_name}_history.json")
+            
+            if not os.path.exists(old_file):
+                _log(f"[ERROR] Session '{old_name}' does not exist.", Fore.RED)
+                return
+                
+            if os.path.exists(new_file):
+                _log(f"[ERROR] Session '{new_name}' already exists.", Fore.RED)
+                return
+                
+            try:
+                os.rename(old_file, new_file)
+                old_bak = old_file + ".bak"
+                if os.path.exists(old_bak):
+                    os.rename(old_bak, new_file + ".bak")
+                
+                _log(f"[SYSTEM] Renamed session '{old_name}' to '{new_name}'.", Fore.GREEN)
+                
+                if old_name == active_session:
+                    update_setting("current_history_session", new_name)
+                    raise SessionChangedRequested(new_name)
+            except SessionChangedRequested:
+                raise
+            except Exception as e:
+                _log(f"[ERROR] Failed to rename session: {e}", Fore.RED)
+                
+        elif subcmd == "delete":
+            if not sub_args:
+                _log("[ERROR] Usage: //session delete <name>", Fore.RED)
+                return
+            name = sanitize_profile_name(sub_args[0])
+            if not name:
+                _log("[ERROR] Invalid session name.", Fore.RED)
+                return
+                
+            if name == active_session:
+                _log("[ERROR] Cannot delete the currently active session. Switch to another session first.", Fore.RED)
+                return
+                
+            session_file = os.path.join(char_dir, f"{name}_history.json")
+            if not os.path.exists(session_file):
+                _log(f"[ERROR] Session '{name}' does not exist.", Fore.RED)
+                return
+                
+            try:
+                os.remove(session_file)
+                bak_file = session_file + ".bak"
+                if os.path.exists(bak_file):
+                    os.remove(bak_file)
+                _log(f"[SYSTEM] Deleted session '{name}'.", Fore.GREEN)
+            except Exception as e:
+                _log(f"[ERROR] Failed to delete session: {e}", Fore.RED)
+                
+        else:
+            _log(f"[ERROR] Unknown session subcommand: '{subcmd}'", Fore.RED)
 
     # Mapping of command strings to their respective functions
     cmds = {
@@ -594,6 +845,7 @@ def app_commands(ops: str, suppress_output: bool = False):
         "//rewind": _rewind,
         "//compress": _compress,
         "//settings": _settings,
+        "//session": _session,
     }
 
     normalized = normalize_command_prefix(ops)
@@ -621,6 +873,14 @@ def app_commands(ops: str, suppress_output: bool = False):
             return True
         except RestartRequested:
             raise
+        except SessionChangedRequested:
+            if suppress_output:
+                raise
+            return True
+        except SessionNewRequested:
+            if suppress_output:
+                raise
+            return True
         except RegenerateRequested:
             if suppress_output:
                 raise
@@ -639,7 +899,7 @@ def app_commands(ops: str, suppress_output: bool = False):
         except SettingsRequested:
             if suppress_output:
                 raise
-            _log("[SYSTEM] Settings screen is only supported in TUI mode.", Fore.RED)
+            _log("[SYSTEM] Settings screen is only supported in TUI mode.", Fore.YELLOW)
             return True
         except Exception as e:
             _log(f"[ERROR] Command failed: {e}", Fore.RED)

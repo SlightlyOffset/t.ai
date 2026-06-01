@@ -155,6 +155,7 @@ class TaiMenu(App):
     BINDINGS = [
         ("ctrl+b", "toggle_sidebar", "Toggle Sidebar"),
         ("ctrl+o", "open_profile_select", "Profiles"),
+        ("ctrl+t", "open_session_select", "Sessions"),
         ("ctrl+s", "open_settings", "Settings"),
         ("ctrl+q", "quit", "Quit"),
         ("alt+left", "previous_response", "Prev Resp"),
@@ -374,6 +375,108 @@ class TaiMenu(App):
         """Open the profile selection screen."""
         from ui.ProfileSelectScreen import ProfileSelect
         self.push_screen(ProfileSelect(), callback=self.on_profile_selected)
+
+    def action_open_session_select(self) -> None:
+        """Open the session selection modal screen."""
+        if not self.history_profile_name:
+            self.add_message("[ERROR] No active companion profile loaded. Cannot manage sessions.", role="system")
+            return
+        from ui.SessionSelectScreen import SessionSelectScreen
+        self.push_screen(SessionSelectScreen(self.history_profile_name), callback=self.on_session_selected)
+
+    def on_session_selected(self, result: dict) -> None:
+        """Callback handled when SessionSelectScreen is dismissed."""
+        if result:
+            action = result.get("action")
+            session_name = result.get("session_name")
+            
+            if action == "new":
+                from ui.ProfileSelectScreen import ProfileSelect
+                self.push_screen(ProfileSelect(choose_user_only=True), callback=self.on_new_session_user_selected)
+                return
+                
+            self.add_message(f"Switched to session: [bold]{session_name}[/bold]", role="system")
+            
+            # Check if we need to switch user profile
+            if self.check_and_switch_session_user(session_name):
+                return
+                
+            # If not switching user, do normal reload
+            self.reload_chat_list_for_session(session_name)
+
+    def on_new_session_user_selected(self, result: dict) -> None:
+        """Callback when user profile is selected for a new session."""
+        if result and result.get("user"):
+            user_name = result.get("user")
+            user_path = os.path.join("user_profiles", user_name)
+            self.switch_profile(self.char_path, user_path)
+        else:
+            # Cancelled or no user selected, reload with current user
+            self.reload_chat_list_for_new_session()
+
+    def reload_chat_list_for_new_session(self) -> None:
+        """Utility to reload the chat screen for a clean/new session state."""
+        if self.char_path and os.path.exists(self.char_path):
+            try:
+                with open(self.char_path, "r", encoding="utf-8") as f:
+                    self.character_profile = json.load(f)
+            except Exception:
+                pass
+        else:
+            if self.character_profile:
+                self.character_profile["relationship_score"] = 0
+
+        chat_list = self.query_one("#chat_list")
+        for child in list(chat_list.children):
+            child.remove()
+        self.print_starter_message()
+        self.update_sidebar()
+
+    def check_and_switch_session_user(self, session_name: str) -> bool:
+        """
+        Check the metadata of the specified session. If it specifies a user profile
+        different from the current one, switch to it and return True. Otherwise return False.
+        """
+        full_data = memory_manager.get_full_data(self.history_profile_name, session_name)
+        metadata = full_data.get("metadata", {})
+        user_profile_name = metadata.get("user_profile")
+        
+        curr_user_base = os.path.basename(self.user_path) if self.user_path else ""
+        new_user_base = user_profile_name if user_profile_name else ""
+        
+        if new_user_base and new_user_base != curr_user_base:
+            user_path = os.path.join("user_profiles", new_user_base)
+            if os.path.exists(user_path):
+                self.add_message(f"[SYSTEM] Switched user profile to: [bold]{new_user_base.replace('.json', '')}[/bold]", role="system")
+                self.switch_profile(self.char_path, user_path)
+                return True
+        return False
+
+    def reload_chat_list_for_session(self, session_name: str) -> None:
+        """Reload chat messages and sidebar for the active session."""
+        if self.char_path and os.path.exists(self.char_path):
+            try:
+                with open(self.char_path, "r", encoding="utf-8") as f:
+                    self.character_profile = json.load(f)
+            except Exception:
+                pass
+
+        full_data = memory_manager.get_full_data(self.history_profile_name)
+        metadata = full_data.get("metadata", {})
+        self.character_profile["relationship_score"] = metadata.get("relationship_score", 0)
+
+        # Clear chat list widgets on screen
+        chat_list = self.query_one("#chat_list")
+        for child in list(chat_list.children):
+            child.remove()
+
+        has_history = memory_manager.has_history(self.history_profile_name) and memory_manager.get_history_length(self.history_profile_name) > 0
+        if not has_history:
+            self.print_starter_message()
+        else:
+            self.reload_chat_from_history()
+
+        self.update_sidebar()
 
     def action_open_settings(self) -> None:
         """Open the global settings screen."""
@@ -1183,6 +1286,23 @@ class TaiMenu(App):
 
             if command_action["type"] == "open_settings":
                 self.action_open_settings()
+                return
+
+            if command_action["type"] == "session_changed":
+                session_name = command_action["session_name"]
+                self.add_message(f"[SYSTEM] Switched to session: [bold]{session_name}[/bold]", role="command")
+                
+                if self.check_and_switch_session_user(session_name):
+                    return
+                    
+                self.reload_chat_list_for_session(session_name)
+                return
+
+            if command_action["type"] == "session_new_requested":
+                session_name = command_action["session_name"]
+                self.add_message(f"[SYSTEM] Switched to new session: [bold]{session_name}[/bold]", role="command")
+                from ui.ProfileSelectScreen import ProfileSelect
+                self.push_screen(ProfileSelect(choose_user_only=True), callback=self.on_new_session_user_selected)
                 return
 
             if command_action["type"] == "compress":
