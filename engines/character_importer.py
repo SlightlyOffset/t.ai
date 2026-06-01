@@ -356,7 +356,7 @@ class CharacterImporter:
 
         # Security check: Ensure the target path is still within the profiles directory
         if not target_path.startswith(profiles_dir):
-            print(f"{Fore.RED}[ERROR] Path traversal attempt detected: {filename}")
+            print(f"{Fore.RED}[ERROR] Path traversal attempt detected.")
             return False
 
         # Ensure profiles directory exists
@@ -413,7 +413,7 @@ def import_character(source_path, refine=False, model=None):
     save_path = CharacterImporter.save_profile(new_profile)
 
     if save_path:
-        print(f"{Fore.GREEN}[SUCCESS] Imported {new_profile['name']} successfully.")
+        print(f"{Fore.GREEN}[SUCCESS] Character profile imported successfully.")
         if avatar_path != "img/No_Image_Error.png":
              print(f"{Fore.GREEN}[SUCCESS] Saved avatar to {avatar_path}")
              
