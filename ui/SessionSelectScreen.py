@@ -6,7 +6,7 @@ from textual.widgets import Label, Input, Button, OptionList
 from textual.widgets.option_list import Option
 from engines.config import get_setting, update_setting
 from engines.memory_v2 import memory_manager
-from engines.app_commands import sanitize_profile_name
+from engines.utilities import sanitize_profile_name
 
 class SessionSelectScreen(ModalScreen):
     """Modal screen for managing conversation sessions (load, new, branch, rename, delete)."""
