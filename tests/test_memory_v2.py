@@ -257,6 +257,35 @@ class TestHistoryManager(unittest.TestCase):
         self.assertFalse(os.path.exists(legacy_path))
         self.assertFalse(os.path.exists(legacy_bak_path))
 
+    def test_legacy_migration_only_backup_exists(self):
+        profile = "LegacyBackupProfile"
+        # 1. Create a legacy backup file only
+        legacy_bak_path = os.path.join(self.test_dir, f"{profile}_history.json.bak")
+        
+        legacy_data = {
+            "metadata": {
+                "relationship_score": 75,
+                "current_scene": "Park",
+                "memory_core": "Backup recovery",
+                "last_summarized_index": 1,
+            },
+            "history": [{"role": "user", "content": "Backup legacy message"}]
+        }
+        
+        with open(legacy_bak_path, "w", encoding="utf-8") as f:
+            json.dump(legacy_data, f)
+            
+        # 2. Access it via the manager under the default session name
+        loaded = self.manager.load_history(profile, session_name="default")
+        
+        # 3. Assert transparent migration from backup happened
+        self.assertEqual(len(loaded), 1)
+        self.assertEqual(loaded[0]["content"], "Backup legacy message")
+        
+        new_path = os.path.join(self.test_dir, profile, "default_history.json")
+        self.assertTrue(os.path.exists(new_path))
+        self.assertFalse(os.path.exists(legacy_bak_path))
+
 if __name__ == "__main__":
     unittest.main()
 

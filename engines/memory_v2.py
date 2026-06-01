@@ -46,16 +46,22 @@ class HistoryManager:
         if not os.path.exists(char_dir):
             os.makedirs(char_dir)
 
-        # Auto-migration: if default session doesn't exist, check if old flat file exists
+        # Auto-migration: if default session doesn't exist, check if old flat file or backup exists
         if safe_session == "default" and not os.path.exists(new_path):
             old_path = os.path.join(self.history_dir, f"{safe_char}_history.json")
+            old_bak = old_path + ".bak"
+            new_bak = new_path + ".bak"
+
             if os.path.exists(old_path):
                 try:
                     os.rename(old_path, new_path)
-                    # Migrate backup if exists
-                    old_bak = old_path + ".bak"
-                    if os.path.exists(old_bak):
-                        os.rename(old_bak, new_path + ".bak")
+                    if os.path.exists(old_bak) and not os.path.exists(new_bak):
+                        os.rename(old_bak, new_bak)
+                except Exception:
+                    pass
+            elif os.path.exists(old_bak):
+                try:
+                    os.rename(old_bak, new_path)
                 except Exception:
                     pass
 
