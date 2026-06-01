@@ -206,6 +206,45 @@ class TestAppCommands(unittest.TestCase):
         mock_update.assert_called_with("interaction_mode", "casual")
 
 
+    @patch('engines.app_commands.update_setting')
+    def test_session_new_cmd(self, mock_update):
+        def get_setting_mock(key, default=None):
+            if key == "current_character_profile":
+                return "Meryl.json"
+            if key == "current_history_session":
+                return "default"
+            return default
+        self.mock_get_setting.side_effect = get_setting_mock
+
+        from engines.app_commands import SessionChangedRequested
+        with self.assertRaises(SessionChangedRequested) as cm:
+            app_commands("//session new adventure", suppress_output=True)
+        self.assertEqual(cm.exception.session_name, "adventure")
+        mock_update.assert_called_with("current_history_session", "adventure")
+
+    @patch('engines.app_commands.update_setting')
+    def test_session_load_cmd(self, mock_update):
+        def get_setting_mock(key, default=None):
+            if key == "current_character_profile":
+                return "Meryl.json"
+            if key == "current_history_session":
+                return "default"
+            return default
+        self.mock_get_setting.side_effect = get_setting_mock
+
+        # Create dummy session file to load
+        char_dir = os.path.join(self.test_history_dir, "Meryl")
+        os.makedirs(char_dir, exist_ok=True)
+        session_file = os.path.join(char_dir, "adventure_history.json")
+        with open(session_file, "w") as f:
+            f.write("{}")
+
+        from engines.app_commands import SessionChangedRequested
+        with self.assertRaises(SessionChangedRequested) as cm:
+            app_commands("//session load adventure", suppress_output=True)
+        self.assertEqual(cm.exception.session_name, "adventure")
+        mock_update.assert_called_with("current_history_session", "adventure")
+
 if __name__ == "__main__":
     unittest.main()
 

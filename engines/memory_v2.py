@@ -30,10 +30,36 @@ class HistoryManager:
         if not os.path.exists(self.history_dir):
             os.makedirs(self.history_dir)
 
-    def _get_filename(self, profile_name: str) -> str:
-        """Generates a safe filename for the history JSON file."""
-        safe_name = sanitize_profile_name(profile_name) or "session"
-        return os.path.join(self.history_dir, f"{safe_name}_history.json")
+    def _get_filename(self, profile_name: str, session_name: str = None) -> str:
+        """Generates a safe filename for the history JSON file in the character's subfolder."""
+        if session_name is None:
+            from engines.config import get_setting
+            session_name = get_setting("current_history_session", "default")
+
+        safe_char = sanitize_profile_name(profile_name) or "session"
+        safe_session = sanitize_profile_name(session_name) or "default"
+        
+        char_dir = os.path.join(self.history_dir, safe_char)
+        new_path = os.path.join(char_dir, f"{safe_session}_history.json")
+
+        # Ensure directory exists
+        if not os.path.exists(char_dir):
+            os.makedirs(char_dir)
+
+        # Auto-migration: if default session doesn't exist, check if old flat file exists
+        if safe_session == "default" and not os.path.exists(new_path):
+            old_path = os.path.join(self.history_dir, f"{safe_char}_history.json")
+            if os.path.exists(old_path):
+                try:
+                    os.rename(old_path, new_path)
+                    # Migrate backup if exists
+                    old_bak = old_path + ".bak"
+                    if os.path.exists(old_bak):
+                        os.rename(old_bak, new_path + ".bak")
+                except Exception:
+                    pass
+
+        return new_path
 
     def _get_profile_lock(self, profile_name: str) -> threading.Lock:
         """Get or create a per-profile lock for thread-safe writes."""
@@ -42,9 +68,9 @@ class HistoryManager:
                 self._write_locks[profile_name] = threading.Lock()
             return self._write_locks[profile_name]
 
-    def has_history(self, profile_name: str) -> bool:
+    def has_history(self, profile_name: str, session_name: str = None) -> bool:
         """Checks if the history file exists for a given profile."""
-        filename = self._get_filename(profile_name)
+        filename = self._get_filename(profile_name, session_name)
         return os.path.exists(filename)
 
     def set_pending_user_message(self, profile_name: str, message: str) -> None:
@@ -62,14 +88,14 @@ class HistoryManager:
         with self._pending_lock:
             self._pending_user_messages.pop(profile_name, None)
 
-    def get_history_length(self, profile_name: str) -> int:
+    def get_history_length(self, profile_name: str, session_name: str = None) -> int:
         """Returns the number of messages in the history."""
-        data = self.get_full_data(profile_name)
+        data = self.get_full_data(profile_name, session_name)
         return len(data.get("history", [])) if data else 0
 
     def save_history(self, profile_name: str, history: list, relationship_score: int = 0,
                      current_scene: str = "Unknown Location", memory_core: str = "",
-                     last_summarized_index: int = 0) -> None:
+                     last_summarized_index: int = 0, session_name: str = None) -> None:
         """
         Saves history to a JSON file with metadata (thread-safe).
 
@@ -80,10 +106,11 @@ class HistoryManager:
             current_scene (str): The physical location or state of the RP.
             memory_core (str): The consolidated rolling summary.
             last_summarized_index (int): The index of the last message included in the summary.
+            session_name (str, optional): The name of the session.
         """
         lock = self._get_profile_lock(profile_name)
         with lock:
-            filename = self._get_filename(profile_name)
+            filename = self._get_filename(profile_name, session_name)
             now = datetime.now()
             current_time = now.strftime("%Y-%m-%d | %H:%M:%S")
 
@@ -100,12 +127,12 @@ class HistoryManager:
 
             save_json_atomic(filename, data_to_save)
 
-    def get_full_data(self, profile_name: str) -> dict:
+    def get_full_data(self, profile_name: str, session_name: str = None) -> dict:
         """
         Loads the full JSON structure from the history file.
         Handles transition from the old format (list of messages).
         """
-        filename = self._get_filename(profile_name)
+        filename = self._get_filename(profile_name, session_name)
         default_data = {
             "metadata": {
                 "last_interaction": None,
@@ -184,18 +211,19 @@ class HistoryManager:
         except Exception:
             return default_data
 
-    def load_history(self, profile_name: str, limit: int = None) -> list:
+    def load_history(self, profile_name: str, limit: int = None, session_name: str = None) -> list:
         """
         Loads history list from a JSON file, optionally truncating it.
 
         Args:
             profile_name (str): The name of the character.
             limit (int, optional): The maximum number of messages to return.
+            session_name (str, optional): The session name.
 
         Returns:
             list: List of loaded messages.
         """
-        data = self.get_full_data(profile_name)
+        data = self.get_full_data(profile_name, session_name)
         history = data.get("history", [])
 
         if limit and len(history) > limit:
@@ -203,11 +231,11 @@ class HistoryManager:
             return history[-limit:]
         return history
 
-    def get_last_timestamp(self, profile_name: str) -> datetime | None:
+    def get_last_timestamp(self, profile_name: str, session_name: str = None) -> datetime | None:
         """
         Retrieves the last interaction timestamp for mood decay.
         """
-        data = self.get_full_data(profile_name)
+        data = self.get_full_data(profile_name, session_name)
         time_str = data.get("metadata", {}).get("last_interaction")
         if time_str:
             try:
@@ -216,11 +244,11 @@ class HistoryManager:
                 return None
         return None
 
-    def is_recent_interaction(self, profile_name: str, hours: int = 24) -> bool:
+    def is_recent_interaction(self, profile_name: str, hours: int = 24, session_name: str = None) -> bool:
         """
         Checks if the last interaction was within a certain number of hours.
         """
-        last_time = self.get_last_timestamp(profile_name)
+        last_time = self.get_last_timestamp(profile_name, session_name)
         if not last_time:
             return False
 
@@ -228,52 +256,53 @@ class HistoryManager:
         diff = now - last_time
         return (diff.total_seconds() / 3600) <= hours
 
-    def get_memory_core(self, profile_name: str) -> str:
+    def get_memory_core(self, profile_name: str, session_name: str = None) -> str:
         """Retrieves the consolidated rolling summary for a profile."""
-        data = self.get_full_data(profile_name)
+        data = self.get_full_data(profile_name, session_name)
         return data.get("metadata", {}).get("memory_core", "")
 
-    def get_last_summarized_index(self, profile_name: str) -> int:
+    def get_last_summarized_index(self, profile_name: str, session_name: str = None) -> int:
         """Retrieves the index of the last summarized message."""
-        data = self.get_full_data(profile_name)
+        data = self.get_full_data(profile_name, session_name)
         return data.get("metadata", {}).get("last_summarized_index", 0)
 
-    def update_memory_core(self, profile_name: str, summary: str, last_index: int) -> None:
+    def update_memory_core(self, profile_name: str, summary: str, last_index: int, session_name: str = None) -> None:
         """Updates the Memory Core and its last summarized index without losing history (thread-safe)."""
         lock = self._get_profile_lock(profile_name)
         with lock:
-            data = self.get_full_data(profile_name)
+            data = self.get_full_data(profile_name, session_name)
             data["metadata"]["memory_core"] = summary
             data["metadata"]["last_summarized_index"] = last_index
 
-            filename = self._get_filename(profile_name)
+            filename = self._get_filename(profile_name, session_name)
             save_json_atomic(filename, data)
 
-    def get_narrative_state(self, profile_name: str) -> dict:
+    def get_narrative_state(self, profile_name: str, session_name: str = None) -> dict:
         """Retrieves persisted narrative state for pipeline-based generation."""
-        data = self.get_full_data(profile_name)
+        data = self.get_full_data(profile_name, session_name)
         return data.get("metadata", {}).get("narrative_state", {})
 
-    def update_narrative_state(self, profile_name: str, narrative_state: dict, turn_metrics: dict | None = None) -> None:
+    def update_narrative_state(self, profile_name: str, narrative_state: dict, turn_metrics: dict | None = None, session_name: str = None) -> None:
         """Persists narrative state and optional turn metrics without touching history messages (thread-safe)."""
         lock = self._get_profile_lock(profile_name)
         with lock:
-            data = self.get_full_data(profile_name)
+            data = self.get_full_data(profile_name, session_name)
             metadata = data.setdefault("metadata", {})
             metadata["narrative_state"] = narrative_state or {}
             if turn_metrics is not None:
                 metadata["last_turn_metrics"] = turn_metrics
 
-            filename = self._get_filename(profile_name)
+            filename = self._get_filename(profile_name, session_name)
             save_json_atomic(filename, data)
 
-    def rewind_history(self, profile_name: str, keep_count: int) -> tuple[int, int]:
+    def rewind_history(self, profile_name: str, keep_count: int, session_name: str = None) -> tuple[int, int]:
         """
         Truncates conversation history to the first `keep_count` messages.
 
         Args:
             profile_name (str): The profile whose history should be rewound.
             keep_count (int): Number of earliest messages to keep (0..len(history)).
+            session_name (str, optional): The session name.
 
         Returns:
             tuple[int, int]: (original_count, kept_count)
@@ -281,7 +310,7 @@ class HistoryManager:
         if keep_count < 0:
             raise ValueError("keep_count must be 0 or greater")
 
-        data = self.get_full_data(profile_name)
+        data = self.get_full_data(profile_name, session_name)
         history = data.get("history", [])
         original_count = len(history)
         removed_count = original_count - keep_count
@@ -302,7 +331,7 @@ class HistoryManager:
 
         lock = self._get_profile_lock(profile_name)
         with lock:
-            filename = self._get_filename(profile_name)
+            filename = self._get_filename(profile_name, session_name)
             save_json_atomic(filename, data)
 
         return original_count, keep_count

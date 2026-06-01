@@ -155,6 +155,7 @@ class TaiMenu(App):
     BINDINGS = [
         ("ctrl+b", "toggle_sidebar", "Toggle Sidebar"),
         ("ctrl+o", "open_profile_select", "Profiles"),
+        ("ctrl+t", "open_session_select", "Sessions"),
         ("ctrl+s", "open_settings", "Settings"),
         ("ctrl+q", "quit", "Quit"),
         ("alt+left", "previous_response", "Prev Resp"),
@@ -374,6 +375,46 @@ class TaiMenu(App):
         """Open the profile selection screen."""
         from ui.ProfileSelectScreen import ProfileSelect
         self.push_screen(ProfileSelect(), callback=self.on_profile_selected)
+
+    def action_open_session_select(self) -> None:
+        """Open the session selection modal screen."""
+        if not self.history_profile_name:
+            self.add_message("[ERROR] No active companion profile loaded. Cannot manage sessions.", role="system")
+            return
+        from ui.SessionSelectScreen import SessionSelectScreen
+        self.push_screen(SessionSelectScreen(self.history_profile_name), callback=self.on_session_selected)
+
+    def on_session_selected(self, result: dict) -> None:
+        """Callback handled when SessionSelectScreen is dismissed."""
+        if result:
+            action = result.get("action")
+            session_name = result.get("session_name")
+            self.add_message(f"Switched to session: [bold]{session_name}[/bold]", role="system")
+            
+            # Reload metadata and rebuild screen
+            if self.char_path and os.path.exists(self.char_path):
+                try:
+                    with open(self.char_path, "r", encoding="utf-8") as f:
+                        self.character_profile = json.load(f)
+                except Exception:
+                    pass
+
+            full_data = memory_manager.get_full_data(self.history_profile_name)
+            metadata = full_data.get("metadata", {})
+            self.character_profile["relationship_score"] = metadata.get("relationship_score", 0)
+
+            # Clear chat list widgets on screen
+            chat_list = self.query_one("#chat_list")
+            for child in list(chat_list.children):
+                child.remove()
+
+            has_history = memory_manager.has_history(self.history_profile_name) and memory_manager.get_history_length(self.history_profile_name) > 0
+            if not has_history:
+                self.print_starter_message()
+            else:
+                self.reload_chat_from_history()
+
+            self.update_sidebar()
 
     def action_open_settings(self) -> None:
         """Open the global settings screen."""
@@ -1183,6 +1224,38 @@ class TaiMenu(App):
 
             if command_action["type"] == "open_settings":
                 self.action_open_settings()
+                return
+
+            if command_action["type"] == "session_changed":
+                session_name = command_action["session_name"]
+                self.add_message(f"[SYSTEM] Switched to session: [bold]{session_name}[/bold]", role="command")
+                
+                # Reload character profile from disk
+                if self.char_path and os.path.exists(self.char_path):
+                    try:
+                        with open(self.char_path, "r", encoding="utf-8") as f:
+                            self.character_profile = json.load(f)
+                    except Exception:
+                        pass
+                
+                # Read history metadata and update sidebar relationship/scene
+                full_data = memory_manager.get_full_data(self.history_profile_name)
+                metadata = full_data.get("metadata", {})
+                self.character_profile["relationship_score"] = metadata.get("relationship_score", 0)
+
+                has_history = memory_manager.has_history(self.history_profile_name) and memory_manager.get_history_length(self.history_profile_name) > 0
+                
+                # Clear chat list widgets on screen
+                chat_list = self.query_one("#chat_list")
+                for child in list(chat_list.children):
+                    child.remove()
+                    
+                if not has_history:
+                    self.print_starter_message()
+                else:
+                    self.reload_chat_from_history()
+                
+                self.update_sidebar()
                 return
 
             if command_action["type"] == "compress":
