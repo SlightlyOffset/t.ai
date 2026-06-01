@@ -245,6 +245,42 @@ class TestAppCommands(unittest.TestCase):
         self.assertEqual(cm.exception.session_name, "adventure")
         mock_update.assert_called_with("current_history_session", "adventure")
 
+    @patch('engines.app_commands.update_setting')
+    def test_session_new_cmd_no_suppress(self, mock_update):
+        def get_setting_mock(key, default=None):
+            if key == "current_character_profile":
+                return "Meryl.json"
+            if key == "current_history_session":
+                return "default"
+            return default
+        self.mock_get_setting.side_effect = get_setting_mock
+
+        # Should not raise exception and return True in non-suppressed mode (CLI)
+        result = app_commands("//session new adventure2", suppress_output=False)
+        self.assertTrue(result)
+        mock_update.assert_called_with("current_history_session", "adventure2")
+
+    @patch('engines.app_commands.update_setting')
+    def test_session_load_cmd_no_suppress(self, mock_update):
+        def get_setting_mock(key, default=None):
+            if key == "current_character_profile":
+                return "Meryl.json"
+            if key == "current_history_session":
+                return "default"
+            return default
+        self.mock_get_setting.side_effect = get_setting_mock
+
+        char_dir = os.path.join(self.test_history_dir, "Meryl")
+        os.makedirs(char_dir, exist_ok=True)
+        session_file = os.path.join(char_dir, "adventure3_history.json")
+        with open(session_file, "w") as f:
+            f.write("{}")
+
+        # Should not raise exception and return True in non-suppressed mode (CLI)
+        result = app_commands("//session load adventure3", suppress_output=False)
+        self.assertTrue(result)
+        mock_update.assert_called_with("current_history_session", "adventure3")
+
 if __name__ == "__main__":
     unittest.main()
 

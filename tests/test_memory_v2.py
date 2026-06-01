@@ -297,6 +297,21 @@ class TestHistoryManager(unittest.TestCase):
         full_data = self.manager.get_full_data(profile, session_name="default")
         self.assertEqual(full_data["metadata"].get("user_profile"), "Aiko.json")
 
+    @patch('engines.config.update_setting')
+    @patch('engines.config.get_setting')
+    def test_get_filename_fallback_and_setting_update(self, mock_get_setting, mock_update_setting):
+        profile = "FallbackProfile"
+        # Return non-existent session
+        mock_get_setting.return_value = "nonexistent_session"
+        
+        # Calling get_filename or using it should fallback to default and update setting
+        filename = self.manager._get_filename(profile, session_name=None)
+        
+        # The filename should point to default
+        self.assertTrue(filename.endswith("default_history.json"))
+        # update_setting should be called to update "current_history_session" to "default"
+        mock_update_setting.assert_called_with("current_history_session", "default")
+
 if __name__ == "__main__":
     unittest.main()
 

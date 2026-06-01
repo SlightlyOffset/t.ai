@@ -416,6 +416,16 @@ class TaiMenu(App):
 
     def reload_chat_list_for_new_session(self) -> None:
         """Utility to reload the chat screen for a clean/new session state."""
+        if self.char_path and os.path.exists(self.char_path):
+            try:
+                with open(self.char_path, "r", encoding="utf-8") as f:
+                    self.character_profile = json.load(f)
+            except Exception:
+                pass
+        else:
+            if self.character_profile:
+                self.character_profile["relationship_score"] = 0
+
         chat_list = self.query_one("#chat_list")
         for child in list(chat_list.children):
             child.remove()

@@ -646,6 +646,8 @@ def app_commands(ops: str, suppress_output: bool = False):
             files = [f for f in os.listdir(char_dir) if f.endswith("_history.json")]
             if not files:
                 files = ["default_history.json"]
+                # Create the file on the fly
+                memory_manager.save_history(character_name, [], session_name="default")
             
             _log(f"[SESSIONS FOR {character_name.upper()}]", Fore.YELLOW)
             for f in sorted(files):
@@ -664,6 +666,12 @@ def app_commands(ops: str, suppress_output: bool = False):
                 _log("[ERROR] Invalid session name.", Fore.RED)
                 return
             
+            # Existence check to prevent data loss
+            session_file = os.path.join(char_dir, f"{name}_history.json")
+            if os.path.exists(session_file):
+                _log(f"[ERROR] Session '{name}' already exists.", Fore.RED)
+                return
+            
             memory_manager.save_history(character_name, [], session_name=name)
             update_setting("current_history_session", name)
             _log(f"[SYSTEM] Created and switched to new session: {name}", Fore.GREEN)
@@ -680,8 +688,12 @@ def app_commands(ops: str, suppress_output: bool = False):
                 
             session_file = os.path.join(char_dir, f"{name}_history.json")
             if not os.path.exists(session_file):
-                _log(f"[ERROR] Session '{name}' does not exist.", Fore.RED)
-                return
+                if name == "default":
+                    # Create empty default session on the fly
+                    memory_manager.save_history(character_name, [], session_name="default")
+                else:
+                    _log(f"[ERROR] Session '{name}' does not exist.", Fore.RED)
+                    return
                 
             update_setting("current_history_session", name)
             _log(f"[SYSTEM] Switched to session: {name}", Fore.GREEN)
@@ -694,6 +706,12 @@ def app_commands(ops: str, suppress_output: bool = False):
             name = sanitize_profile_name(sub_args[0])
             if not name:
                 _log("[ERROR] Invalid session name.", Fore.RED)
+                return
+
+            # Existence check to prevent data loss
+            session_file = os.path.join(char_dir, f"{name}_history.json")
+            if os.path.exists(session_file):
+                _log(f"[ERROR] Session '{name}' already exists.", Fore.RED)
                 return
 
             msg_index = None
@@ -856,9 +874,13 @@ def app_commands(ops: str, suppress_output: bool = False):
         except RestartRequested:
             raise
         except SessionChangedRequested:
-            raise
+            if suppress_output:
+                raise
+            return True
         except SessionNewRequested:
-            raise
+            if suppress_output:
+                raise
+            return True
         except RegenerateRequested:
             if suppress_output:
                 raise

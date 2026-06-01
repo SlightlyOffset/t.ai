@@ -1,6 +1,6 @@
 import os
 from textual.app import ComposeResult
-from textual.containers import Container, Horizontal, Vertical
+from textual.containers import Container, Horizontal
 from textual.screen import ModalScreen
 from textual.widgets import Label, Input, Button, OptionList
 from textual.widgets.option_list import Option
@@ -136,6 +136,8 @@ class SessionSelectScreen(ModalScreen):
         files = [f for f in os.listdir(self.char_dir) if f.endswith("_history.json")]
         if not files:
             files = ["default_history.json"]
+            # Create default session file on the fly
+            memory_manager.save_history(self.character_name, [], session_name="default")
 
         active_session = get_setting("current_history_session", "default")
         
@@ -191,8 +193,12 @@ class SessionSelectScreen(ModalScreen):
         
         session_file = os.path.join(self.char_dir, f"{session_name}_history.json")
         if not os.path.exists(session_file):
-            self.show_error(f"Session '{session_name}' file not found.")
-            return
+            if session_name == "default":
+                # Create empty default session on the fly
+                memory_manager.save_history(self.character_name, [], session_name="default")
+            else:
+                self.show_error(f"Session '{session_name}' file not found.")
+                return
 
         update_setting("current_history_session", session_name)
         self.dismiss({"action": "load", "session_name": session_name})
@@ -202,6 +208,12 @@ class SessionSelectScreen(ModalScreen):
         name = sanitize_profile_name(name_input)
         if not name:
             self.show_error("Invalid or empty session name.")
+            return
+
+        # Check if session file already exists
+        session_file = os.path.join(self.char_dir, f"{name}_history.json")
+        if os.path.exists(session_file):
+            self.show_error(f"Session '{name}' already exists.")
             return
 
         # Write empty history
@@ -226,6 +238,12 @@ class SessionSelectScreen(ModalScreen):
 
         if new_name == source_name:
             self.show_error("Target session name must be different from source.")
+            return
+
+        # Block branching when the target session already exists.
+        new_file = os.path.join(self.char_dir, f"{new_name}_history.json")
+        if os.path.exists(new_file):
+            self.show_error(f"Session '{new_name}' already exists.")
             return
 
         branch_index_input = self.query_one("#txt_branch_index", Input).value.strip()

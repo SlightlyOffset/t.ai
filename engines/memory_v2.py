@@ -35,6 +35,16 @@ class HistoryManager:
         if session_name is None:
             from engines.config import get_setting
             session_name = get_setting("current_history_session", "default")
+            
+            # Fall back to default session if target session does not exist
+            safe_char = sanitize_profile_name(profile_name) or "session"
+            safe_session = sanitize_profile_name(session_name) or "default"
+            char_dir = os.path.join(self.history_dir, safe_char)
+            temp_path = os.path.join(char_dir, f"{safe_session}_history.json")
+            if safe_session != "default" and not os.path.exists(temp_path):
+                session_name = "default"
+                from engines.config import update_setting
+                update_setting("current_history_session", "default")
 
         safe_char = sanitize_profile_name(profile_name) or "session"
         safe_session = sanitize_profile_name(session_name) or "default"
@@ -58,12 +68,12 @@ class HistoryManager:
                     if os.path.exists(old_bak) and not os.path.exists(new_bak):
                         os.rename(old_bak, new_bak)
                 except Exception:
-                    pass
+                    return old_path
             elif os.path.exists(old_bak):
                 try:
                     os.rename(old_bak, new_path)
                 except Exception:
-                    pass
+                    return old_bak
 
         return new_path
 
