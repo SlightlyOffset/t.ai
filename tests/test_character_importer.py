@@ -135,5 +135,24 @@ class TestCharacterImporterRefine(unittest.TestCase):
         self.assertEqual(refined, profile_copy)
 
 
+class TestCharacterImporterConvert(unittest.TestCase):
+    def test_convert_to_project_format_listify_likes_dislikes(self):
+        st_data = {
+            "name": "Bob",
+            "character_info": {
+                "likes": "coffee, reading\ntea",
+                "dislikes": ["bugs", "meetings"]
+            },
+            "llm_model": None,
+            "voice_clone_ref": None
+        }
+        profile = CharacterImporter.convert_to_project_format(st_data)
+        self.assertEqual(profile["name"], "Bob")
+        self.assertEqual(profile["character_info"]["likes"], ["coffee", "reading", "tea"])
+        self.assertEqual(profile["character_info"]["dislikes"], ["bugs", "meetings"])
+        self.assertEqual(profile["llm_model"], "")
+        self.assertEqual(profile["voice_clone_ref"], "")
+
+
 if __name__ == "__main__":
     unittest.main()

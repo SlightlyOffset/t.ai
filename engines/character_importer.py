@@ -76,6 +76,16 @@ class CharacterImporter:
             text = text.replace("\r\n", "\n").replace("\r", "\n")
             return text.strip()
 
+        def listify(val):
+            if isinstance(val, list):
+                return [str(x).strip() for x in val if x]
+            if isinstance(val, str):
+                if not val.strip():
+                    return []
+                import re
+                return [x.strip() for x in re.split(r'[,;\n]', val) if x.strip()]
+            return []
+
         # Conditional extraction of other fields
         preferred_edge_voice = st_data.get("preferred_edge_voice") or st_data.get("preferred_tts_voice") or "en-US-AvaMultilingualNeural"
         tts_engine = st_data.get("tts_engine") or "edge-tts"
@@ -114,8 +124,8 @@ class CharacterImporter:
                 "gender": (st_data.get("character_info", {}).get("gender") if isinstance(st_data.get("character_info"), dict) else st_data.get("gender")) or "Unknown",
                 "age": (st_data.get("character_info", {}).get("age") if isinstance(st_data.get("character_info"), dict) else st_data.get("age")) or "Unknown",
                 "appearance": (st_data.get("character_info", {}).get("appearance") if isinstance(st_data.get("character_info"), dict) else st_data.get("appearance")) or "",
-                "likes": (st_data.get("character_info", {}).get("likes") if isinstance(st_data.get("character_info"), dict) else st_data.get("likes")) or [],
-                "dislikes": (st_data.get("character_info", {}).get("dislikes") if isinstance(st_data.get("character_info"), dict) else st_data.get("dislikes")) or [],
+                "likes": listify(st_data.get("character_info", {}).get("likes") if isinstance(st_data.get("character_info"), dict) else st_data.get("likes")),
+                "dislikes": listify(st_data.get("character_info", {}).get("dislikes") if isinstance(st_data.get("character_info"), dict) else st_data.get("dislikes")),
                 "other": replace_placeholders(g("scenario"))
             },
             "starter_messages": st_data.get("starter_messages") if isinstance(st_data.get("starter_messages"), list) else ([replace_placeholders(g("first_mes"))] if g("first_mes") else []),

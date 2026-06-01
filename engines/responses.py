@@ -36,6 +36,9 @@ active_post_process_threads = []
 
 def track_thread(thread: threading.Thread) -> None:
     """Track a background thread so we can join it on shutdown/exit."""
+    global active_post_process_threads
+    # Prune dead threads to prevent unbounded list growth and memory leaks
+    active_post_process_threads = [t for t in active_post_process_threads if t.is_alive()]
     active_post_process_threads.append(thread)
 
 SIM_STREAM_CHUNK_SIZE = 32

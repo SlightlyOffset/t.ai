@@ -1,5 +1,4 @@
 import re
-from rich.markup import escape
 
 def safe_escape(text: str) -> str:
     """Escape all square brackets and backslashes to prevent Rich markup parsing errors."""

@@ -58,7 +58,9 @@ def hide_file(file_path):
         import ctypes
         try:
             # FILE_ATTRIBUTE_HIDDEN = 2
-            ctypes.windll.kernel32.SetFileAttributesW(str(file_path), 2)
+            attrs = ctypes.windll.kernel32.GetFileAttributesW(str(file_path))
+            if attrs != -1:  # INVALID_FILE_ATTRIBUTES is -1
+                ctypes.windll.kernel32.SetFileAttributesW(str(file_path), attrs | 2)
         except Exception:
             pass
 
