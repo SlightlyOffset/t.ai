@@ -31,7 +31,7 @@ from engines.chat_controller import (
     previous_response_variant,
 )
 from engines.config import update_setting, get_setting
-from engines.formatting import TextFormatter
+from engines.formatting import TextFormatter, parse_message_content
 from engines.profile_state import (
     build_sidebar_state,
     get_initial_avatar_paths,
@@ -171,7 +171,6 @@ class ChatBubble(Vertical):
                 idx = self.msg_data.get("selected_index", 0)
                 indicator = f"\n\n[dim]< {idx + 1}/{len(alternatives)} >[/dim]"
 
-        from engines.formatting import parse_message_content
         chunks = parse_message_content(self.raw_content)
 
         for chunk in chunks:
@@ -182,22 +181,60 @@ class ChatBubble(Vertical):
                     indicator = ""
                 yield Static(formatted_text, markup=True, classes="bubble_text")
             elif chunk["type"] == "image":
-                url = chunk["url"]
-                alt = chunk["alt"]
                 image_protocol = get_setting("image_protocol", "auto")
                 if image_protocol == "none":
-                    desc = alt if alt else url
+                    desc = chunk["alt"] if chunk["alt"] else chunk["url"]
                     yield Static(f"🖼️ [Image: {desc}]", classes="bubble_image_fallback")
                 else:
-                    placeholder = Static(f"⏳ [Optimizing Image... {alt or url}]", classes="bubble_image_loading")
-                    placeholder.image_url = url
-                    yield placeholder
+                    desc = chunk["alt"] if chunk["alt"] else os.path.basename(chunk["url"])
+                    yield Static(f"[dim]🖼️ Image: {desc}[/dim]", markup=True, classes="bubble_image_indicator")
+
+        if indicator:
+            yield Static(indicator, markup=True, classes="bubble_text")
+
+
+class ImageBubble(Vertical):
+    """A separate, togglable image bubble that renders below the text bubble."""
+
+    collapsed = reactive(True)
+
+    def __init__(self, image_url: str, alt: str = "", role: str = "assistant", **kwargs):
+        super().__init__(**kwargs)
+        self.image_url = image_url
+        self.alt = alt
+        self.role = role
+        self.add_class("message")
+        self.add_class("image_bubble_wrap")
+
+    def compose(self) -> ComposeResult:
+        desc = self.alt if self.alt else os.path.basename(self.image_url)
+        yield Static(f"🖼️ ▶ Show Image ({desc})", classes="image_toggle_header")
+        yield Vertical(
+            Static("⏳ Loading image...", classes="bubble_image_loading"),
+            classes="image_container",
+        )
 
     def on_mount(self) -> None:
-        for placeholder in self.query(".bubble_image_loading"):
-            url = getattr(placeholder, "image_url", "")
-            if url:
-                self.app.optimize_and_mount_bubble_image(url, placeholder, self)
+        try:
+            self.query_one(".image_container").display = False
+        except Exception:
+            pass
+
+    def watch_collapsed(self, collapsed: bool) -> None:
+        try:
+            container = self.query_one(".image_container")
+            container.display = not collapsed
+            header = self.query_one(".image_toggle_header", Static)
+            desc = self.alt if self.alt else os.path.basename(self.image_url)
+            arrow = "▶" if collapsed else "▼"
+            action = "Show" if collapsed else "Hide"
+            header.update(f"🖼️ {arrow} {action} Image ({desc})")
+        except Exception:
+            pass
+
+    def on_click(self, event: events.Click) -> None:
+        self.collapsed = not self.collapsed
+        event.stop()
 
 class TaiMenu(App):
     """t.ai - Logic-focused TUI implementation."""
@@ -320,32 +357,34 @@ class TaiMenu(App):
         self.app.call_from_thread(update_ui)
 
     @work(thread=True)
-    def optimize_and_mount_bubble_image(self, image_path_or_url: str, placeholder: Static, bubble: ChatBubble) -> None:
+    def optimize_and_mount_bubble_image(self, image_path_or_url: str, image_bubble) -> None:
         from engines.image_optimizer import get_or_create_optimized_image
-        if not bubble.is_mounted:
+        if not image_bubble.is_mounted:
             return
-            
+
         optimized_path = get_or_create_optimized_image(image_path_or_url, max_dim=800)
-        
+
         def update_ui():
             try:
-                if not bubble.is_mounted or not placeholder.is_mounted:
+                if not image_bubble.is_mounted:
                     return
+                container = image_bubble.query_one(".image_container")
+                for child in list(container.children):
+                    child.remove()
+
                 widget_type = self._resolve_image_widget_type()
                 if optimized_path and os.path.exists(optimized_path) and widget_type is not None:
                     img_widget = widget_type(optimized_path, classes="bubble_image")
-                    bubble.mount(img_widget, before=placeholder)
-                    placeholder.remove()
+                    container.mount(img_widget)
                 else:
                     desc = image_path_or_url
-                    fallback_widget = Static(f"❌ [Failed to load image: {desc}]", classes="bubble_image_failed")
-                    bubble.mount(fallback_widget, before=placeholder)
-                    placeholder.remove()
+                    container.mount(Static(f"❌ [Failed to load image: {desc}]", classes="bubble_image_failed"))
             except Exception as e:
                 try:
-                    fallback_widget = Static(f"❌ [Error loading image: {e}]", classes="bubble_image_failed")
-                    bubble.mount(fallback_widget, before=placeholder)
-                    placeholder.remove()
+                    container = image_bubble.query_one(".image_container")
+                    for child in list(container.children):
+                        child.remove()
+                    container.mount(Static(f"❌ [Error loading image: {e}]", classes="bubble_image_failed"))
                 except Exception:
                     pass
         self.app.call_from_thread(update_ui)
@@ -443,14 +482,57 @@ class TaiMenu(App):
         return None
 
     def refresh_last_ai_message(self, content: str, index: int, total: int) -> None:
-        """Updates the text and indicator of the last AI message in the UI."""
+        """Rebuilds the last AI message bubble and its associated image rows."""
         try:
-            ai_bubble = self.query(".ai_bubble").last()
-            indicator = f"\n\n[dim]< {index + 1}/{total} >[/dim]" if total > 1 else ""
-            formatted_text = self.format_rp(content, role="assistant") + indicator
-            ai_bubble.update(
-                f"{self._message_header('assistant', self._current_assistant_message_number())}\n{formatted_text}"
+            last_ai = self.query(".ai_bubble").last()
+            msg_row = last_ai.parent
+            container = self.query_one("#chat_list", ScrollableContainer)
+
+            # Remove associated image bubble rows after this message row
+            siblings = list(container.children)
+            try:
+                row_idx = siblings.index(msg_row)
+            except ValueError:
+                row_idx = -1
+            if row_idx >= 0:
+                for sibling in siblings[row_idx + 1:]:
+                    if sibling.query(".image_bubble_wrap"):
+                        sibling.remove()
+                    else:
+                        break
+
+            # Build new ChatBubble
+            msg_number = self._current_assistant_message_number()
+            header = self._message_header("assistant", msg_number)
+            msg_data = None
+            if total > 1:
+                msg_data = {"alternatives": [""] * total, "selected_index": index}
+
+            new_bubble = ChatBubble(
+                header=header,
+                raw_content=content,
+                role="assistant",
+                message_number=msg_number,
+                msg_data=msg_data,
             )
+            msg_row.mount(new_bubble, before=last_ai)
+            last_ai.remove()
+
+            # Mount new image bubbles
+            image_chunks = [c for c in parse_message_content(content) if c["type"] == "image"]
+            image_protocol = get_setting("image_protocol", "auto")
+            if image_protocol != "none":
+                for img_chunk in image_chunks:
+                    img_bubble = ImageBubble(
+                        image_url=img_chunk["url"],
+                        alt=img_chunk["alt"],
+                        role="assistant",
+                    )
+                    img_row = Horizontal(img_bubble, classes="message_row ai_row")
+                    container.mount(img_row)
+                    self.optimize_and_mount_bubble_image(img_chunk["url"], img_bubble)
+
+            container.scroll_end(animate=False)
         except Exception:
             pass
 
@@ -1279,6 +1361,20 @@ class TaiMenu(App):
             row = Horizontal(bubble, classes=f"message_row {row_class}")
             container.mount(row)
 
+            # Mount separate ImageBubble rows for each image in the message
+            image_chunks = [c for c in parse_message_content(raw_content) if c["type"] == "image"]
+            image_protocol = get_setting("image_protocol", "auto")
+            if image_protocol != "none":
+                for img_chunk in image_chunks:
+                    img_bubble = ImageBubble(
+                        image_url=img_chunk["url"],
+                        alt=img_chunk["alt"],
+                        role=role,
+                    )
+                    img_row = Horizontal(img_bubble, classes=f"message_row {row_class}")
+                    container.mount(img_row)
+                    self.optimize_and_mount_bubble_image(img_chunk["url"], img_bubble)
+
         container.scroll_end(animate=False)
 
     def reload_chat_from_history(self) -> None:
@@ -1458,7 +1554,29 @@ class TaiMenu(App):
 
         if is_regeneration:
             try:
-                ai_msg = self.query(".ai_bubble").last()
+                last_bubble = self.query(".ai_bubble").last()
+                parent_row = last_bubble.parent
+
+                # Remove associated image bubble rows
+                siblings = list(container.children)
+                try:
+                    row_idx = siblings.index(parent_row)
+                    for sibling in siblings[row_idx + 1:]:
+                        if sibling.query(".image_bubble_wrap"):
+                            sibling.remove()
+                        else:
+                            break
+                except ValueError:
+                    pass
+
+                # Replace the existing bubble with a fresh streaming Static
+                ai_msg = Static(
+                    f"{header}\n",
+                    markup=True,
+                    classes="message ai_bubble",
+                )
+                parent_row.mount(ai_msg, before=last_bubble)
+                last_bubble.remove()
             except Exception:
                 ai_msg = Static(
                     f"{header}\n",
@@ -1553,7 +1671,7 @@ class TaiMenu(App):
                 msg_data = None
                 if full_history and full_history[-1].get("role") == "assistant":
                     msg_data = full_history[-1]
-                
+
                 bubble = ChatBubble(
                     header=header,
                     raw_content=full_response,
@@ -1561,11 +1679,26 @@ class TaiMenu(App):
                     message_number=assistant_message_number,
                     msg_data=msg_data
                 )
-                
+
                 parent = ai_msg.parent
                 if parent:
                     parent.mount(bubble, before=ai_msg)
                     ai_msg.remove()
+
+                # Mount separate ImageBubble rows for images in the response
+                image_chunks = [c for c in parse_message_content(full_response) if c["type"] == "image"]
+                image_protocol = get_setting("image_protocol", "auto")
+                if image_protocol != "none":
+                    for img_chunk in image_chunks:
+                        img_bubble = ImageBubble(
+                            image_url=img_chunk["url"],
+                            alt=img_chunk["alt"],
+                            role="assistant",
+                        )
+                        img_row = Horizontal(img_bubble, classes="message_row ai_row")
+                        container.mount(img_row)
+                        self.optimize_and_mount_bubble_image(img_chunk["url"], img_bubble)
+
                 container.scroll_end(animate=False)
             except Exception:
                 pass

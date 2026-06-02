@@ -180,3 +180,28 @@ Label {
     text-style: italic;
 }
 
+.bubble_image_indicator {
+    color: $text-disabled;
+    margin: 0;
+}
+
+.image_bubble_wrap {
+    padding: 0 1;
+    width: 100%;
+    max-width: 85%;
+    height: auto;
+    border: dashed $accent-darken-1;
+}
+
+.image_toggle_header {
+    color: $accent;
+    text-style: italic;
+    padding: 0;
+    margin: 0;
+}
+
+.image_container {
+    width: 100%;
+    height: auto;
+}
+
