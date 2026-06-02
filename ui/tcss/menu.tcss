@@ -171,7 +171,7 @@ Label {
     height: auto;
     max-height: 25;
     margin: 1 0;
-    border: solid $accent;
+    border: none;
 }
 
 .bubble_image_fallback, .bubble_image_loading, .bubble_image_failed {
