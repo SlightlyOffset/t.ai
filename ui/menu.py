@@ -402,11 +402,11 @@ class TaiMenu(App):
                         rows = max_h
                         cols = int(rows * char_aspect_ratio)
                         
-                    # Apply exact sizing to prevent layout loops or empty space inside the border
+                    # Apply dynamic width with auto height and max_height cap to preserve aspect ratio under any layout constraints
                     img_widget.styles.width = max(15, cols)
-                    img_widget.styles.height = max(5, rows)
+                    img_widget.styles.height = "auto"
+                    img_widget.styles.max_height = max_h
                     img_widget.styles.max_width = None
-                    img_widget.styles.max_height = None
                     
                     container.mount(img_widget)
                 else:
