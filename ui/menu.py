@@ -193,6 +193,7 @@ class TaiMenu(App):
         ("Kitty", "kitty"),
         ("Sixel", "sixel"),
         ("Blocky", "blocky"),
+        ("None (Text Only)", "none"),
     ]
 
     # Global TTS queue
@@ -213,8 +214,10 @@ class TaiMenu(App):
         self._current_char_avatar_path = None
         self._current_user_avatar_path = None
 
-    def _resolve_image_widget_type(self) -> type[Image]:
+    def _resolve_image_widget_type(self) -> type[Image] | None:
         protocol = get_setting("image_protocol", "auto")
+        if protocol == "none":
+            return None
         if protocol == "kitty":
             return TGPImage
         if protocol == "sixel":
@@ -225,11 +228,13 @@ class TaiMenu(App):
 
     def _build_avatar_widget(self, image_path: str | None, widget_id: str):
         widget_type = self._resolve_image_widget_type()
+        if widget_type is None:
+            return Static("🖼️", id=widget_id)
         return widget_type(image_path, id=widget_id)
 
     def _mount_avatar_widget(self, container_id: str, widget_id: str, image_path: str | None) -> None:
         container = self.query_one(f"#{container_id}", Vertical)
-        desired_widget_type = self._resolve_image_widget_type()
+        desired_widget_type = self._resolve_image_widget_type() or Static
         try:
             existing = self.query_one(f"#{widget_id}")
         except Exception:
@@ -237,7 +242,8 @@ class TaiMenu(App):
 
         if existing is not None:
             if isinstance(existing, desired_widget_type):
-                existing.image = image_path
+                if isinstance(existing, Image):
+                    existing.image = image_path
                 return
             existing.remove()
             self.call_after_refresh(self._mount_avatar_widget, container_id, widget_id, image_path)
@@ -245,16 +251,32 @@ class TaiMenu(App):
 
         container.mount(self._build_avatar_widget(image_path, widget_id))
 
+    @work(thread=True)
+    def _optimize_and_set_avatar(self, image_path: str, container_id: str, widget_id: str) -> None:
+        from engines.image_optimizer import get_or_create_optimized_image
+        optimized_path = get_or_create_optimized_image(image_path, max_dim=500)
+        
+        def update_ui():
+            try:
+                avatar_widget = self.query_one(f"#{widget_id}")
+                if isinstance(avatar_widget, Image):
+                    avatar_widget.image = optimized_path
+                else:
+                    self._mount_avatar_widget(container_id, widget_id, optimized_path)
+            except Exception:
+                self._mount_avatar_widget(container_id, widget_id, optimized_path)
+        self.app.call_from_thread(update_ui)
+
     def _set_avatar_image(self, container_id: str, widget_id: str, image_path: str | None) -> None:
-        try:
-            avatar_widget = self.query_one(f"#{widget_id}")
-            avatar_widget.image = image_path
-        except Exception:
-            self._mount_avatar_widget(container_id, widget_id, image_path)
+        protocol = get_setting("image_protocol", "auto")
+        if protocol == "none" or not image_path:
+            self._mount_avatar_widget(container_id, widget_id, None)
+            return
+        self._optimize_and_set_avatar(image_path, container_id, widget_id)
 
     def remount_avatar_widgets(self) -> None:
-        self._mount_avatar_widget("char_avatar_wrap", "avatar_portrait_character", self._current_char_avatar_path)
-        self._mount_avatar_widget("user_avatar_wrap", "avatar_portrait_user", self._current_user_avatar_path)
+        self._set_avatar_image("char_avatar_wrap", "avatar_portrait_character", self._current_char_avatar_path)
+        self._set_avatar_image("user_avatar_wrap", "avatar_portrait_user", self._current_user_avatar_path)
 
     def watch_show_sidebar(self, show: bool) -> None:
         """Called when show_sidebar reactive property changes."""
