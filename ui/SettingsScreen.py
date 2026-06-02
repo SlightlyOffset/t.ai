@@ -93,6 +93,7 @@ class SettingsScreen(ModalScreen):
         clear_on_start = settings.get("clear_on_start", False)
         auto_recap_on_start = settings.get("auto_recap_on_start", True)
         image_protocol = settings.get("image_protocol", "auto")
+        image_size = settings.get("image_size", "medium")
         suppress_errors = settings.get("suppress_errors", True)
 
         default_llm_model = settings.get("default_llm_model", "fluffy/l3-8b-stheno-v3.2")
@@ -154,6 +155,14 @@ class SettingsScreen(ModalScreen):
                                 TaiMenu.IMAGE_PROTOCOLS,
                                 value=image_protocol,
                                 id="image_protocol",
+                                classes="settings_widget"
+                            )
+                        with Horizontal(classes="settings_row"):
+                            yield Label("Image Size/Quality:", classes="settings_label")
+                            yield Select(
+                                [("Small (400px)", "small"), ("Medium (800px)", "medium"), ("Large (1200px)", "large")],
+                                value=image_size,
+                                id="image_size",
                                 classes="settings_widget"
                             )
                         with Horizontal(classes="settings_row"):
@@ -343,6 +352,7 @@ class SettingsScreen(ModalScreen):
             "clear_on_start": self.query_one("#clear_on_start", Switch).value,
             "auto_recap_on_start": self.query_one("#auto_recap_on_start", Switch).value,
             "image_protocol": self.query_one("#image_protocol", Select).value,
+            "image_size": self.query_one("#image_size", Select).value,
             "suppress_errors": self.query_one("#suppress_errors", Switch).value,
 
             "default_llm_model": self.query_one("#default_llm_model", Input).value.strip(),

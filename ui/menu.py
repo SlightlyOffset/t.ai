@@ -366,7 +366,10 @@ class TaiMenu(App):
         if not image_bubble.is_mounted:
             return
 
-        optimized_path = get_or_create_optimized_image(image_path_or_url, max_dim=800)
+        image_size = get_setting("image_size", "medium")
+        size_map = {"small": 400, "medium": 800, "large": 1200}
+        max_dim = size_map.get(image_size, 800)
+        optimized_path = get_or_create_optimized_image(image_path_or_url, max_dim=max_dim)
 
         def update_ui():
             try:
