@@ -166,7 +166,8 @@ Label {
 }
 
 .bubble_image {
-    width: 100%;
+    width: auto;
+    max-width: 100%;
     height: auto;
     max-height: 25;
     margin: 1 0;
