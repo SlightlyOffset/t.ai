@@ -219,6 +219,10 @@ class ImageBubble(Vertical):
             self.query_one(".image_container").display = False
         except Exception:
             pass
+        # Trigger async image optimization now that the widget is fully mounted
+        image_protocol = get_setting("image_protocol", "auto")
+        if image_protocol != "none":
+            self.app.optimize_and_mount_bubble_image(self.image_url, self)
 
     def watch_collapsed(self, collapsed: bool) -> None:
         try:
@@ -530,7 +534,6 @@ class TaiMenu(App):
                     )
                     img_row = Horizontal(img_bubble, classes="message_row ai_row")
                     container.mount(img_row)
-                    self.optimize_and_mount_bubble_image(img_chunk["url"], img_bubble)
 
             container.scroll_end(animate=False)
         except Exception:
@@ -1373,7 +1376,6 @@ class TaiMenu(App):
                     )
                     img_row = Horizontal(img_bubble, classes=f"message_row {row_class}")
                     container.mount(img_row)
-                    self.optimize_and_mount_bubble_image(img_chunk["url"], img_bubble)
 
         container.scroll_end(animate=False)
 
@@ -1697,7 +1699,6 @@ class TaiMenu(App):
                         )
                         img_row = Horizontal(img_bubble, classes="message_row ai_row")
                         container.mount(img_row)
-                        self.optimize_and_mount_bubble_image(img_chunk["url"], img_bubble)
 
                 container.scroll_end(animate=False)
             except Exception:
