@@ -129,3 +129,54 @@ def format_roleplay_text(
 
 def get_tts_split_points(text: str) -> list[int]:
     return TextFormatter.get_tts_split_points(text)
+
+def parse_message_content(text: str) -> list[dict]:
+    """
+    Parses a message string and splits it into text chunks and image chunks.
+    Returns a list of dicts, e.g.:
+    [
+        {"type": "text", "content": "Here is the image:"},
+        {"type": "image", "url": "https://example.com/pic.png", "alt": "Description"},
+        {"type": "text", "content": "Hope you like it!"}
+    ]
+    """
+    if not text:
+        return []
+
+    # Combined regex to match:
+    # 1. Markdown image: ![alt](url)
+    # 2. Web image URL: https://.../image.png
+    # 3. Local image path: C:\path\image.png or ./img/image.jpg or profiles/avatar.png
+    combined_pattern = re.compile(
+        r'(?P<md>!\[(?P<alt>[^\]]*)\]\((?P<url>[^)]+)\))|'
+        r'(?P<web>https?://[^\s]+?\.(?:png|jpg|jpeg|gif|webp|bmp)(?:\?[^\s]*)?)|'
+        r'(?P<local>(?:[a-zA-Z]:[\\/][^\s]+?\.(?:png|jpg|jpeg|gif|webp|bmp)|(?:\.{0,2}/)+[^\s]+?\.(?:png|jpg|jpeg|gif|webp|bmp)|(?:profiles|history|img|cards|cache|temp|\.cache)[\\/][^\s]+?\.(?:png|jpg|jpeg|gif|webp|bmp)))',
+        re.IGNORECASE
+    )
+
+    chunks = []
+    last_idx = 0
+
+    for match in combined_pattern.finditer(text):
+        start, end = match.span()
+        if start > last_idx:
+            chunks.append({"type": "text", "content": text[last_idx:start]})
+
+        gd = match.groupdict()
+        if gd.get("md"):
+            chunks.append({"type": "image", "url": gd["url"], "alt": gd["alt"]})
+            last_idx = end
+        else:
+            url = match.group("web") if gd.get("web") else match.group("local")
+            trail = ""
+            while url and url[-1] in ".,!?":
+                trail = url[-1] + trail
+                url = url[:-1]
+            chunks.append({"type": "image", "url": url, "alt": ""})
+            last_idx = end - len(trail)
+
+    if last_idx < len(text):
+        chunks.append({"type": "text", "content": text[last_idx:]})
+
+    return chunks
+
