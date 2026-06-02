@@ -148,6 +148,57 @@ class ExitSavingScreen(ModalScreen):
             id="saving_container"
         )
 
+class ChatBubble(Vertical):
+    def __init__(self, header: str, raw_content: str, role: str, message_number: int | None = None, msg_data: dict | None = None, **kwargs):
+        super().__init__(**kwargs)
+        self.header = header
+        self.raw_content = raw_content
+        self.role = role
+        self.message_number = message_number
+        self.msg_data = msg_data
+
+        bubble_class = "user_bubble" if role == "user" else "ai_bubble"
+        self.add_class("message")
+        self.add_class(bubble_class)
+
+    def compose(self) -> ComposeResult:
+        yield Static(self.header, markup=True, classes="bubble_header")
+
+        indicator = ""
+        if self.msg_data and self.role == "assistant":
+            alternatives = self.msg_data.get("alternatives", [])
+            if alternatives:
+                idx = self.msg_data.get("selected_index", 0)
+                indicator = f"\n\n[dim]< {idx + 1}/{len(alternatives)} >[/dim]"
+
+        from engines.formatting import parse_message_content
+        chunks = parse_message_content(self.raw_content)
+
+        for chunk in chunks:
+            if chunk["type"] == "text":
+                formatted_text = self.app.format_rp(chunk["content"], role=self.role)
+                if indicator:
+                    formatted_text += indicator
+                    indicator = ""
+                yield Static(formatted_text, markup=True, classes="bubble_text")
+            elif chunk["type"] == "image":
+                url = chunk["url"]
+                alt = chunk["alt"]
+                image_protocol = get_setting("image_protocol", "auto")
+                if image_protocol == "none":
+                    desc = alt if alt else url
+                    yield Static(f"🖼️ [Image: {desc}]", classes="bubble_image_fallback")
+                else:
+                    placeholder = Static(f"⏳ [Optimizing Image... {alt or url}]", classes="bubble_image_loading")
+                    placeholder.image_url = url
+                    yield placeholder
+
+    def on_mount(self) -> None:
+        for placeholder in self.query(".bubble_image_loading"):
+            url = getattr(placeholder, "image_url", "")
+            if url:
+                self.app.optimize_and_mount_bubble_image(url, placeholder, self)
+
 class TaiMenu(App):
     """t.ai - Logic-focused TUI implementation."""
     TITLE = "t.ai (made with love from a lone developer! 💖)"
@@ -265,6 +316,37 @@ class TaiMenu(App):
                     self._mount_avatar_widget(container_id, widget_id, optimized_path)
             except Exception:
                 self._mount_avatar_widget(container_id, widget_id, optimized_path)
+        self.app.call_from_thread(update_ui)
+
+    @work(thread=True)
+    def optimize_and_mount_bubble_image(self, image_path_or_url: str, placeholder: Static, bubble: ChatBubble) -> None:
+        from engines.image_optimizer import get_or_create_optimized_image
+        if not bubble.is_mounted:
+            return
+            
+        optimized_path = get_or_create_optimized_image(image_path_or_url, max_dim=800)
+        
+        def update_ui():
+            try:
+                if not bubble.is_mounted or not placeholder.is_mounted:
+                    return
+                widget_type = self._resolve_image_widget_type()
+                if optimized_path and widget_type is not None:
+                    img_widget = widget_type(optimized_path, classes="bubble_image")
+                    bubble.mount(img_widget, before=placeholder)
+                    placeholder.remove()
+                else:
+                    desc = image_path_or_url
+                    fallback_widget = Static(f"❌ [Failed to load image: {desc}]", classes="bubble_image_failed")
+                    bubble.mount(fallback_widget, before=placeholder)
+                    placeholder.remove()
+            except Exception as e:
+                try:
+                    fallback_widget = Static(f"❌ [Error loading image: {e}]", classes="bubble_image_failed")
+                    bubble.mount(fallback_widget, before=placeholder)
+                    placeholder.remove()
+                except Exception:
+                    pass
         self.app.call_from_thread(update_ui)
 
     def _set_avatar_image(self, container_id: str, widget_id: str, image_path: str | None) -> None:
@@ -882,7 +964,7 @@ class TaiMenu(App):
         if starter_messages:
             random.shuffle(starter_messages)
             starter_text = starter_messages[0]
-            self.add_message(self.format_rp(starter_text, role="assistant"), role="assistant", message_number=1)
+            self.add_message(self.format_rp(starter_text, role="assistant"), role="assistant", message_number=1, raw_text=starter_text)
             rel_score = self.character_profile.get("relationship_score", 0)
             memory_manager.save_history(self.history_profile_name, [{"role": "assistant",
                                                                      "content": starter_text}],
@@ -1175,22 +1257,25 @@ class TaiMenu(App):
             self.set_timer(10.0, safe_remove_tip)
         else:
             row_class = "user_row" if role == "user" else "ai_row"
-            bubble_class = "user_bubble" if role == "user" else "ai_bubble"
             header = self._message_header(role, message_number)
 
-            # Multi-response pagination indicator
-            indicator = ""
-            if msg_data and role == "assistant":
-                alternatives = msg_data.get("alternatives", [])
-                if alternatives:
-                    idx = msg_data.get("selected_index", 0)
-                    indicator = f"\n\n[dim]< {idx + 1}/{len(alternatives)} >[/dim]"
+            raw_content = ""
+            if msg_data:
+                raw_content = msg_data.get("content", "")
+            if not raw_content:
+                raw_content = raw_text or text
 
-            bubble = Static(f"{header}\n{text}{indicator}", markup=True, classes=f"message {bubble_class}")
+            bubble = ChatBubble(
+                header=header,
+                raw_content=raw_content,
+                role=role,
+                message_number=message_number,
+                msg_data=msg_data
+            )
             if role == "user":
-                bubble.raw_text = raw_text or (msg_data.get("content") if msg_data else text)
-            row = Horizontal(bubble, classes=f"message_row {row_class}")
+                bubble.raw_text = raw_content
 
+            row = Horizontal(bubble, classes=f"message_row {row_class}")
             container.mount(row)
 
         container.scroll_end(animate=False)
@@ -1361,7 +1446,7 @@ class TaiMenu(App):
         self,
         is_regeneration: bool,
         message_number: int | None = None,
-    ) -> tuple[ScrollableContainer, Static, str]:
+    ) -> tuple[ScrollableContainer, Static, str, int | None]:
         """Resolve chat widgets on the main thread before background streaming starts."""
         container = self.query_one("#chat_list", ScrollableContainer)
         assistant_message_number = message_number
@@ -1391,12 +1476,12 @@ class TaiMenu(App):
             container.mount(row)
 
         container.scroll_end(animate=False)
-        return container, ai_msg, header
+        return container, ai_msg, header, assistant_message_number
 
     def stream_response(self, message: str, is_regeneration: bool = False, message_number: int | None = None) -> None:
         """Prepare UI targets on the main thread, then stream in a worker thread."""
-        container, ai_msg, header = self._prepare_stream_widgets(is_regeneration, message_number=message_number)
-        self.response_worker(message, is_regeneration, container, ai_msg, header)
+        container, ai_msg, header, assistant_message_number = self._prepare_stream_widgets(is_regeneration, message_number=message_number)
+        self.response_worker(message, is_regeneration, container, ai_msg, header, assistant_message_number)
 
     @work(exclusive=True, thread=True)
     def response_worker(
@@ -1406,6 +1491,7 @@ class TaiMenu(App):
         container: ScrollableContainer,
         ai_msg: Static,
         header: str,
+        assistant_message_number: int | None = None,
     ) -> None:
         """Worker to handle the LLM streaming and TTS queuing."""
         full_response = ""
@@ -1458,6 +1544,31 @@ class TaiMenu(App):
         with open(profile_path, "r", encoding="utf-8") as f:
             self.character_profile = json.load(f)
         self.app.call_from_thread(self.update_sidebar)
+
+        # Swap the streaming Static widget to a fully formatted ChatBubble widget
+        def swap_to_bubble():
+            try:
+                full_history = memory_manager.load_history(self.history_profile_name)
+                msg_data = None
+                if full_history and full_history[-1].get("role") == "assistant":
+                    msg_data = full_history[-1]
+                
+                bubble = ChatBubble(
+                    header=header,
+                    raw_content=full_response,
+                    role="assistant",
+                    message_number=assistant_message_number,
+                    msg_data=msg_data
+                )
+                
+                parent = ai_msg.parent
+                if parent:
+                    parent.mount(bubble, before=ai_msg)
+                    ai_msg.remove()
+                container.scroll_end(animate=False)
+            except Exception:
+                pass
+        self.app.call_from_thread(swap_to_bubble)
 
         # Trigger rolling summarization check
         self.check_for_rolling_summary()
