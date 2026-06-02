@@ -433,6 +433,18 @@ class TaiMenu(App):
         self._set_avatar_image("char_avatar_wrap", "avatar_portrait_character", self._current_char_avatar_path)
         self._set_avatar_image("user_avatar_wrap", "avatar_portrait_user", self._current_user_avatar_path)
 
+    def remount_all_image_bubbles(self) -> None:
+        """Reload and resize all currently mounted image bubbles."""
+        for bubble in self.query(ImageBubble):
+            try:
+                container = bubble.query_one(".image_container")
+                for child in list(container.children):
+                    child.remove()
+                container.mount(Static("⏳ Loading image...", classes="bubble_image_loading"))
+            except Exception:
+                pass
+            self.optimize_and_mount_bubble_image(bubble.image_url, bubble)
+
     def watch_show_sidebar(self, show: bool) -> None:
         """Called when show_sidebar reactive property changes."""
         try:
@@ -750,6 +762,7 @@ class TaiMenu(App):
         # Apply settings changes live
         self.remount_avatar_widgets()
         self.update_sidebar()
+        self.remount_all_image_bubbles()
 
     def compose(self) -> ComposeResult:
         self._current_char_avatar_path, self._current_user_avatar_path = get_initial_avatar_paths(
