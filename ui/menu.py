@@ -384,14 +384,29 @@ class TaiMenu(App):
                     img_widget = widget_type(optimized_path, classes="bubble_image")
                     
                     # Map configuration size to terminal columns/rows
+                    # Calculate cell-aspect ratio (terminal character cell height-to-width ratio is ~2.0)
+                    w = getattr(img_widget, "_image_width", 0)
+                    h = getattr(img_widget, "_image_height", 0)
+                    char_aspect_ratio = (w / h) * 2.0 if w > 0 and h > 0 else 2.0
+                    
+                    # Get setting boundaries
                     terminal_widths = {"small": 45, "medium": 75, "large": 105}
                     terminal_heights = {"small": 15, "medium": 25, "large": 35}
-                    target_width = terminal_widths.get(image_size, 75)
-                    target_height = terminal_heights.get(image_size, 25)
+                    max_w = terminal_widths.get(image_size, 75)
+                    max_h = terminal_heights.get(image_size, 25)
                     
-                    img_widget.styles.width = "auto"
-                    img_widget.styles.max_width = target_width
-                    img_widget.styles.max_height = target_height
+                    # Scale to fit
+                    cols = max_w
+                    rows = int(cols / char_aspect_ratio)
+                    if rows > max_h:
+                        rows = max_h
+                        cols = int(rows * char_aspect_ratio)
+                        
+                    # Apply exact sizing to prevent layout loops or empty space inside the border
+                    img_widget.styles.width = max(15, cols)
+                    img_widget.styles.height = max(5, rows)
+                    img_widget.styles.max_width = None
+                    img_widget.styles.max_height = None
                     
                     container.mount(img_widget)
                 else:
