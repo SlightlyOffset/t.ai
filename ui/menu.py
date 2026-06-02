@@ -998,14 +998,43 @@ class TaiMenu(App):
                 save_json_atomic(self.char_path, self.character_profile)
                 self.add_message(f"LLM model switched to [bold]{val}[/bold]", role="system")
             else:
-                event.select.value = self.character_profile.get("llm_model") if self.character_profile else get_setting("default_llm_model", "llama3")
+                target = self.character_profile.get("llm_model") if self.character_profile else get_setting("default_llm_model", "llama3")
+                try:
+                    is_real_select = isinstance(getattr(event.select, "_legal_values", None), set)
+                    if not is_real_select:
+                        event.select.value = target
+                    elif target in event.select._legal_values:
+                        event.select.value = target
+                    else:
+                        default_model = get_setting("default_llm_model", "llama3")
+                        if is_real_select and default_model in event.select._legal_values:
+                            event.select.value = default_model
+                        else:
+                            opts = [opt for opt in event.select._legal_values if opt != Select.NULL]
+                            event.select.value = opts[0] if opts else Select.NULL
+                except Exception:
+                    try:
+                        event.select.value = Select.NULL
+                    except Exception:
+                        pass
         elif event.select.id == "character_voice_select":
             if val is not None:
                 self.character_profile["preferred_edge_voice"] = val
                 save_json_atomic(self.char_path, self.character_profile)
                 self.add_message(f"Companion voice set to [bold]{val}[/bold]", role="system")
             else:
-                event.select.value = self.character_profile.get("preferred_edge_voice") if self.character_profile else get_setting("narration_tts_voice", "en-US-AndrewNeural")
+                target = self.character_profile.get("preferred_edge_voice") if self.character_profile else get_setting("narration_tts_voice", "en-US-AndrewNeural")
+                try:
+                    is_real_select = isinstance(getattr(event.select, "_legal_values", None), set)
+                    if not is_real_select:
+                        event.select.value = target
+                    else:
+                        event.select.value = target if target in event.select._legal_values else Select.NULL
+                except Exception:
+                    try:
+                        event.select.value = Select.NULL
+                    except Exception:
+                        pass
         elif event.select.id == "narration_voice_select":
             if val is not None:
                 if update_setting("narration_tts_voice", val):
@@ -1013,14 +1042,36 @@ class TaiMenu(App):
                 else:
                     self.add_message(f"Failed to set narration voice to [bold]{val}[/bold]", role="system")
             else:
-                event.select.value = get_setting("narration_tts_voice", "en-US-AndrewNeural")
+                target = get_setting("narration_tts_voice", "en-US-AndrewNeural")
+                try:
+                    is_real_select = isinstance(getattr(event.select, "_legal_values", None), set)
+                    if not is_real_select:
+                        event.select.value = target
+                    else:
+                        event.select.value = target if target in event.select._legal_values else Select.NULL
+                except Exception:
+                    try:
+                        event.select.value = Select.NULL
+                    except Exception:
+                        pass
         elif event.select.id == "tts_engine_select":
             if val is not None:
                 self.character_profile["tts_engine"] = val
                 save_json_atomic(self.char_path, self.character_profile)
                 self.add_message(f"TTS engine switched to [bold]{val}[/bold]", role="system")
             else:
-                event.select.value = self.character_profile.get("tts_engine") if self.character_profile else get_setting("default_tts_engine", "edge-tts")
+                target = self.character_profile.get("tts_engine") if self.character_profile else get_setting("default_tts_engine", "edge-tts")
+                try:
+                    is_real_select = isinstance(getattr(event.select, "_legal_values", None), set)
+                    if not is_real_select:
+                        event.select.value = target
+                    else:
+                        event.select.value = target if target in event.select._legal_values else Select.NULL
+                except Exception:
+                    try:
+                        event.select.value = Select.NULL
+                    except Exception:
+                        pass
         elif event.select.id == "image_protocol_select":
             if val is not None:
                 valid_protocols = {value for _, value in self.IMAGE_PROTOCOLS}
@@ -1030,7 +1081,18 @@ class TaiMenu(App):
                 else:
                     self.add_message(f"Failed to set image protocol to [bold]{val}[/bold]", role="system")
             else:
-                event.select.value = get_setting("image_protocol", "auto")
+                target = get_setting("image_protocol", "auto")
+                try:
+                    is_real_select = isinstance(getattr(event.select, "_legal_values", None), set)
+                    if not is_real_select:
+                        event.select.value = target
+                    else:
+                        event.select.value = target if target in event.select._legal_values else Select.NULL
+                except Exception:
+                    try:
+                        event.select.value = Select.NULL
+                    except Exception:
+                        pass
         elif event.select.id == "interaction_mode_select":
             if val is not None:
                 if update_setting("interaction_mode", val):
@@ -1038,7 +1100,18 @@ class TaiMenu(App):
                 else:
                     self.add_message(f"Failed to set interaction mode to [bold]{val.upper()}[/bold]", role="system")
             else:
-                event.select.value = get_setting("interaction_mode", "rp")
+                target = get_setting("interaction_mode", "rp")
+                try:
+                    is_real_select = isinstance(getattr(event.select, "_legal_values", None), set)
+                    if not is_real_select:
+                        event.select.value = target
+                    else:
+                        event.select.value = target if target in event.select._legal_values else Select.NULL
+                except Exception:
+                    try:
+                        event.select.value = Select.NULL
+                    except Exception:
+                        pass
 
     def populate_image_protocols(self) -> None:
         """Populate image protocol selection and sync current setting."""
