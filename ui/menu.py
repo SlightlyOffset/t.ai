@@ -382,6 +382,16 @@ class TaiMenu(App):
                 widget_type = self._resolve_image_widget_type()
                 if optimized_path and os.path.exists(optimized_path) and widget_type is not None:
                     img_widget = widget_type(optimized_path, classes="bubble_image")
+                    
+                    # Map configuration size to terminal columns/rows
+                    terminal_widths = {"small": 45, "medium": 75, "large": 105}
+                    terminal_heights = {"small": 15, "medium": 25, "large": 35}
+                    target_width = terminal_widths.get(image_size, 75)
+                    target_height = terminal_heights.get(image_size, 25)
+                    
+                    img_widget.styles.width = target_width
+                    img_widget.styles.max_height = target_height
+                    
                     container.mount(img_widget)
                 else:
                     desc = image_path_or_url
