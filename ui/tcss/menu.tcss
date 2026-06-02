@@ -188,7 +188,7 @@ Label {
 .image_bubble_wrap {
     padding: 0 1;
     width: auto;
-    max-width: 85%;
+    max-width: 95%;
     height: auto;
     border: dashed $accent-darken-1;
 }
@@ -198,10 +198,11 @@ Label {
     text-style: italic;
     padding: 0;
     margin: 0;
+    width: auto;
 }
 
 .image_container {
-    width: 100%;
+    width: auto;
     height: auto;
 }
 

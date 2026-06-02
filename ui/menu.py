@@ -389,7 +389,8 @@ class TaiMenu(App):
                     target_width = terminal_widths.get(image_size, 75)
                     target_height = terminal_heights.get(image_size, 25)
                     
-                    img_widget.styles.width = target_width
+                    img_widget.styles.width = "auto"
+                    img_widget.styles.max_width = target_width
                     img_widget.styles.max_height = target_height
                     
                     container.mount(img_widget)
