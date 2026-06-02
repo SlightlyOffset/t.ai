@@ -27,14 +27,33 @@ def download_image(url: str) -> str:
     local_path = os.path.join(DOWNLOAD_DIR, f"{url_hash}{ext}")
     
     if os.path.exists(local_path):
-        return local_path
+        try:
+            with Image.open(local_path) as img:
+                img.verify()
+            return local_path
+        except Exception:
+            try:
+                os.remove(local_path)
+            except Exception:
+                pass
         
     try:
         response = requests.get(url, timeout=10)
         if response.status_code == 200:
+            content_type = response.headers.get("Content-Type", "")
+            if "text/html" in content_type:
+                return ""
             with open(local_path, "wb") as f:
                 f.write(response.content)
-            return local_path
+            try:
+                with Image.open(local_path) as img:
+                    img.verify()
+                return local_path
+            except Exception:
+                try:
+                    os.remove(local_path)
+                except Exception:
+                    pass
     except Exception:
         pass
     return ""
@@ -42,7 +61,7 @@ def download_image(url: str) -> str:
 def get_or_create_optimized_image(image_path_or_url: str, max_dim: int = 800) -> str:
     """
     Downloads, checks size, and optimizes an image.
-    Returns the path to the cached optimized image, or the original path if optimization is unnecessary/fails.
+    Returns the path to the cached optimized image, or the original path/url if optimization fails.
     """
     if not image_path_or_url:
         return ""
@@ -53,13 +72,25 @@ def get_or_create_optimized_image(image_path_or_url: str, max_dim: int = 800) ->
     if image_path_or_url.startswith(("http://", "https://")):
         local_path = download_image(image_path_or_url)
         if not local_path:
-            # Downloading failed, return original URL as fallback
             return image_path_or_url
     else:
         local_path = os.path.abspath(image_path_or_url)
         if not os.path.exists(local_path):
             return image_path_or_url
             
+    # Verify local_path integrity
+    try:
+        with Image.open(local_path) as img:
+            img.verify()
+    except Exception:
+        # Invalid image file (corrupted or unreadable)
+        if local_path.startswith(CACHE_DIR):
+            try:
+                os.remove(local_path)
+            except Exception:
+                pass
+        return image_path_or_url
+
     # 2. Get file stats to check if we already have it optimized
     try:
         mtime = os.path.getmtime(local_path)
@@ -77,17 +108,24 @@ def get_or_create_optimized_image(image_path_or_url: str, max_dim: int = 800) ->
     
     # 3. If cached optimized image exists, return it immediately
     if os.path.exists(cache_path):
-        return cache_path
+        try:
+            with Image.open(cache_path) as img:
+                img.verify()
+            return cache_path
+        except Exception:
+            try:
+                os.remove(cache_path)
+            except Exception:
+                pass
         
     # 4. Check if size needs optimization
     try:
         with Image.open(local_path) as img:
             w, h = img.size
             if w <= max_dim and h <= max_dim:
-                # No resize needed, just return original/downloaded path
                 return local_path
     except Exception:
-        return local_path
+        return image_path_or_url
         
     # 5. Optimize the image
     try:
@@ -102,7 +140,15 @@ def get_or_create_optimized_image(image_path_or_url: str, max_dim: int = 800) ->
             ]
             subprocess.run(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=True)
             if os.path.exists(cache_path):
-                return cache_path
+                try:
+                    with Image.open(cache_path) as img:
+                        img.verify()
+                    return cache_path
+                except Exception:
+                    try:
+                        os.remove(cache_path)
+                    except Exception:
+                        pass
                 
         # Pillow resizing fallback
         with Image.open(local_path) as img:
@@ -139,7 +185,15 @@ def get_or_create_optimized_image(image_path_or_url: str, max_dim: int = 800) ->
                 img.save(cache_path)
                 
         if os.path.exists(cache_path):
-            return cache_path
+            try:
+                with Image.open(cache_path) as img:
+                    img.verify()
+                return cache_path
+            except Exception:
+                try:
+                    os.remove(cache_path)
+                except Exception:
+                    pass
             
     except Exception:
         pass

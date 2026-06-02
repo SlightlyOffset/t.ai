@@ -89,6 +89,21 @@ class TestImageOptimizer(unittest.TestCase):
         res = get_or_create_optimized_image(url, max_dim=500)
         self.assertEqual(res, url)
 
+    @patch("requests.get")
+    def test_corrupted_download_returns_original_url(self, mock_get):
+        # Mock HTML landing page content (not an image)
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.headers = {"Content-Type": "text/html"}
+        mock_response.content = b"<html>Landing Page</html>"
+        mock_get.return_value = mock_response
+
+        url = "https://example.com/html_landing_page.png"
+        res = get_or_create_optimized_image(url, max_dim=500)
+        
+        # It should detect HTML content type and not download it, returning the original URL
+        self.assertEqual(res, url)
+
 
 if __name__ == "__main__":
     unittest.main()

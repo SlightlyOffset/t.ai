@@ -308,14 +308,15 @@ class TaiMenu(App):
         optimized_path = get_or_create_optimized_image(image_path, max_dim=500)
         
         def update_ui():
+            path_to_use = optimized_path if optimized_path and os.path.exists(optimized_path) else None
             try:
                 avatar_widget = self.query_one(f"#{widget_id}")
                 if isinstance(avatar_widget, Image):
-                    avatar_widget.image = optimized_path
+                    avatar_widget.image = path_to_use
                 else:
-                    self._mount_avatar_widget(container_id, widget_id, optimized_path)
+                    self._mount_avatar_widget(container_id, widget_id, path_to_use)
             except Exception:
-                self._mount_avatar_widget(container_id, widget_id, optimized_path)
+                self._mount_avatar_widget(container_id, widget_id, path_to_use)
         self.app.call_from_thread(update_ui)
 
     @work(thread=True)
@@ -331,7 +332,7 @@ class TaiMenu(App):
                 if not bubble.is_mounted or not placeholder.is_mounted:
                     return
                 widget_type = self._resolve_image_widget_type()
-                if optimized_path and widget_type is not None:
+                if optimized_path and os.path.exists(optimized_path) and widget_type is not None:
                     img_widget = widget_type(optimized_path, classes="bubble_image")
                     bubble.mount(img_widget, before=placeholder)
                     placeholder.remove()
