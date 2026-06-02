@@ -85,8 +85,9 @@
 }
 .message {
     padding: 0 1;
-    width: auto;
+    width: 1fr;
     max-width: 85%;
+    height: auto;
 }
 .user_bubble {
     color: $text;
@@ -152,3 +153,28 @@ ChatInput:focus {
 Label {
     margin: 1 0;
 }
+
+.bubble_header {
+    text-style: bold;
+    color: $accent;
+    margin-bottom: 1;
+}
+
+.bubble_text {
+    color: $text;
+}
+
+.bubble_image {
+    width: 100%;
+    height: auto;
+    max-height: 25;
+    margin: 1 0;
+    border: solid $accent;
+}
+
+.bubble_image_fallback, .bubble_image_loading, .bubble_image_failed {
+    color: $warning;
+    margin: 1 0;
+    text-style: italic;
+}
+
