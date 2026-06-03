@@ -58,7 +58,7 @@ class ProfileSelect(Screen):
     }
     #preview_avatar {
         width: 32;
-        height: 16;
+        height: auto;
         border: solid $accent;
         display: block;
         margin-bottom: 1;
