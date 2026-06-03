@@ -4,7 +4,7 @@ import json
 from textual.app import ComposeResult
 from textual.containers import Container, Vertical, ScrollableContainer
 from textual.screen import Screen
-from textual.widgets import Header, Label, Footer, OptionList
+from textual.widgets import Header, Label, Footer, OptionList, Static
 from textual.widgets.option_list import Option
 from textual import work
 
