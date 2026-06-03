@@ -1202,6 +1202,8 @@ class TaiMenu(App):
 
     def print_starter_message(self) -> None:
         """Prints starter messages to the chat list and extracts the initial scene in the background."""
+        if not self.character_profile:
+            return
         starter_messages = list(self.character_profile.get("starter_messages", []))
         if starter_messages:
             random.shuffle(starter_messages)
