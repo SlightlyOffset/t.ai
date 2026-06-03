@@ -101,6 +101,7 @@ class SettingsScreen(ModalScreen):
         local_utility_model = settings.get("local_utility_model", "phi3")
         memory_limit = str(settings.get("memory_limit", 15))
         repetition_penalty = str(settings.get("repetition_penalty", 1.15))
+        max_tokens = str(settings.get("max_tokens", 300))
 
         tts_enabled = settings.get("tts_enabled", False)
         character_speak = settings.get("character_speak", True)
@@ -186,6 +187,9 @@ class SettingsScreen(ModalScreen):
                         with Horizontal(classes="settings_row"):
                             yield Label("Repetition Penalty:", classes="settings_label")
                             yield Input(value=repetition_penalty, id="repetition_penalty", classes="settings_widget")
+                        with Horizontal(classes="settings_row"):
+                            yield Label("Max Response Tokens:", classes="settings_label")
+                            yield Input(value=max_tokens, id="max_tokens", classes="settings_widget")
 
                 with TabPane("TTS / Audio", id="tab_tts"):
                     with VerticalScroll(classes="settings_pane"):
@@ -331,6 +335,14 @@ class SettingsScreen(ModalScreen):
             return
 
         try:
+            max_tokens = int(self.query_one("#max_tokens", Input).value.strip())
+            if max_tokens <= 0:
+                raise ValueError()
+        except ValueError:
+            self.show_error("Max Response Tokens must be a positive integer.")
+            return
+
+        try:
             tts_rate = int(self.query_one("#tts_rate", Input).value.strip())
             if tts_rate <= 0:
                 raise ValueError()
@@ -360,6 +372,7 @@ class SettingsScreen(ModalScreen):
             "local_utility_model": self.query_one("#local_utility_model", Input).value.strip(),
             "memory_limit": memory_limit,
             "repetition_penalty": repetition_penalty,
+            "max_tokens": max_tokens,
 
             "tts_enabled": self.query_one("#tts_enabled", Switch).value,
             "character_speak": self.query_one("#character_speak", Switch).value,
