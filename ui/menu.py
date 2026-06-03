@@ -333,7 +333,7 @@ class TaiMenu(App):
             existing = None
 
         if existing is not None:
-            if isinstance(existing, desired_widget_type):
+            if type(existing) is desired_widget_type:
                 if isinstance(existing, Image):
                     existing.image = image_path
                 return
@@ -363,8 +363,6 @@ class TaiMenu(App):
     @work(thread=True)
     def optimize_and_mount_bubble_image(self, image_path_or_url: str, image_bubble) -> None:
         from engines.image_optimizer import get_or_create_optimized_image
-        if not image_bubble.is_mounted:
-            return
 
         image_size = get_setting("image_size", "medium")
         size_map = {"small": 400, "medium": 800, "large": 1200}

@@ -5,6 +5,12 @@ from textual.app import App
 
 
 class TestChatBubble(unittest.TestCase):
+    def setUp(self):
+        self.orig_app = ChatBubble.app
+
+    def tearDown(self):
+        ChatBubble.app = self.orig_app
+
     @patch('ui.menu.get_setting')
     def test_chat_bubble_text_only(self, mock_get_setting):
         # Mock image protocol to "none"
