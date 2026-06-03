@@ -768,9 +768,14 @@ class TaiMenu(App):
     async def _wait_and_exit(self, alive_threads: list) -> None:
         """Asynchronously wait for active post-processing threads to finish, then exit."""
         import asyncio
+        import time
         def join_all():
+            start_time = time.time()
+            max_wait = 4.0
             for t in alive_threads:
-                t.join()
+                elapsed = time.time() - start_time
+                remaining = max(0.1, max_wait - elapsed)
+                t.join(timeout=remaining)
 
         await asyncio.to_thread(join_all)
         self.exit()
@@ -783,7 +788,6 @@ class TaiMenu(App):
         self.add_message("✓ Settings saved successfully", role="system")
 
         # Sync Main TUI settings sidebar widgets with new settings
-        self._is_syncing_settings = True
         try:
             self.query_one("#sw_tts", Switch).value = result.get("tts_enabled", False)
             self.query_one("#sw_dialogue", Switch).value = result.get("character_speak", True)
@@ -799,8 +803,6 @@ class TaiMenu(App):
             self.query_one("#image_protocol_select", Select).value = result.get("image_protocol")
         except Exception:
             pass
-        finally:
-            self._is_syncing_settings = False
 
 
         # Apply settings changes live
@@ -897,8 +899,13 @@ class TaiMenu(App):
         from engines.responses import active_post_process_threads
         alive_threads = [t for t in active_post_process_threads if t.is_alive()]
         if alive_threads:
+            import time
+            start_time = time.time()
+            max_wait = 2.0
             for t in alive_threads:
-                t.join()
+                elapsed = time.time() - start_time
+                remaining = max(0.1, max_wait - elapsed)
+                t.join(timeout=remaining)
 
     def on_profile_selected(self, result: dict) -> None:
         """Callback handled when ProfileSelect screen is dismissed."""
@@ -1016,8 +1023,6 @@ class TaiMenu(App):
 
     def on_switch_changed(self, event: Switch.Changed) -> None:
         """Handle toggle switches for TTS settings."""
-        if getattr(self, "_is_syncing_settings", False):
-            return
         if event.switch.id == "sw_tts":
             update_setting("tts_enabled", event.value)
             self.add_message(f"TTS Master: {'[bold green]ON[/bold green]' if event.value else '[bold red]OFF[/bold red]'}", role="system")
@@ -1033,8 +1038,6 @@ class TaiMenu(App):
 
     def on_select_changed(self, event: Select.Changed) -> None:
         """Update the character profile with selected LLM, Character Voice, or Narration Voice."""
-        if getattr(self, "_is_syncing_settings", False):
-            return
         from engines.utilities import save_json_atomic
 
         # Handle cases where value might be Select.NULL

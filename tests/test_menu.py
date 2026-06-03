@@ -453,7 +453,7 @@ class TestMenu(unittest.TestCase):
         app.on_unmount()
         
         # Verify that only the alive thread was joined
-        mock_thread_alive.join.assert_called_once_with()
+        mock_thread_alive.join.assert_called_once()
         mock_thread_dead.join.assert_not_called()
 
     @patch("engines.responses.active_post_process_threads")
@@ -506,7 +506,7 @@ class TestMenu(unittest.TestCase):
         import asyncio
         asyncio.run(app._wait_and_exit([mock_thread]))
         
-        mock_thread.join.assert_called_once_with()
+        mock_thread.join.assert_called_once()
         self.assertTrue(app.exit_called)
 
     @patch('ui.menu.memory_manager')
