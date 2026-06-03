@@ -42,7 +42,8 @@ class TestTTSModule(unittest.TestCase):
         self.assertTrue(os.path.exists("voices"))
 
     def test_cache_directory_exists(self):
-        self.assertTrue(os.path.exists("cache"))
+        from engines.audio_cache import CACHE_DIR
+        self.assertTrue(os.path.exists(CACHE_DIR))
 
 if __name__ == '__main__':
     unittest.main()

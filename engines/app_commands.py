@@ -442,10 +442,10 @@ def app_commands(ops: str, suppress_output: bool = False):
 
     def _clear_cache():
         """Clears the local TTS audio cache."""
-        cache_dir = "cache"
-        if os.path.exists(cache_dir):
+        from engines.audio_cache import CACHE_DIR as tts_cache_dir
+        if os.path.exists(tts_cache_dir):
             try:
-                shutil.rmtree(cache_dir)
+                shutil.rmtree(tts_cache_dir)
                 _log("[SYSTEM] TTS cache cleared.", Fore.GREEN)
             except Exception as e:
                 _log(f"[SYSTEM] Failed to clear TTS cache: {e}", Fore.RED)

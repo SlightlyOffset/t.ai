@@ -7,11 +7,14 @@ import os
 import hashlib
 from engines.config import get_setting
 
-CACHE_DIR = "cache"
+CACHE_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".cache", "audio"))
 
 def _ensure_cache_dir(directory):
     if not os.path.exists(directory):
         os.makedirs(directory, exist_ok=True)
+
+_ensure_cache_dir(CACHE_DIR)
+
 
 def _get_hash(text, voice, engine):
     """Generates a unique MD5 hash for the given TTS parameters."""
