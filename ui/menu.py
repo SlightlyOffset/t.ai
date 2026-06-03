@@ -681,8 +681,49 @@ class TaiMenu(App):
                 return True
         return False
 
+    def verify_session_user_profile(self, session_name: str = None) -> str:
+        """
+        Verify that the loaded session's user profile matches the active user profile.
+        If it doesn't match and the history is not empty, start a new session.
+        Returns the (possibly new) session name.
+        """
+        if session_name is None:
+            session_name = get_setting("current_history_session", "default")
+            
+        full_data = memory_manager.get_full_data(self.history_profile_name, session_name)
+        history = full_data.get("history", [])
+        metadata = full_data.get("metadata", {})
+        history_user = metadata.get("user_profile")
+        
+        current_user = os.path.basename(self.user_path) if self.user_path else None
+        
+        if len(history) > 0 and history_user != current_user:
+            # User profile doesn't match! Start a new conversation/session.
+            user_base = os.path.splitext(current_user)[0] if current_user else "user"
+            from engines.utilities import sanitize_profile_name
+            safe_user = sanitize_profile_name(user_base) or "user"
+            
+            # Generate a unique session name
+            import time
+            timestamp = time.strftime("%Y%m%d_%H%M%S")
+            new_session_name = f"{safe_user}_{timestamp}"
+            
+            update_setting("current_history_session", new_session_name)
+            # Save empty history for new session
+            memory_manager.save_history(self.history_profile_name, [], session_name=new_session_name)
+            
+            self.add_message(
+                f"[SYSTEM] User profile mismatch in session '{session_name}'. "
+                f"Started new session: [bold]{new_session_name}[/bold]",
+                role="system"
+            )
+            return new_session_name
+            
+        return session_name
+
     def reload_chat_list_for_session(self, session_name: str) -> None:
         """Reload chat messages and sidebar for the active session."""
+        session_name = self.verify_session_user_profile(session_name)
         if self.char_path and os.path.exists(self.char_path):
             try:
                 with open(self.char_path, "r", encoding="utf-8") as f:
@@ -1340,6 +1381,10 @@ class TaiMenu(App):
             update_setting("current_user_profile", os.path.basename(self.user_path))
         else:
             self.user_name = "User"
+
+        # Verify and switch session if user profile mismatch
+        active_session = get_setting("current_history_session", "default")
+        self.verify_session_user_profile(active_session)
 
         self.update_sidebar()
         self.add_message(f"Loaded character profile: [bold]{self.ch_name}[/bold]", role="system")

@@ -312,6 +312,72 @@ class TestTUIStartup(unittest.TestCase):
             check_ollama_and_models()
         mock_input.assert_called_once()
 
+    @patch('ui.menu.get_setting')
+    @patch('ui.menu.update_setting')
+    @patch('ui.menu.memory_manager.get_full_data')
+    @patch('ui.menu.memory_manager.save_history')
+    @patch('ui.menu.TaiMenu.add_message')
+    def test_verify_session_user_profile_mismatch(self, mock_add_message, mock_save_history, mock_get_full_data, mock_update_setting, mock_get_setting):
+        """
+        Test that verify_session_user_profile starts a new session if history is not empty
+        and the user profile in metadata does not match the active user profile.
+        """
+        from ui.menu import TaiMenu
+        
+        # Mocks
+        mock_get_setting.return_value = "default"
+        mock_get_full_data.return_value = {
+            "metadata": {
+                "user_profile": "Manganese.json"
+            },
+            "history": [{"role": "user", "content": "hello"}]
+        }
+        
+        with patch('ui.menu.TaiMenu.start_tts_worker'):
+            app = TaiMenu(char_path="profiles/Astgenne.json", user_path="user_profiles/Zenith.json")
+            app.history_profile_name = "Astgenne"
+            
+            # Since user_path is Zenith.json, os.path.basename(user_path) is Zenith.json.
+            # History user is Manganese.json.
+            # There is history. Mismatch should trigger new session name creation.
+            new_session = app.verify_session_user_profile("default")
+            
+            # Assertions
+            self.assertTrue(new_session.lower().startswith("zenith_"))
+            mock_update_setting.assert_called_with("current_history_session", new_session)
+            mock_save_history.assert_called_with("Astgenne", [], session_name=new_session)
+            mock_add_message.assert_called_once()
+
+    @patch('ui.menu.get_setting')
+    @patch('ui.menu.update_setting')
+    @patch('ui.menu.memory_manager.get_full_data')
+    @patch('ui.menu.memory_manager.save_history')
+    @patch('ui.menu.TaiMenu.add_message')
+    def test_verify_session_user_profile_match(self, mock_add_message, mock_save_history, mock_get_full_data, mock_update_setting, mock_get_setting):
+        """
+        Test that verify_session_user_profile does not start a new session if the user profiles match.
+        """
+        from ui.menu import TaiMenu
+        
+        mock_get_setting.return_value = "default"
+        mock_get_full_data.return_value = {
+            "metadata": {
+                "user_profile": "Zenith.json"
+            },
+            "history": [{"role": "user", "content": "hello"}]
+        }
+        
+        with patch('ui.menu.TaiMenu.start_tts_worker'):
+            app = TaiMenu(char_path="profiles/Astgenne.json", user_path="user_profiles/Zenith.json")
+            app.history_profile_name = "Astgenne"
+            
+            new_session = app.verify_session_user_profile("default")
+            
+            self.assertEqual(new_session, "default")
+            mock_update_setting.assert_not_called()
+            mock_save_history.assert_not_called()
+            mock_add_message.assert_not_called()
+
 if __name__ == '__main__':
     unittest.main()
 
