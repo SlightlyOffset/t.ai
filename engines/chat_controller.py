@@ -23,12 +23,17 @@ def get_latest_regeneration_prompt(history_profile_name: str) -> str | None:
     if pending is not None:
         return pending
     full_history = memory_manager.load_history(history_profile_name)
+    if not full_history:
+        return None
+    if len(full_history) == 1 and full_history[0].get("role") == "assistant":
+        return "[GENERATE_STARTER_SCENARIO]"
     if len(full_history) >= 2:
         if full_history[-1].get("role") == "assistant" and full_history[-2].get("role") == "assistant":
             return ""
         if full_history[-2].get("role") == "user":
             return full_history[-2].get("content", "")
     return None
+
 
 
 def handle_command_input(message: str, history_profile_name: str) -> dict | None:

@@ -430,6 +430,74 @@ class TestResponsesRegeneration(unittest.TestCase):
         called_messages2 = mock_ollama_chat.call_args_list[0][1]["messages"]
         self.assertNotIn("Ensure this new response is completely different", called_messages2[0]["content"])
 
+    @patch("engines.responses.get_pipeline_flags", return_value={
+        "enabled": False,
+        "instrumentation": False,
+        "state": False,
+        "memory": False,
+        "planner": False,
+        "candidates": False,
+        "critic": False,
+        "candidate_count": 1,
+        "style_profile": "balanced",
+    })
+    @patch("engines.responses.get_sentiment_score", return_value=0)
+    @patch("engines.responses.build_system_prompt", return_value="SYSTEM_PROMPT")
+    @patch("engines.responses.get_setting")
+    @patch("engines.responses.memory_manager")
+    @patch("engines.responses.ollama.chat")
+    def test_generate_starter_scenario(
+        self,
+        mock_ollama_chat,
+        mock_memory_manager,
+        mock_get_setting,
+        _mock_build_system_prompt,
+        _mock_get_sentiment,
+        _mock_pipeline_flags,
+    ):
+        profile = {"name": "TestAI", "llm_model": "test-model", "relationship_score": 0, "starter_messages": ["msg1", "msg2"]}
+        prompt_history = [
+            {"role": "assistant", "content": "msg1", "alternatives": ["msg1", "msg2"], "selected_index": 1},
+        ]
+        full_history = [
+            {"role": "assistant", "content": "msg1", "alternatives": ["msg1", "msg2"], "selected_index": 1},
+        ]
+
+        mock_get_setting.side_effect = lambda key, default=None: {
+            "default_llm_model": "test-model",
+            "remote_llm_url": None,
+            "interaction_mode": "rp",
+            "memory_limit": 15,
+        }.get(key, default)
+        mock_memory_manager.get_full_data.return_value = {
+            "metadata": {"current_scene": "Room", "memory_core": ""}
+        }
+        mock_memory_manager.load_history.side_effect = [prompt_history, full_history]
+        mock_ollama_chat.return_value = [{"message": {"content": "Generated msg3"}}]
+
+        list(
+            get_respond_stream(
+                "[GENERATE_STARTER_SCENARIO]",
+                profile,
+                history_profile_name="test_profile",
+                is_regeneration=True,
+            )
+        )
+
+        called_messages = mock_ollama_chat.call_args_list[0][1]["messages"]
+        system_msg = called_messages[0]["content"]
+        self.assertIn("[STARTER SCENARIO GENERATION RULES]", system_msg)
+        self.assertIn("msg1", system_msg)
+        self.assertIn("msg2", system_msg)
+        
+        self.assertEqual(called_messages[-1], {"role": "user", "content": "Please start our conversation with a new scenario."})
+
+        saved_history = mock_memory_manager.save_history.call_args[0][1]
+        self.assertEqual(len(saved_history), 1)
+        self.assertEqual(saved_history[0]["alternatives"], ["msg1", "msg2", "Generated msg3"])
+        self.assertEqual(saved_history[0]["selected_index"], 2)
+        self.assertEqual(saved_history[0]["content"], "Generated msg3")
+
 
 if __name__ == "__main__":
     unittest.main()

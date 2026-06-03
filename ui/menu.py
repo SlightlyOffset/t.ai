@@ -318,19 +318,15 @@ class TaiMenu(App):
             return HalfcellImage
         return Image
 
-    def _build_avatar_widget(self, image_path: str | None, widget_id: str, loading: bool = False):
+    def _build_avatar_widget(self, image_path: str | None, widget_id: str):
         widget_type = self._resolve_image_widget_type()
-        if widget_type is None or not image_path:
-            placeholder = "⏳" if loading else "🖼️"
-            return Static(placeholder, id=widget_id)
+        if widget_type is None:
+            return Static("🖼️", id=widget_id)
         return widget_type(image_path, id=widget_id)
 
-    def _mount_avatar_widget(self, container_id: str, widget_id: str, image_path: str | None, loading: bool = False) -> None:
+    def _mount_avatar_widget(self, container_id: str, widget_id: str, image_path: str | None) -> None:
         container = self.query_one(f"#{container_id}", Vertical)
         desired_widget_type = self._resolve_image_widget_type() or Static
-        if not image_path:
-            desired_widget_type = Static
-            
         try:
             existing = self.query_one(f"#{widget_id}")
         except Exception:
@@ -338,17 +334,14 @@ class TaiMenu(App):
 
         if existing is not None:
             if type(existing) is desired_widget_type:
-                if isinstance(existing, Image) and image_path:
+                if isinstance(existing, Image):
                     existing.image = image_path
-                elif isinstance(existing, Static):
-                    placeholder = "⏳" if loading else "🖼️"
-                    existing.update(placeholder)
                 return
             existing.remove()
-            self.call_after_refresh(self._mount_avatar_widget, container_id, widget_id, image_path, loading)
+            self.call_after_refresh(self._mount_avatar_widget, container_id, widget_id, image_path)
             return
 
-        container.mount(self._build_avatar_widget(image_path, widget_id, loading))
+        container.mount(self._build_avatar_widget(image_path, widget_id))
 
     @work(thread=True)
     def _optimize_and_set_avatar(self, image_path: str, container_id: str, widget_id: str) -> None:
@@ -432,7 +425,6 @@ class TaiMenu(App):
         if protocol == "none" or not image_path:
             self._mount_avatar_widget(container_id, widget_id, None)
             return
-        self._mount_avatar_widget(container_id, widget_id, None, loading=True)
         self._optimize_and_set_avatar(image_path, container_id, widget_id)
 
     def remount_avatar_widgets(self) -> None:
@@ -1208,15 +1200,21 @@ class TaiMenu(App):
 
     def print_starter_message(self) -> None:
         """Prints starter messages to the chat list and extracts the initial scene in the background."""
-        starter_messages = self.character_profile.get("starter_messages", [])
+        starter_messages = list(self.character_profile.get("starter_messages", []))
         if starter_messages:
             random.shuffle(starter_messages)
             starter_text = starter_messages[0]
-            self.add_message(self.format_rp(starter_text, role="assistant"), role="assistant", message_number=1, raw_text=starter_text)
+            msg_data = None
+            if len(starter_messages) > 1:
+                msg_data = {"alternatives": starter_messages, "selected_index": 0}
+            self.add_message(self.format_rp(starter_text, role="assistant"), role="assistant", message_number=1, raw_text=starter_text, msg_data=msg_data)
             rel_score = self.character_profile.get("relationship_score", 0)
             memory_manager.save_history(self.history_profile_name, [{"role": "assistant",
-                                                                     "content": starter_text}],
+                                                                     "content": starter_text,
+                                                                     "alternatives": starter_messages,
+                                                                     "selected_index": 0}],
                                          relationship_score=rel_score)
+
 
             def extract_and_save_starter_scene():
                 try:

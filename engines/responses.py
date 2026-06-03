@@ -682,7 +682,10 @@ def get_respond_stream(user_input: str, profile: dict, profile_path: str = None,
     # If the user input does not match the last user turn in history, this is actually a first-time generation
     # for a failed turn, so we treat it as is_regeneration = False for history saving and prompting.
     is_regenerating_existing = False
-    if is_regeneration:
+    if user_input == "[GENERATE_STARTER_SCENARIO]":
+        is_regeneration = True
+        is_regenerating_existing = True
+    elif is_regeneration:
         if len(prompt_history) >= 2 and prompt_history[-1].get("role") == "assistant":
             last_user_or_assistant = prompt_history[-2]
             if (
@@ -807,29 +810,54 @@ def get_respond_stream(user_input: str, profile: dict, profile_path: str = None,
 
     messages = [{'role': 'system', 'content': system_content}]
     if is_regeneration:
-        messages.extend(prompt_history)
-        # The user_input passed in is the last user message.
-        if (
-            not prompt_history
-            or prompt_history[-1].get("role") != "user"
-            or prompt_history[-1].get("content") != user_input
-        ):
-            messages.append({'role': 'user', 'content': user_input})
+        if user_input == "[GENERATE_STARTER_SCENARIO]":
+            starter_examples = list(profile.get("starter_messages", []))
+            if regeneration_previous_replies:
+                for rep in regeneration_previous_replies:
+                    if rep not in starter_examples:
+                        starter_examples.append(rep)
 
-        if regeneration_previous_replies:
-            replay_block = "\n".join(f"- {reply[:220]}" for reply in regeneration_previous_replies[-3:])
+            examples_str = ""
+            for idx, ex in enumerate(starter_examples[:5]):
+                examples_str += f"### Example {idx+1}:\n{ex}\n\n"
+
             instruction = (
-                "[REGENERATION DIVERSITY CONSTRAINT]\n"
-                "Generate a substantially different alternative response while preserving canon and scene continuity.\n"
-                "Do not paraphrase the same response structure.\n"
+                "\n\n"
+                "[STARTER SCENARIO GENERATION RULES]\n"
+                "Generate a brand new, highly creative starter message/greeting in-character.\n"
+                "Rules:\n"
+                "1. Do NOT repeat or copy the scenarios, settings, or ideas from the examples below.\n"
+                "2. Ensure the new scenario introduces a different setting or situation.\n"
+                "3. Maintain character personality, mannerisms, and speech style.\n"
+                "4. Respond only in-character as the starter greeting. Do not include user speech, meta-explanations, or intro remarks.\n\n"
+                f"Here are the existing starter messages for reference:\n{examples_str}"
             )
-            if len(regeneration_previous_replies) == 1:
-                instruction += (
-                    "Ensure this new response is completely different in starting words, phrasing, tone, "
-                    "and narrative progression compared to the previous attempt. Be creative and explore a different approach.\n"
-                )
-            instruction += f"Previous assistant attempts:\n{replay_block}\n"
             messages[0]["content"] = f"{messages[0]['content']}\n\n{instruction}"
+            messages.append({'role': 'user', 'content': 'Please start our conversation with a new scenario.'})
+        else:
+            messages.extend(prompt_history)
+            # The user_input passed in is the last user message.
+            if (
+                not prompt_history
+                or prompt_history[-1].get("role") != "user"
+                or prompt_history[-1].get("content") != user_input
+            ):
+                messages.append({'role': 'user', 'content': user_input})
+
+            if regeneration_previous_replies:
+                replay_block = "\n".join(f"- {reply[:220]}" for reply in regeneration_previous_replies[-3:])
+                instruction = (
+                    "[REGENERATION DIVERSITY CONSTRAINT]\n"
+                    "Generate a substantially different alternative response while preserving canon and scene continuity.\n"
+                    "Do not paraphrase the same response structure.\n"
+                )
+                if len(regeneration_previous_replies) == 1:
+                    instruction += (
+                        "Ensure this new response is completely different in starting words, phrasing, tone, "
+                        "and narrative progression compared to the previous attempt. Be creative and explore a different approach.\n"
+                    )
+                instruction += f"Previous assistant attempts:\n{replay_block}\n"
+                messages[0]["content"] = f"{messages[0]['content']}\n\n{instruction}"
     else:
         messages.extend(prompt_history)
         messages.append({'role': 'user', 'content': user_input})

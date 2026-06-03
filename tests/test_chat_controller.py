@@ -77,5 +77,15 @@ class TestChatController(unittest.TestCase):
         self.assertEqual(prompt, "")
 
 
+    @patch("engines.chat_controller.memory_manager.load_history")
+    def test_get_latest_regeneration_prompt_single_assistant_starter(self, mock_load_history):
+        history = [
+            {"role": "assistant", "content": "Welcome to Rhodes Island!"}
+        ]
+        mock_load_history.return_value = history
+        prompt = get_latest_regeneration_prompt("profile")
+        self.assertEqual(prompt, "[GENERATE_STARTER_SCENARIO]")
+
+
 if __name__ == "__main__":
     unittest.main()
