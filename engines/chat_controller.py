@@ -2,19 +2,20 @@ from engines.app_commands import app_commands, RegenerateRequested, RestartReque
 from engines.memory_v2 import memory_manager
 
 
-def get_user_message_number(message: str, history_profile_name: str) -> int | None:
-    """Compute the display/history number for a user message."""
+def get_user_message_number(message: str, current_visible_count: int) -> int | None:
+    """Compute the display/history number for a user message.
+
+    Args:
+        message: The raw user input text.
+        current_visible_count: The current in-memory count of visible
+            (user + assistant) messages already displayed in the UI.
+
+    Returns:
+        The next visible message number, or None for command inputs.
+    """
     if message.startswith("//"):
         return None
-    history = memory_manager.load_history(history_profile_name)
-    visible_count = 0
-    for msg in history:
-        r = msg.get("role", "assistant")
-        c = msg.get("content", "")
-        if r in ("user", "assistant"):
-            if not (r == "user" and not c):
-                visible_count += 1
-    return visible_count + 1
+    return current_visible_count + 1
 
 
 def get_latest_regeneration_prompt(history_profile_name: str) -> str | None:

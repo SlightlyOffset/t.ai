@@ -12,15 +12,10 @@ from engines.chat_controller import (
 
 
 class TestChatController(unittest.TestCase):
-    @patch("engines.chat_controller.memory_manager.load_history", return_value=[
-        {"role": "user", "content": "hello"},
-        {"role": "assistant", "content": "hi"},
-        {"role": "user", "content": ""},
-        {"role": "assistant", "content": "howdy"}
-    ])
-    def test_get_user_message_number_non_command(self, _mock_load):
-        self.assertEqual(get_user_message_number("hello", "profile"), 4)
-        self.assertIsNone(get_user_message_number("//help", "profile"))
+    def test_get_user_message_number_non_command(self):
+        # With 3 visible messages already displayed, next should be #4
+        self.assertEqual(get_user_message_number("hello", 3), 4)
+        self.assertIsNone(get_user_message_number("//help", 3))
 
     @patch("engines.chat_controller.memory_manager.load_history")
     @patch("engines.chat_controller.app_commands")

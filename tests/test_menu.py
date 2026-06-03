@@ -182,6 +182,7 @@ class TestMenu(unittest.TestCase):
                 self.history_profile_name = "test_profile"
                 self.char_path = "profiles/test.json"
                 self.user_path = "user_profiles/test.json"
+                self._visible_message_count = 0
             def format_rp(self, text, role="user"):
                 return text
 
@@ -254,6 +255,7 @@ class TestMenu(unittest.TestCase):
                 self.user_name = "TestUser"
                 self.char_name_lbl_color = "red"
                 self.user_name_lbl_color = "blue"
+                self._visible_message_count = 0
 
         app = DummyMenu()
         app.add_message = MagicMock()
@@ -363,6 +365,7 @@ class TestMenu(unittest.TestCase):
                 self.history_profile_name = "test_profile"
                 self.char_path = "profiles/test.json"
                 self.user_path = "user_profiles/test.json"
+                self._visible_message_count = 6
             def format_rp(self, text, role="user"):
                 return text
 
@@ -374,9 +377,6 @@ class TestMenu(unittest.TestCase):
             def __init__(self, value):
                 self.value = value
 
-        mock_memory_manager.get_history_length.return_value = 5
-        mock_memory_manager.load_history.return_value = [{"role": "user", "content": "msg"}] * 6
-
         # Call on_chat_input_submitted with empty message
         asyncio.run(app.on_chat_input_submitted(MockEvent("   ")))
 
@@ -386,7 +386,7 @@ class TestMenu(unittest.TestCase):
         # Check that memory_manager set pending user message to empty string
         mock_memory_manager.set_pending_user_message.assert_called_once_with("test_profile", "")
 
-        # Check that stream_response was called with empty message and Turn 7
+        # Check that stream_response was called with empty message and Turn 7 (_visible_message_count + 1)
         mock_stream.assert_called_once_with("", message_number=7)
 
     def test_add_message_hides_empty_user_messages(self):
