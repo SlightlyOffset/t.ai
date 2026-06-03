@@ -36,6 +36,7 @@ class TestSettingsScreen(unittest.TestCase):
             "#clear_on_start": MagicMock(value=False),
             "#auto_recap_on_start": MagicMock(value=True),
             "#image_protocol": MagicMock(value="auto"),
+            "#image_size": MagicMock(value="medium"),
             "#suppress_errors": MagicMock(value=True),
             "#default_llm_model": MagicMock(value="fluffy/l3-8b-stheno-v3.2"),
             "#summarizer_model": MagicMock(value="gemma2:2b"),
@@ -109,6 +110,7 @@ class TestSettingsScreen(unittest.TestCase):
         self.assertEqual(dismissed_dict["tts_rate"], 170)
         self.assertEqual(dismissed_dict["overhaul_candidate_count"], 2)
         self.assertEqual(dismissed_dict["interaction_mode"], "rp")
+        self.assertEqual(dismissed_dict["image_size"], "medium")
 
     @patch('engines.config.update_settings')
     def test_save_action_insecure_llm_url(self, mock_update):

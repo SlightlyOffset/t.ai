@@ -31,7 +31,7 @@ from engines.chat_controller import (
     previous_response_variant,
 )
 from engines.config import update_setting, get_setting
-from engines.formatting import TextFormatter
+from engines.formatting import TextFormatter, parse_message_content
 from engines.profile_state import (
     build_sidebar_state,
     get_initial_avatar_paths,
@@ -148,6 +148,98 @@ class ExitSavingScreen(ModalScreen):
             id="saving_container"
         )
 
+class ChatBubble(Vertical):
+    def __init__(self, header: str, raw_content: str, role: str, message_number: int | None = None, msg_data: dict | None = None, **kwargs):
+        super().__init__(**kwargs)
+        self.header = header
+        self.raw_content = raw_content
+        self.role = role
+        self.message_number = message_number
+        self.msg_data = msg_data
+
+        bubble_class = "user_bubble" if role == "user" else "ai_bubble"
+        self.add_class("message")
+        self.add_class(bubble_class)
+
+    def compose(self) -> ComposeResult:
+        yield Static(self.header, markup=True, classes="bubble_header")
+
+        indicator = ""
+        if self.msg_data and self.role == "assistant":
+            alternatives = self.msg_data.get("alternatives", [])
+            if alternatives:
+                idx = self.msg_data.get("selected_index", 0)
+                indicator = f"\n\n[dim]< {idx + 1}/{len(alternatives)} >[/dim]"
+
+        chunks = parse_message_content(self.raw_content)
+
+        for chunk in chunks:
+            if chunk["type"] == "text":
+                formatted_text = self.app.format_rp(chunk["content"], role=self.role)
+                if indicator:
+                    formatted_text += indicator
+                    indicator = ""
+                yield Static(formatted_text, markup=True, classes="bubble_text")
+            elif chunk["type"] == "image":
+                image_protocol = get_setting("image_protocol", "auto")
+                if image_protocol == "none":
+                    desc = chunk["alt"] if chunk["alt"] else chunk["url"]
+                    yield Static(f"🖼️ [Image: {desc}]", classes="bubble_image_fallback")
+                else:
+                    desc = chunk["alt"] if chunk["alt"] else os.path.basename(chunk["url"])
+                    yield Static(f"[dim]🖼️ Image: {desc}[/dim]", markup=True, classes="bubble_image_indicator")
+
+        if indicator:
+            yield Static(indicator, markup=True, classes="bubble_text")
+
+
+class ImageBubble(Vertical):
+    """A separate, togglable image bubble that renders below the text bubble."""
+
+    collapsed = reactive(True)
+
+    def __init__(self, image_url: str, alt: str = "", role: str = "assistant", **kwargs):
+        super().__init__(**kwargs)
+        self.image_url = image_url
+        self.alt = alt
+        self.role = role
+        self.add_class("message")
+        self.add_class("image_bubble_wrap")
+
+    def compose(self) -> ComposeResult:
+        desc = self.alt if self.alt else os.path.basename(self.image_url)
+        yield Static(f"🖼️ ▶ Show Image ({desc})", classes="image_toggle_header")
+        yield Vertical(
+            Static("⏳ Loading image...", classes="bubble_image_loading"),
+            classes="image_container",
+        )
+
+    def on_mount(self) -> None:
+        try:
+            self.query_one(".image_container").display = False
+        except Exception:
+            pass
+        # Trigger async image optimization now that the widget is fully mounted
+        image_protocol = get_setting("image_protocol", "auto")
+        if image_protocol != "none":
+            self.app.optimize_and_mount_bubble_image(self.image_url, self)
+
+    def watch_collapsed(self, collapsed: bool) -> None:
+        try:
+            container = self.query_one(".image_container")
+            container.display = not collapsed
+            header = self.query_one(".image_toggle_header", Static)
+            desc = self.alt if self.alt else os.path.basename(self.image_url)
+            arrow = "▶" if collapsed else "▼"
+            action = "Show" if collapsed else "Hide"
+            header.update(f"🖼️ {arrow} {action} Image ({desc})")
+        except Exception:
+            pass
+
+    def on_click(self, event: events.Click) -> None:
+        self.collapsed = not self.collapsed
+        event.stop()
+
 class TaiMenu(App):
     """t.ai - Logic-focused TUI implementation."""
     TITLE = "t.ai (made with love from a lone developer! 💖)"
@@ -193,6 +285,7 @@ class TaiMenu(App):
         ("Kitty", "kitty"),
         ("Sixel", "sixel"),
         ("Blocky", "blocky"),
+        ("None (Text Only)", "none"),
     ]
 
     # Global TTS queue
@@ -213,8 +306,10 @@ class TaiMenu(App):
         self._current_char_avatar_path = None
         self._current_user_avatar_path = None
 
-    def _resolve_image_widget_type(self) -> type[Image]:
+    def _resolve_image_widget_type(self) -> type[Image] | None:
         protocol = get_setting("image_protocol", "auto")
+        if protocol == "none":
+            return None
         if protocol == "kitty":
             return TGPImage
         if protocol == "sixel":
@@ -225,19 +320,22 @@ class TaiMenu(App):
 
     def _build_avatar_widget(self, image_path: str | None, widget_id: str):
         widget_type = self._resolve_image_widget_type()
+        if widget_type is None:
+            return Static("🖼️", id=widget_id)
         return widget_type(image_path, id=widget_id)
 
     def _mount_avatar_widget(self, container_id: str, widget_id: str, image_path: str | None) -> None:
         container = self.query_one(f"#{container_id}", Vertical)
-        desired_widget_type = self._resolve_image_widget_type()
+        desired_widget_type = self._resolve_image_widget_type() or Static
         try:
             existing = self.query_one(f"#{widget_id}")
         except Exception:
             existing = None
 
         if existing is not None:
-            if isinstance(existing, desired_widget_type):
-                existing.image = image_path
+            if type(existing) is desired_widget_type:
+                if isinstance(existing, Image):
+                    existing.image = image_path
                 return
             existing.remove()
             self.call_after_refresh(self._mount_avatar_widget, container_id, widget_id, image_path)
@@ -245,16 +343,105 @@ class TaiMenu(App):
 
         container.mount(self._build_avatar_widget(image_path, widget_id))
 
+    @work(thread=True)
+    def _optimize_and_set_avatar(self, image_path: str, container_id: str, widget_id: str) -> None:
+        from engines.image_optimizer import get_or_create_optimized_image
+        optimized_path = get_or_create_optimized_image(image_path, max_dim=500)
+        
+        def update_ui():
+            path_to_use = optimized_path if optimized_path and os.path.exists(optimized_path) else None
+            try:
+                avatar_widget = self.query_one(f"#{widget_id}")
+                if isinstance(avatar_widget, Image):
+                    avatar_widget.image = path_to_use
+                else:
+                    self._mount_avatar_widget(container_id, widget_id, path_to_use)
+            except Exception:
+                self._mount_avatar_widget(container_id, widget_id, path_to_use)
+        self.app.call_from_thread(update_ui)
+
+    @work(thread=True)
+    def optimize_and_mount_bubble_image(self, image_path_or_url: str, image_bubble) -> None:
+        from engines.image_optimizer import get_or_create_optimized_image
+
+        image_size = get_setting("image_size", "medium")
+        size_map = {"small": 400, "medium": 800, "large": 1200}
+        max_dim = size_map.get(image_size, 800)
+        optimized_path = get_or_create_optimized_image(image_path_or_url, max_dim=max_dim)
+
+        def update_ui():
+            try:
+                if not image_bubble.is_mounted:
+                    return
+                container = image_bubble.query_one(".image_container")
+                for child in list(container.children):
+                    child.remove()
+
+                widget_type = self._resolve_image_widget_type()
+                if optimized_path and os.path.exists(optimized_path) and widget_type is not None:
+                    img_widget = widget_type(optimized_path, classes="bubble_image")
+                    
+                    # Map configuration size to terminal columns/rows
+                    # Calculate cell-aspect ratio (terminal character cell height-to-width ratio is ~2.0)
+                    w = getattr(img_widget, "_image_width", 0)
+                    h = getattr(img_widget, "_image_height", 0)
+                    char_aspect_ratio = (w / h) * 2.0 if w > 0 and h > 0 else 2.0
+                    
+                    # Get setting boundaries
+                    terminal_widths = {"small": 45, "medium": 75, "large": 105}
+                    terminal_heights = {"small": 15, "medium": 25, "large": 35}
+                    max_w = terminal_widths.get(image_size, 75)
+                    max_h = terminal_heights.get(image_size, 25)
+                    
+                    # Scale to fit
+                    cols = max_w
+                    rows = int(cols / char_aspect_ratio)
+                    if rows > max_h:
+                        rows = max_h
+                        cols = int(rows * char_aspect_ratio)
+                        
+                    # Apply dynamic width with auto height and max_height cap to preserve aspect ratio under any layout constraints
+                    img_widget.styles.width = max(15, cols)
+                    img_widget.styles.height = "auto"
+                    img_widget.styles.max_height = max_h
+                    img_widget.styles.max_width = None
+                    
+                    container.mount(img_widget)
+                else:
+                    desc = image_path_or_url
+                    container.mount(Static(f"❌ [Failed to load image: {desc}]", classes="bubble_image_failed"))
+            except Exception as e:
+                try:
+                    container = image_bubble.query_one(".image_container")
+                    for child in list(container.children):
+                        child.remove()
+                    container.mount(Static(f"❌ [Error loading image: {e}]", classes="bubble_image_failed"))
+                except Exception:
+                    pass
+        self.app.call_from_thread(update_ui)
+
     def _set_avatar_image(self, container_id: str, widget_id: str, image_path: str | None) -> None:
-        try:
-            avatar_widget = self.query_one(f"#{widget_id}")
-            avatar_widget.image = image_path
-        except Exception:
-            self._mount_avatar_widget(container_id, widget_id, image_path)
+        protocol = get_setting("image_protocol", "auto")
+        if protocol == "none" or not image_path:
+            self._mount_avatar_widget(container_id, widget_id, None)
+            return
+        self._optimize_and_set_avatar(image_path, container_id, widget_id)
 
     def remount_avatar_widgets(self) -> None:
-        self._mount_avatar_widget("char_avatar_wrap", "avatar_portrait_character", self._current_char_avatar_path)
-        self._mount_avatar_widget("user_avatar_wrap", "avatar_portrait_user", self._current_user_avatar_path)
+        self._set_avatar_image("char_avatar_wrap", "avatar_portrait_character", self._current_char_avatar_path)
+        self._set_avatar_image("user_avatar_wrap", "avatar_portrait_user", self._current_user_avatar_path)
+
+    def remount_all_image_bubbles(self) -> None:
+        """Reload and resize all currently mounted image bubbles."""
+        for bubble in self.query(ImageBubble):
+            try:
+                container = bubble.query_one(".image_container")
+                for child in list(container.children):
+                    child.remove()
+                container.mount(Static("⏳ Loading image...", classes="bubble_image_loading"))
+            except Exception:
+                pass
+            self.optimize_and_mount_bubble_image(bubble.image_url, bubble)
 
     def watch_show_sidebar(self, show: bool) -> None:
         """Called when show_sidebar reactive property changes."""
@@ -338,14 +525,56 @@ class TaiMenu(App):
         return None
 
     def refresh_last_ai_message(self, content: str, index: int, total: int) -> None:
-        """Updates the text and indicator of the last AI message in the UI."""
+        """Rebuilds the last AI message bubble and its associated image rows."""
         try:
-            ai_bubble = self.query(".ai_bubble").last()
-            indicator = f"\n\n[dim]< {index + 1}/{total} >[/dim]" if total > 1 else ""
-            formatted_text = self.format_rp(content, role="assistant") + indicator
-            ai_bubble.update(
-                f"{self._message_header('assistant', self._current_assistant_message_number())}\n{formatted_text}"
+            last_ai = self.query(".ai_bubble").last()
+            msg_row = last_ai.parent
+            container = self.query_one("#chat_list", ScrollableContainer)
+
+            # Remove associated image bubble rows after this message row
+            siblings = list(container.children)
+            try:
+                row_idx = siblings.index(msg_row)
+            except ValueError:
+                row_idx = -1
+            if row_idx >= 0:
+                for sibling in siblings[row_idx + 1:]:
+                    if sibling.query(".image_bubble_wrap"):
+                        sibling.remove()
+                    else:
+                        break
+
+            # Build new ChatBubble
+            msg_number = self._current_assistant_message_number()
+            header = self._message_header("assistant", msg_number)
+            msg_data = None
+            if total > 1:
+                msg_data = {"alternatives": [""] * total, "selected_index": index}
+
+            new_bubble = ChatBubble(
+                header=header,
+                raw_content=content,
+                role="assistant",
+                message_number=msg_number,
+                msg_data=msg_data,
             )
+            msg_row.mount(new_bubble, before=last_ai)
+            last_ai.remove()
+
+            # Mount new image bubbles
+            image_chunks = [c for c in parse_message_content(content) if c["type"] == "image"]
+            image_protocol = get_setting("image_protocol", "auto")
+            if image_protocol != "none":
+                for img_chunk in image_chunks:
+                    img_bubble = ImageBubble(
+                        image_url=img_chunk["url"],
+                        alt=img_chunk["alt"],
+                        role="assistant",
+                    )
+                    img_row = Horizontal(img_bubble, classes="message_row ai_row")
+                    container.mount(img_row)
+
+            container.scroll_end(animate=False)
         except Exception:
             pass
 
@@ -531,6 +760,7 @@ class TaiMenu(App):
         # Apply settings changes live
         self.remount_avatar_widgets()
         self.update_sidebar()
+        self.remount_all_image_bubbles()
 
     def compose(self) -> ComposeResult:
         self._current_char_avatar_path, self._current_user_avatar_path = get_initial_avatar_paths(
@@ -766,14 +996,43 @@ class TaiMenu(App):
                 save_json_atomic(self.char_path, self.character_profile)
                 self.add_message(f"LLM model switched to [bold]{val}[/bold]", role="system")
             else:
-                event.select.value = self.character_profile.get("llm_model") if self.character_profile else get_setting("default_llm_model", "llama3")
+                target = self.character_profile.get("llm_model") if self.character_profile else get_setting("default_llm_model", "llama3")
+                try:
+                    is_real_select = isinstance(getattr(event.select, "_legal_values", None), set)
+                    if not is_real_select:
+                        event.select.value = target
+                    elif target in event.select._legal_values:
+                        event.select.value = target
+                    else:
+                        default_model = get_setting("default_llm_model", "llama3")
+                        if is_real_select and default_model in event.select._legal_values:
+                            event.select.value = default_model
+                        else:
+                            opts = [opt for opt in event.select._legal_values if opt != Select.NULL]
+                            event.select.value = opts[0] if opts else Select.NULL
+                except Exception:
+                    try:
+                        event.select.value = Select.NULL
+                    except Exception:
+                        pass
         elif event.select.id == "character_voice_select":
             if val is not None:
                 self.character_profile["preferred_edge_voice"] = val
                 save_json_atomic(self.char_path, self.character_profile)
                 self.add_message(f"Companion voice set to [bold]{val}[/bold]", role="system")
             else:
-                event.select.value = self.character_profile.get("preferred_edge_voice") if self.character_profile else get_setting("narration_tts_voice", "en-US-AndrewNeural")
+                target = self.character_profile.get("preferred_edge_voice") if self.character_profile else get_setting("narration_tts_voice", "en-US-AndrewNeural")
+                try:
+                    is_real_select = isinstance(getattr(event.select, "_legal_values", None), set)
+                    if not is_real_select:
+                        event.select.value = target
+                    else:
+                        event.select.value = target if target in event.select._legal_values else Select.NULL
+                except Exception:
+                    try:
+                        event.select.value = Select.NULL
+                    except Exception:
+                        pass
         elif event.select.id == "narration_voice_select":
             if val is not None:
                 if update_setting("narration_tts_voice", val):
@@ -781,14 +1040,36 @@ class TaiMenu(App):
                 else:
                     self.add_message(f"Failed to set narration voice to [bold]{val}[/bold]", role="system")
             else:
-                event.select.value = get_setting("narration_tts_voice", "en-US-AndrewNeural")
+                target = get_setting("narration_tts_voice", "en-US-AndrewNeural")
+                try:
+                    is_real_select = isinstance(getattr(event.select, "_legal_values", None), set)
+                    if not is_real_select:
+                        event.select.value = target
+                    else:
+                        event.select.value = target if target in event.select._legal_values else Select.NULL
+                except Exception:
+                    try:
+                        event.select.value = Select.NULL
+                    except Exception:
+                        pass
         elif event.select.id == "tts_engine_select":
             if val is not None:
                 self.character_profile["tts_engine"] = val
                 save_json_atomic(self.char_path, self.character_profile)
                 self.add_message(f"TTS engine switched to [bold]{val}[/bold]", role="system")
             else:
-                event.select.value = self.character_profile.get("tts_engine") if self.character_profile else get_setting("default_tts_engine", "edge-tts")
+                target = self.character_profile.get("tts_engine") if self.character_profile else get_setting("default_tts_engine", "edge-tts")
+                try:
+                    is_real_select = isinstance(getattr(event.select, "_legal_values", None), set)
+                    if not is_real_select:
+                        event.select.value = target
+                    else:
+                        event.select.value = target if target in event.select._legal_values else Select.NULL
+                except Exception:
+                    try:
+                        event.select.value = Select.NULL
+                    except Exception:
+                        pass
         elif event.select.id == "image_protocol_select":
             if val is not None:
                 valid_protocols = {value for _, value in self.IMAGE_PROTOCOLS}
@@ -798,7 +1079,18 @@ class TaiMenu(App):
                 else:
                     self.add_message(f"Failed to set image protocol to [bold]{val}[/bold]", role="system")
             else:
-                event.select.value = get_setting("image_protocol", "auto")
+                target = get_setting("image_protocol", "auto")
+                try:
+                    is_real_select = isinstance(getattr(event.select, "_legal_values", None), set)
+                    if not is_real_select:
+                        event.select.value = target
+                    else:
+                        event.select.value = target if target in event.select._legal_values else Select.NULL
+                except Exception:
+                    try:
+                        event.select.value = Select.NULL
+                    except Exception:
+                        pass
         elif event.select.id == "interaction_mode_select":
             if val is not None:
                 if update_setting("interaction_mode", val):
@@ -806,7 +1098,18 @@ class TaiMenu(App):
                 else:
                     self.add_message(f"Failed to set interaction mode to [bold]{val.upper()}[/bold]", role="system")
             else:
-                event.select.value = get_setting("interaction_mode", "rp")
+                target = get_setting("interaction_mode", "rp")
+                try:
+                    is_real_select = isinstance(getattr(event.select, "_legal_values", None), set)
+                    if not is_real_select:
+                        event.select.value = target
+                    else:
+                        event.select.value = target if target in event.select._legal_values else Select.NULL
+                except Exception:
+                    try:
+                        event.select.value = Select.NULL
+                    except Exception:
+                        pass
 
     def populate_image_protocols(self) -> None:
         """Populate image protocol selection and sync current setting."""
@@ -860,7 +1163,7 @@ class TaiMenu(App):
         if starter_messages:
             random.shuffle(starter_messages)
             starter_text = starter_messages[0]
-            self.add_message(self.format_rp(starter_text, role="assistant"), role="assistant", message_number=1)
+            self.add_message(self.format_rp(starter_text, role="assistant"), role="assistant", message_number=1, raw_text=starter_text)
             rel_score = self.character_profile.get("relationship_score", 0)
             memory_manager.save_history(self.history_profile_name, [{"role": "assistant",
                                                                      "content": starter_text}],
@@ -1153,23 +1456,39 @@ class TaiMenu(App):
             self.set_timer(10.0, safe_remove_tip)
         else:
             row_class = "user_row" if role == "user" else "ai_row"
-            bubble_class = "user_bubble" if role == "user" else "ai_bubble"
             header = self._message_header(role, message_number)
 
-            # Multi-response pagination indicator
-            indicator = ""
-            if msg_data and role == "assistant":
-                alternatives = msg_data.get("alternatives", [])
-                if alternatives:
-                    idx = msg_data.get("selected_index", 0)
-                    indicator = f"\n\n[dim]< {idx + 1}/{len(alternatives)} >[/dim]"
+            raw_content = ""
+            if msg_data:
+                raw_content = msg_data.get("content", "")
+            if not raw_content:
+                raw_content = raw_text or text
 
-            bubble = Static(f"{header}\n{text}{indicator}", markup=True, classes=f"message {bubble_class}")
+            bubble = ChatBubble(
+                header=header,
+                raw_content=raw_content,
+                role=role,
+                message_number=message_number,
+                msg_data=msg_data
+            )
             if role == "user":
-                bubble.raw_text = raw_text or (msg_data.get("content") if msg_data else text)
-            row = Horizontal(bubble, classes=f"message_row {row_class}")
+                bubble.raw_text = raw_content
 
+            row = Horizontal(bubble, classes=f"message_row {row_class}")
             container.mount(row)
+
+            # Mount separate ImageBubble rows for each image in the message
+            image_chunks = [c for c in parse_message_content(raw_content) if c["type"] == "image"]
+            image_protocol = get_setting("image_protocol", "auto")
+            if image_protocol != "none":
+                for img_chunk in image_chunks:
+                    img_bubble = ImageBubble(
+                        image_url=img_chunk["url"],
+                        alt=img_chunk["alt"],
+                        role=role,
+                    )
+                    img_row = Horizontal(img_bubble, classes=f"message_row {row_class}")
+                    container.mount(img_row)
 
         container.scroll_end(animate=False)
 
@@ -1339,7 +1658,7 @@ class TaiMenu(App):
         self,
         is_regeneration: bool,
         message_number: int | None = None,
-    ) -> tuple[ScrollableContainer, Static, str]:
+    ) -> tuple[ScrollableContainer, Static, str, int | None]:
         """Resolve chat widgets on the main thread before background streaming starts."""
         container = self.query_one("#chat_list", ScrollableContainer)
         assistant_message_number = message_number
@@ -1350,7 +1669,29 @@ class TaiMenu(App):
 
         if is_regeneration:
             try:
-                ai_msg = self.query(".ai_bubble").last()
+                last_bubble = self.query(".ai_bubble").last()
+                parent_row = last_bubble.parent
+
+                # Remove associated image bubble rows
+                siblings = list(container.children)
+                try:
+                    row_idx = siblings.index(parent_row)
+                    for sibling in siblings[row_idx + 1:]:
+                        if sibling.query(".image_bubble_wrap"):
+                            sibling.remove()
+                        else:
+                            break
+                except ValueError:
+                    pass
+
+                # Replace the existing bubble with a fresh streaming Static
+                ai_msg = Static(
+                    f"{header}\n",
+                    markup=True,
+                    classes="message ai_bubble",
+                )
+                parent_row.mount(ai_msg, before=last_bubble)
+                last_bubble.remove()
             except Exception:
                 ai_msg = Static(
                     f"{header}\n",
@@ -1369,12 +1710,12 @@ class TaiMenu(App):
             container.mount(row)
 
         container.scroll_end(animate=False)
-        return container, ai_msg, header
+        return container, ai_msg, header, assistant_message_number
 
     def stream_response(self, message: str, is_regeneration: bool = False, message_number: int | None = None) -> None:
         """Prepare UI targets on the main thread, then stream in a worker thread."""
-        container, ai_msg, header = self._prepare_stream_widgets(is_regeneration, message_number=message_number)
-        self.response_worker(message, is_regeneration, container, ai_msg, header)
+        container, ai_msg, header, assistant_message_number = self._prepare_stream_widgets(is_regeneration, message_number=message_number)
+        self.response_worker(message, is_regeneration, container, ai_msg, header, assistant_message_number)
 
     @work(exclusive=True, thread=True)
     def response_worker(
@@ -1384,6 +1725,7 @@ class TaiMenu(App):
         container: ScrollableContainer,
         ai_msg: Static,
         header: str,
+        assistant_message_number: int | None = None,
     ) -> None:
         """Worker to handle the LLM streaming and TTS queuing."""
         full_response = ""
@@ -1436,6 +1778,45 @@ class TaiMenu(App):
         with open(profile_path, "r", encoding="utf-8") as f:
             self.character_profile = json.load(f)
         self.app.call_from_thread(self.update_sidebar)
+
+        # Swap the streaming Static widget to a fully formatted ChatBubble widget
+        def swap_to_bubble():
+            try:
+                full_history = memory_manager.load_history(self.history_profile_name)
+                msg_data = None
+                if full_history and full_history[-1].get("role") == "assistant":
+                    msg_data = full_history[-1]
+
+                bubble = ChatBubble(
+                    header=header,
+                    raw_content=full_response,
+                    role="assistant",
+                    message_number=assistant_message_number,
+                    msg_data=msg_data
+                )
+
+                parent = ai_msg.parent
+                if parent:
+                    parent.mount(bubble, before=ai_msg)
+                    ai_msg.remove()
+
+                # Mount separate ImageBubble rows for images in the response
+                image_chunks = [c for c in parse_message_content(full_response) if c["type"] == "image"]
+                image_protocol = get_setting("image_protocol", "auto")
+                if image_protocol != "none":
+                    for img_chunk in image_chunks:
+                        img_bubble = ImageBubble(
+                            image_url=img_chunk["url"],
+                            alt=img_chunk["alt"],
+                            role="assistant",
+                        )
+                        img_row = Horizontal(img_bubble, classes="message_row ai_row")
+                        container.mount(img_row)
+
+                container.scroll_end(animate=False)
+            except Exception:
+                pass
+        self.app.call_from_thread(swap_to_bubble)
 
         # Trigger rolling summarization check
         self.check_for_rolling_summary()

@@ -1,9 +1,29 @@
 import unittest
 
-from engines.formatting import format_roleplay_text, format_summary_text, get_tts_split_points, TextFormatter
+from engines.formatting import format_roleplay_text, format_summary_text, get_tts_split_points, TextFormatter, parse_message_content
 
 
 class TestFormatting(unittest.TestCase):
+    def test_parse_message_content(self):
+        # Test markdown image, raw web url, local path, and regular text
+        text = "Hello! Here is a markdown image: ![Avatar](profiles/avatar.png) and a web image: https://example.com/test.jpg?size=large. Also check this local path: C:\\Users\\white\\image.png. Have fun!"
+        chunks = parse_message_content(text)
+        
+        expected = [
+            {"type": "text", "content": "Hello! Here is a markdown image: "},
+            {"type": "image", "url": "profiles/avatar.png", "alt": "Avatar"},
+            {"type": "text", "content": " and a web image: "},
+            {"type": "image", "url": "https://example.com/test.jpg?size=large", "alt": ""},
+            {"type": "text", "content": ". Also check this local path: "},
+            {"type": "image", "url": "C:\\Users\\white\\image.png", "alt": ""},
+            {"type": "text", "content": ". Have fun!"}
+        ]
+        self.assertEqual(chunks, expected)
+
+        # Test empty input
+        self.assertEqual(parse_message_content(""), [])
+        self.assertEqual(parse_message_content(None), [])
+
     def test_format_summary_text(self):
         summary = "## Header\n**Bold**\n* item"
         result = format_summary_text(summary)
