@@ -1,6 +1,6 @@
 # 🤖 t.ai - Terminal AI Desktop Companion
 
-**Current Status: [Stable v1.1.0](https://github.com/SlightlyOffset/t.ai/releases/tag/v1.1.0)**
+**Current Status: [Stable v1.2.0](https://github.com/SlightlyOffset/t.ai/releases/tag/v1.2.0)**
 
 A lightweight, highly immersive, profile-based AI companion that lives in your terminal. Built for roleplayers and AI enthusiasts who want a character that feels alive, remembers the past, and has a distinct personality.
 
@@ -10,11 +10,12 @@ A lightweight, highly immersive, profile-based AI companion that lives in your t
 
 ### 🖥️ Modern TUI (Terminal User Interface)
 
+* **Split-Pane Cards Layout**: A premium split horizontal dashboard displaying selectable character/user profiles on the left and a detailed scrollable info card (with background optimized avatars, biography, statistics, and likes/dislikes) on the right.
 * **Minimalist Bubble Layout**: A clean, distraction-free chat interface with right-aligned user messages and left-aligned companion responses.
 * **Sixel/Kitty Image Rendering**: High-fidelity character portraits integrated directly into the terminal for deeper immersion.
 * **Real-time Streaming**: Watch your companion "think" and type in real-time within immersive side-bordered bubbles.
 * **Immersive Styling**: Automatic italicization and dimming of RP narration (`*actions*`) to separate dialogue from description.
-* **Persistent Sidebars**: Real-time tracking of relationship scores, status labels, and active profiles (Toggle with `Ctrl+B`).
+* **Persistent Sidebars & Header Optimizations**: Real-time tracking of relationship scores, status labels, and active profiles (Toggle with `Ctrl+B`). Optimized rendering loops (clockless headers) to eliminate lagging and flickering.
 
 ### 🎙️ Advanced Audio & Voice Cloning
 
@@ -30,10 +31,11 @@ A lightweight, highly immersive, profile-based AI companion that lives in your t
 
 ### 🎭 Deep Character Immersion & Memory
 
+* **Starter Message Pagination & AI Fallbacks**: Shuffles and exposes multiple companion greetings as swipe alternatives (`Alt+Right`/`Alt+Left`). Automatically generates brand-new scenarios in-character using previous attempts as examples once predefined options run out.
 * **Rolling Summarization & Memory Core**: Automatically condenses long histories (>15 messages) into a "Memory Core" injected into every interaction to preserve long-term narrative recall.
 * **Dynamic Lorebook (World Info)**: Efficiently injects relevant world or character facts into the LLM context based on keywords detected in the conversation.
 * **Character-Scoped Session Management**: Organizes history into character-scoped subfolders (`history/<character>/<session>_history.json`). Features a comprehensive session manager (TUI via `Ctrl+T` or CLI via `//session`) to load, create, branch (optionally from a specific message index), rename, and delete sessions.
-* **User Profile-Session Binding**: Sessions automatically bind to the user profile that was active during the conversation, seamlessly switching profiles when reloading past sessions.
+* **User Profile-Session Binding & Separation**: Sessions automatically bind to the user profile active during the conversation, seamlessly switching profiles when reloading. Automatically splits off and separates sessions on active user profile mismatch.
 * **Legacy Auto-Migration**: Automatically and transparently migrates legacy flat history and backup files into the character-scoped directory structure on launch.
 
 ### 🎭 Creating & Importing Characters
