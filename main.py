@@ -21,7 +21,6 @@ def ensure_directories():
         "user_profiles",
         "history",
         "img",
-        "cache",
         "voices",
         "template",
         "response_rule",
