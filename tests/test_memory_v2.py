@@ -309,8 +309,9 @@ class TestHistoryManager(unittest.TestCase):
         
         # The filename should point to default
         self.assertTrue(filename.endswith("default_history.json"))
-        # update_setting should be called to update "current_history_session" to "default"
-        mock_update_setting.assert_called_with("current_history_session", "default")
+        # update_setting should be called to update "current_history_session" to "default" and "session_FallbackProfile" to "default"
+        mock_update_setting.assert_any_call("current_history_session", "default")
+        mock_update_setting.assert_any_call("session_FallbackProfile", "default")
 
 if __name__ == "__main__":
     unittest.main()

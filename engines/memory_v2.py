@@ -33,8 +33,8 @@ class HistoryManager:
     def _get_filename(self, profile_name: str, session_name: str = None) -> str:
         """Generates a safe filename for the history JSON file in the character's subfolder."""
         if session_name is None:
-            from engines.config import get_setting
-            session_name = get_setting("current_history_session", "default")
+            from engines.config import get_active_session
+            session_name = get_active_session(profile_name)
             
             # Fall back to default session if target session does not exist
             safe_char = sanitize_profile_name(profile_name) or "session"
@@ -43,8 +43,8 @@ class HistoryManager:
             temp_path = os.path.join(char_dir, f"{safe_session}_history.json")
             if safe_session != "default" and not os.path.exists(temp_path):
                 session_name = "default"
-                from engines.config import update_setting
-                update_setting("current_history_session", "default")
+                from engines.config import set_active_session
+                set_active_session(profile_name, "default")
 
         safe_char = sanitize_profile_name(profile_name) or "session"
         safe_session = sanitize_profile_name(session_name) or "default"

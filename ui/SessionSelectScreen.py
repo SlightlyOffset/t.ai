@@ -4,7 +4,7 @@ from textual.containers import Container, Horizontal
 from textual.screen import ModalScreen
 from textual.widgets import Label, Input, Button, OptionList
 from textual.widgets.option_list import Option
-from engines.config import get_setting, update_setting
+from engines.config import get_setting, update_setting, get_active_session, set_active_session
 from engines.memory_v2 import memory_manager
 from engines.utilities import sanitize_profile_name
 
@@ -139,7 +139,7 @@ class SessionSelectScreen(ModalScreen):
             # Create default session file on the fly
             memory_manager.save_history(self.character_name, [], session_name="default")
 
-        active_session = get_setting("current_history_session", "default")
+        active_session = get_active_session(self.character_name)
         
         selected_index = 0
         for idx, f in enumerate(sorted(files)):
@@ -200,7 +200,7 @@ class SessionSelectScreen(ModalScreen):
                 self.show_error(f"Session '{session_name}' file not found.")
                 return
 
-        update_setting("current_history_session", session_name)
+        set_active_session(self.character_name, session_name)
         self.dismiss({"action": "load", "session_name": session_name})
 
     def action_new_session(self) -> None:
@@ -218,7 +218,7 @@ class SessionSelectScreen(ModalScreen):
 
         # Write empty history
         memory_manager.save_history(self.character_name, [], session_name=name)
-        update_setting("current_history_session", name)
+        set_active_session(self.character_name, name)
         self.dismiss({"action": "new", "session_name": name})
 
     def action_branch_session(self) -> None:
@@ -284,7 +284,7 @@ class SessionSelectScreen(ModalScreen):
             session_name=new_name
         )
 
-        update_setting("current_history_session", new_name)
+        set_active_session(self.character_name, new_name)
         self.dismiss({"action": "branch", "session_name": new_name})
 
     def action_rename_session(self) -> None:
@@ -323,9 +323,9 @@ class SessionSelectScreen(ModalScreen):
             if os.path.exists(old_bak):
                 os.rename(old_bak, new_file + ".bak")
 
-            active_session = get_setting("current_history_session", "default")
+            active_session = get_active_session(self.character_name)
             if old_name == active_session:
-                update_setting("current_history_session", new_name)
+                set_active_session(self.character_name, new_name)
                 self.dismiss({"action": "rename", "session_name": new_name})
             else:
                 self.refresh_sessions()
@@ -342,7 +342,7 @@ class SessionSelectScreen(ModalScreen):
         target_option = option_list.get_option_at_index(option_list.highlighted)
         name = target_option.id
 
-        active_session = get_setting("current_history_session", "default")
+        active_session = get_active_session(self.character_name)
         if name == active_session:
             self.show_error("Cannot delete the active session. Switch sessions first.")
             return

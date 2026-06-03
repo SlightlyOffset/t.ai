@@ -690,7 +690,8 @@ class TaiMenu(App):
         Returns the (possibly new) session name.
         """
         if session_name is None:
-            session_name = get_setting("current_history_session", "default")
+            from engines.config import get_active_session
+            session_name = get_active_session(self.history_profile_name)
             
         full_data = memory_manager.get_full_data(self.history_profile_name, session_name)
         history = full_data.get("history", [])
@@ -699,7 +700,7 @@ class TaiMenu(App):
         
         current_user = os.path.basename(self.user_path) if self.user_path else None
         
-        if len(history) > 0 and history_user != current_user:
+        if len(history) > 0 and history_user is not None and history_user != current_user:
             # User profile doesn't match! Start a new conversation/session.
             user_base = os.path.splitext(current_user)[0] if current_user else "user"
             from engines.utilities import sanitize_profile_name
@@ -710,7 +711,8 @@ class TaiMenu(App):
             timestamp = time.strftime("%Y%m%d_%H%M%S")
             new_session_name = f"{safe_user}_{timestamp}"
             
-            update_setting("current_history_session", new_session_name)
+            from engines.config import set_active_session
+            set_active_session(self.history_profile_name, new_session_name)
             # Save empty history for new session
             memory_manager.save_history(self.history_profile_name, [], session_name=new_session_name)
             
@@ -1403,7 +1405,8 @@ class TaiMenu(App):
             self.user_name = "User"
 
         # Verify and switch session if user profile mismatch
-        active_session = get_setting("current_history_session", "default")
+        from engines.config import get_active_session
+        active_session = get_active_session(self.history_profile_name)
         self.verify_session_user_profile(active_session)
 
         self.update_sidebar()

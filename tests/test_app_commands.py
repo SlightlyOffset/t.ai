@@ -206,8 +206,8 @@ class TestAppCommands(unittest.TestCase):
         mock_update.assert_called_with("interaction_mode", "casual")
 
 
-    @patch('engines.app_commands.update_setting')
-    def test_session_new_cmd(self, mock_update):
+    @patch('engines.app_commands.set_active_session')
+    def test_session_new_cmd(self, mock_set_active):
         def get_setting_mock(key, default=None):
             if key == "current_character_profile":
                 return "Meryl.json"
@@ -220,10 +220,10 @@ class TestAppCommands(unittest.TestCase):
         with self.assertRaises(SessionNewRequested) as cm:
             app_commands("//session new adventure", suppress_output=True)
         self.assertEqual(cm.exception.session_name, "adventure")
-        mock_update.assert_called_with("current_history_session", "adventure")
+        mock_set_active.assert_called_with("Meryl", "adventure")
 
-    @patch('engines.app_commands.update_setting')
-    def test_session_load_cmd(self, mock_update):
+    @patch('engines.app_commands.set_active_session')
+    def test_session_load_cmd(self, mock_set_active):
         def get_setting_mock(key, default=None):
             if key == "current_character_profile":
                 return "Meryl.json"
@@ -243,10 +243,10 @@ class TestAppCommands(unittest.TestCase):
         with self.assertRaises(SessionChangedRequested) as cm:
             app_commands("//session load adventure", suppress_output=True)
         self.assertEqual(cm.exception.session_name, "adventure")
-        mock_update.assert_called_with("current_history_session", "adventure")
+        mock_set_active.assert_called_with("Meryl", "adventure")
 
-    @patch('engines.app_commands.update_setting')
-    def test_session_new_cmd_no_suppress(self, mock_update):
+    @patch('engines.app_commands.set_active_session')
+    def test_session_new_cmd_no_suppress(self, mock_set_active):
         def get_setting_mock(key, default=None):
             if key == "current_character_profile":
                 return "Meryl.json"
@@ -258,10 +258,10 @@ class TestAppCommands(unittest.TestCase):
         # Should not raise exception and return True in non-suppressed mode (CLI)
         result = app_commands("//session new adventure2", suppress_output=False)
         self.assertTrue(result)
-        mock_update.assert_called_with("current_history_session", "adventure2")
+        mock_set_active.assert_called_with("Meryl", "adventure2")
 
-    @patch('engines.app_commands.update_setting')
-    def test_session_load_cmd_no_suppress(self, mock_update):
+    @patch('engines.app_commands.set_active_session')
+    def test_session_load_cmd_no_suppress(self, mock_set_active):
         def get_setting_mock(key, default=None):
             if key == "current_character_profile":
                 return "Meryl.json"
@@ -279,7 +279,7 @@ class TestAppCommands(unittest.TestCase):
         # Should not raise exception and return True in non-suppressed mode (CLI)
         result = app_commands("//session load adventure3", suppress_output=False)
         self.assertTrue(result)
-        mock_update.assert_called_with("current_history_session", "adventure3")
+        mock_set_active.assert_called_with("Meryl", "adventure3")
 
 if __name__ == "__main__":
     unittest.main()
