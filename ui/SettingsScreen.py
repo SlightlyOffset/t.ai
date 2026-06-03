@@ -127,7 +127,7 @@ class SettingsScreen(ModalScreen):
         overhaul_candidate_count = str(settings.get("overhaul_candidate_count", 2))
         overhaul_style_profile = settings.get("overhaul_style_profile", "balanced")
 
-        yield Header(show_clock=True)
+        yield Header(show_clock=False)
         with Container(id="settings_container"):
             yield Label("t.ai Global Settings Configuration", id="settings_title")
             yield Label("", id="settings_error")

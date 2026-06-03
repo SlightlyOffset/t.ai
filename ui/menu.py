@@ -809,7 +809,7 @@ class TaiMenu(App):
             self.user_path,
         )
 
-        yield Header(show_clock=True)
+        yield Header(show_clock=False)
         with Horizontal(id="app_body"):
             with Vertical(id="chat_container"):
                 with ScrollableContainer(id="chat_list"):

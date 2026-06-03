@@ -101,7 +101,7 @@ class ProfileSelect(Screen):
         self.current_preview_file = None
 
     def compose(self) -> ComposeResult:
-        yield Header(show_clock=True)
+        yield Header(show_clock=False)
         with Container(id="split_container"):
             with Vertical(id="selection_panel"):
                 yield Label("Welcome to [bold magenta]t.ai[/bold magenta]", id="welcome_label")
