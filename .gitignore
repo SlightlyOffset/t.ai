@@ -107,3 +107,7 @@ notes/
 # Cache directories
 .cache/
 
+# Response rules
+response_rule/
+
+
