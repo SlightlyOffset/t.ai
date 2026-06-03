@@ -184,12 +184,24 @@ class ProfileSelect(Screen):
             self.clear_preview()
 
     def on_option_list_option_highlighted(self, event: OptionList.OptionHighlighted) -> None:
-        """Handle highlight changes in the OptionList to update the preview pane."""
+        """Handle highlight changes in the OptionList to update the preview pane with debouncing."""
+        if hasattr(self, "_debounce_timer") and self._debounce_timer is not None:
+            try:
+                self._debounce_timer.stop()
+            except Exception:
+                pass
+            self._debounce_timer = None
+
         if event.option is None or event.option.id is None:
             self.clear_preview()
             return
         
-        self.update_preview(event.option.id)
+        # Debounce the update: wait 150ms before updating the preview
+        profile_file = event.option.id
+        if hasattr(self, "set_timer"):
+            self._debounce_timer = self.set_timer(0.15, lambda: self.update_preview(profile_file))
+        else:
+            self.update_preview(profile_file)
 
     def on_option_list_option_selected(self, event: OptionList.OptionSelected) -> None:
         """Handle selection of a profile."""
@@ -206,6 +218,9 @@ class ProfileSelect(Screen):
 
     def update_preview(self, profile_file: str) -> None:
         """Load profile file and update details / trigger background avatar loading."""
+        if self.current_preview_file == profile_file:
+            return  # Already showing this preview
+            
         self.current_preview_file = profile_file
         dir_path = self.PROFILES_DIR if self.choosing_character else self.USER_PROFILES_DIR
         full_path = os.path.join(dir_path, profile_file)
