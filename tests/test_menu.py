@@ -509,5 +509,53 @@ class TestMenu(unittest.TestCase):
         mock_thread.join.assert_called_once_with()
         self.assertTrue(app.exit_called)
 
+    @patch('ui.menu.memory_manager')
+    def test_print_starter_message_with_multiple(self, mock_memory_manager):
+        """Test that print_starter_message shuffles multiple messages and populates alternatives."""
+        class DummyMenu(TaiMenu):
+            def __init__(self):
+                self.character_profile = {"starter_messages": ["msg1", "msg2", "msg3"], "relationship_score": 5}
+                self.history_profile_name = "test_profile"
+                self.user_profile = {"name": "TestUser"}
+                self.user_path = "user_profiles/test.json"
+                self.char_path = "profiles/test.json"
+                self.user_name = "TestUser"
+                self.ch_name = "TestChar"
+                self.char_name_lbl_color = "red"
+                self.user_name_lbl_color = "blue"
+
+            def format_rp(self, text, role="user"):
+                return text
+
+        app = DummyMenu()
+        app.add_message = MagicMock()
+
+        app.print_starter_message()
+
+        # Check that add_message was called once
+        self.assertEqual(app.add_message.call_count, 1)
+        args, kwargs = app.add_message.call_args
+        content = args[0]
+        self.assertIn(content, ["msg1", "msg2", "msg3"])
+        self.assertEqual(kwargs.get("role"), "assistant")
+        self.assertEqual(kwargs.get("message_number"), 1)
+        
+        msg_data = kwargs.get("msg_data")
+        self.assertIsNotNone(msg_data)
+        self.assertEqual(len(msg_data.get("alternatives", [])), 3)
+        self.assertEqual(msg_data.get("selected_index"), 0)
+        self.assertEqual(msg_data["alternatives"][0], content)
+
+        # Check memory_manager.save_history
+        self.assertTrue(mock_memory_manager.save_history.called)
+        save_args = mock_memory_manager.save_history.call_args[0]
+        self.assertEqual(save_args[0], "test_profile")
+        saved_history = save_args[1]
+        self.assertEqual(len(saved_history), 1)
+        self.assertEqual(saved_history[0]["role"], "assistant")
+        self.assertEqual(saved_history[0]["content"], content)
+        self.assertEqual(saved_history[0]["alternatives"], msg_data["alternatives"])
+        self.assertEqual(saved_history[0]["selected_index"], 0)
+
 if __name__ == "__main__":
     unittest.main()
