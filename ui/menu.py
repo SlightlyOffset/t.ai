@@ -565,6 +565,7 @@ class TaiMenu(App):
             image_chunks = [c for c in parse_message_content(content) if c["type"] == "image"]
             image_protocol = get_setting("image_protocol", "auto")
             if image_protocol != "none":
+                last_mounted = msg_row
                 for img_chunk in image_chunks:
                     img_bubble = ImageBubble(
                         image_url=img_chunk["url"],
@@ -572,7 +573,8 @@ class TaiMenu(App):
                         role="assistant",
                     )
                     img_row = Horizontal(img_bubble, classes="message_row ai_row")
-                    container.mount(img_row)
+                    container.mount(img_row, after=last_mounted)
+                    last_mounted = img_row
 
             container.scroll_end(animate=False)
         except Exception:
@@ -1855,6 +1857,7 @@ class TaiMenu(App):
                 image_chunks = [c for c in parse_message_content(full_response) if c["type"] == "image"]
                 image_protocol = get_setting("image_protocol", "auto")
                 if image_protocol != "none":
+                    last_mounted = parent
                     for img_chunk in image_chunks:
                         img_bubble = ImageBubble(
                             image_url=img_chunk["url"],
@@ -1862,7 +1865,11 @@ class TaiMenu(App):
                             role="assistant",
                         )
                         img_row = Horizontal(img_bubble, classes="message_row ai_row")
-                        container.mount(img_row)
+                        if last_mounted:
+                            container.mount(img_row, after=last_mounted)
+                            last_mounted = img_row
+                        else:
+                            container.mount(img_row)
 
                 container.scroll_end(animate=False)
             except Exception:
