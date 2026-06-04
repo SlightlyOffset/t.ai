@@ -1042,7 +1042,13 @@ class TaiMenu(App):
         if event.select.id == "model_select":
             if val is not None:
                 self.character_profile["llm_model"] = val
-                save_json_atomic(self.char_path, self.character_profile)
+                try:
+                    with open(self.char_path, "r", encoding="utf-8") as f:
+                        disk_profile = json.load(f)
+                    disk_profile["llm_model"] = val
+                    save_json_atomic(self.char_path, disk_profile)
+                except Exception:
+                    save_json_atomic(self.char_path, self.character_profile)
                 self.add_message(f"LLM model switched to [bold]{val}[/bold]", role="system")
             else:
                 target = self.character_profile.get("llm_model") if self.character_profile else get_setting("default_llm_model", "llama3")
@@ -1067,7 +1073,13 @@ class TaiMenu(App):
         elif event.select.id == "character_voice_select":
             if val is not None:
                 self.character_profile["preferred_edge_voice"] = val
-                save_json_atomic(self.char_path, self.character_profile)
+                try:
+                    with open(self.char_path, "r", encoding="utf-8") as f:
+                        disk_profile = json.load(f)
+                    disk_profile["preferred_edge_voice"] = val
+                    save_json_atomic(self.char_path, disk_profile)
+                except Exception:
+                    save_json_atomic(self.char_path, self.character_profile)
                 self.add_message(f"Companion voice set to [bold]{val}[/bold]", role="system")
             else:
                 target = self.character_profile.get("preferred_edge_voice") if self.character_profile else get_setting("narration_tts_voice", "en-US-AndrewNeural")
@@ -1104,7 +1116,13 @@ class TaiMenu(App):
         elif event.select.id == "tts_engine_select":
             if val is not None:
                 self.character_profile["tts_engine"] = val
-                save_json_atomic(self.char_path, self.character_profile)
+                try:
+                    with open(self.char_path, "r", encoding="utf-8") as f:
+                        disk_profile = json.load(f)
+                    disk_profile["tts_engine"] = val
+                    save_json_atomic(self.char_path, disk_profile)
+                except Exception:
+                    save_json_atomic(self.char_path, self.character_profile)
                 self.add_message(f"TTS engine switched to [bold]{val}[/bold]", role="system")
             else:
                 target = self.character_profile.get("tts_engine") if self.character_profile else get_setting("default_tts_engine", "edge-tts")
@@ -1466,6 +1484,15 @@ class TaiMenu(App):
 
     def update_sidebar(self):
         """Update the sidebar content including avatars and relationship stats."""
+        if self.character_profile:
+            if self.history_profile_name and memory_manager.has_history(self.history_profile_name):
+                full_data = memory_manager.get_full_data(self.history_profile_name)
+                rel_score = full_data.get("metadata", {}).get("relationship_score", self.character_profile.get("relationship_score", 0))
+            else:
+                rel_score = self.character_profile.get("relationship_score", 0)
+            
+            self.character_profile["relationship_score"] = rel_score
+
         state = build_sidebar_state(
             character_profile=self.character_profile or {},
             user_profile=self.user_profile,
@@ -1892,7 +1919,11 @@ class TaiMenu(App):
         profile_path = os.path.join("profiles", get_setting("current_character_profile"))
         with open(profile_path, "r", encoding="utf-8") as f:
             self.character_profile = json.load(f)
+        if self.history_profile_name and memory_manager.has_history(self.history_profile_name):
+            full_data = memory_manager.get_full_data(self.history_profile_name)
+            self.character_profile["relationship_score"] = full_data.get("metadata", {}).get("relationship_score", self.character_profile.get("relationship_score", 0))
         self.app.call_from_thread(self.update_sidebar)
+        self.app.call_from_thread(self.app.set_timer, 2.0, self.update_sidebar)
 
         # Swap the streaming Static widget to a fully formatted ChatBubble widget
         def swap_to_bubble():

@@ -118,25 +118,10 @@ def _extract_remote_message_content(response: requests.Response) -> str:
 
 def update_profile_score(profile_path: str, score_change: int):
     """
-    Persists a change to the companion's relationship score.
-
-    Args:
-        profile_path (str): Path to the .json profile.
-        score_change (int): Amount to add or subtract (-100 to 100 cap).
+    Deprecated: Relationship score is now stored in session history metadata.
+    This function is kept as a no-op for backward compatibility.
     """
-    try:
-        with open(profile_path, "r", encoding="UTF-8") as f:
-            data = json.load(f)
-
-        current_score = data.get("relationship_score", 0)
-        new_score = max(-100, min(100, current_score + score_change))
-        data["relationship_score"] = new_score
-
-        with open(profile_path, "w", encoding="UTF-8") as f:
-            json.dump(data, f, indent=4)
-
-    except Exception as e:
-        print(f"Error updating profile score: {e}")
+    pass
 
 def get_sentiment_score(user_input: str, model: str, remote_url: str = None, profile: dict = None) -> int:
     """
@@ -582,9 +567,8 @@ def _perform_post_processing(
         else:
             score_change = get_sentiment_score(user_input, model, remote_url, profile)
 
-        # Persist relationship update
-        if profile_path and score_change != 0:
-            update_profile_score(profile_path, score_change)
+        # Calculate new relationship score for the session, capped between -100 and 100
+        new_rel_score = max(-100, min(100, rel_score + score_change))
 
         # Save to persistent memory
         full_history = memory_manager.load_history(history_profile_name)
@@ -604,7 +588,7 @@ def _perform_post_processing(
         memory_manager.save_history(
             history_profile_name,
             full_history,
-            relationship_score=rel_score,
+            relationship_score=new_rel_score,
             current_scene=new_scene,
             memory_core=memory_core,
             last_summarized_index=last_summarized_index
@@ -718,7 +702,13 @@ def get_respond_stream(user_input: str, profile: dict, profile_path: str = None,
 
 
     # Determine relationship score and interaction mode
-    rel_score = profile.get("relationship_score", 0)
+    if history_profile_name and memory_manager.has_history(history_profile_name):
+        rel_score = full_data.get("metadata", {}).get("relationship_score", profile.get("relationship_score", 0))
+    else:
+        rel_score = profile.get("relationship_score", 0)
+    
+    # Ensure profile dict has the session-scoped score for any downstream helpers
+    profile = {**profile, "relationship_score": rel_score}
     interaction_mode = get_setting("interaction_mode", "rp")
     pipeline_flags = get_pipeline_flags()
     canonical_state = None

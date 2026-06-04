@@ -272,15 +272,19 @@ def app_commands(ops: str, suppress_output: bool = False):
                     profile_path = pick_profile()
             
             if profile_path and os.path.exists(profile_path):
-                from engines.utilities import save_json_atomic
                 try:
-                    with open(profile_path, "r", encoding="UTF-8") as f:
-                        profile_data = json.load(f)
-                    profile_data["relationship_score"] = 0
-                    if save_json_atomic(profile_path, profile_data):
-                        _log("[SYSTEM] Relationship score reset to 0.", Fore.GREEN)
-                    else:
-                        _log("[SYSTEM] Failed to save profile.", Fore.RED)
+                    profile_name = os.path.basename(profile_path).replace(".json", "")
+                    full_data = memory_manager.get_full_data(profile_name)
+                    
+                    memory_manager.save_history(
+                        profile_name,
+                        full_data.get("history", []),
+                        relationship_score=0,
+                        current_scene=full_data.get("metadata", {}).get("current_scene", "Unknown Location"),
+                        memory_core=full_data.get("metadata", {}).get("memory_core", ""),
+                        last_summarized_index=full_data.get("metadata", {}).get("last_summarized_index", 0)
+                    )
+                    _log("[SYSTEM] Relationship score reset to 0.", Fore.GREEN)
                 except Exception as e:
                     _log(f"[ERROR] Failed to reset relationship score: {e}", Fore.RED)
             else:
