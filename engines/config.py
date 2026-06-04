@@ -167,11 +167,10 @@ def set_active_session(character_name: str, session_name: str) -> bool:
         bool: True if successful, False otherwise.
     """
     from engines.utilities import sanitize_profile_name
-    update_setting("current_history_session", session_name)
-    if not character_name:
-        return True
-        
-    safe_char = sanitize_profile_name(character_name) or "session"
-    return update_setting(f"session_{safe_char}", session_name)
+    updates = {"current_history_session": session_name}
+    if character_name:
+        safe_char = sanitize_profile_name(character_name) or "session"
+        updates[f"session_{safe_char}"] = session_name
+    return update_settings(updates)
 
 
