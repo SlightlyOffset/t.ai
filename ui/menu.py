@@ -173,10 +173,17 @@ class ChatBubble(Vertical):
 
         chunks = parse_message_content(self.raw_content)
 
-        for chunk in chunks:
+        # Find the index of the last text chunk to place the indicator there
+        last_text_idx = -1
+        for i in range(len(chunks) - 1, -1, -1):
+            if chunks[i]["type"] == "text":
+                last_text_idx = i
+                break
+
+        for i, chunk in enumerate(chunks):
             if chunk["type"] == "text":
                 formatted_text = self.app.format_rp(chunk["content"], role=self.role)
-                if indicator:
+                if indicator and i == last_text_idx:
                     formatted_text += indicator
                     indicator = ""
                 yield Static(formatted_text, markup=True, classes="bubble_text")
