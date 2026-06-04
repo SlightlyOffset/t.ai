@@ -109,21 +109,56 @@ class HistoryManager:
         data = self.get_full_data(profile_name, session_name)
         return len(data.get("history", [])) if data else 0
 
-    def save_history(self, profile_name: str, history: list, relationship_score: int = 0,
-                     current_scene: str = "Unknown Location", memory_core: str = "",
-                     last_summarized_index: int = 0, session_name: str = None) -> None:
+    def save_history(self, profile_name: str, history: list, relationship_score: int = None,
+                     current_scene: str = None, memory_core: str = None,
+                     last_summarized_index: int = None, session_name: str = None) -> None:
         """
         Saves history to a JSON file with metadata (thread-safe).
 
         Args:
             profile_name (str): The name of the character.
             history (list): List of message dictionaries.
-            relationship_score (int): Current relationship score.
-            current_scene (str): The physical location or state of the RP.
-            memory_core (str): The consolidated rolling summary.
-            last_summarized_index (int): The index of the last message included in the summary.
+            relationship_score (int, optional): Current relationship score.
+            current_scene (str, optional): The physical location or state of the RP.
+            memory_core (str, optional): The consolidated rolling summary.
+            last_summarized_index (int, optional): The index of the last message included in the summary.
             session_name (str, optional): The name of the session.
         """
+        filename = self._get_filename(profile_name, session_name)
+        
+        # Load existing data if file exists to preserve metadata fields
+        existing_metadata = {}
+        if os.path.exists(filename):
+            try:
+                with open(filename, "r", encoding="utf-8") as f:
+                    existing_data = json.load(f)
+                existing_metadata = existing_data.get("metadata", {})
+            except Exception:
+                pass
+
+        if relationship_score is None:
+            relationship_score = existing_metadata.get("relationship_score")
+            if relationship_score is None:
+                try:
+                    profile_path = os.path.join("profiles", f"{profile_name}.json")
+                    if os.path.exists(profile_path):
+                        with open(profile_path, "r", encoding="utf-8") as f:
+                            profile_data = json.load(f)
+                        relationship_score = profile_data.get("relationship_score", 0)
+                    else:
+                        relationship_score = 0
+                except Exception:
+                    relationship_score = 0
+
+        if current_scene is None:
+            current_scene = existing_metadata.get("current_scene", "Unknown Location")
+
+        if memory_core is None:
+            memory_core = existing_metadata.get("memory_core", "")
+
+        if last_summarized_index is None:
+            last_summarized_index = existing_metadata.get("last_summarized_index", 0)
+
         lock = self._get_profile_lock(profile_name)
         with lock:
             filename = self._get_filename(profile_name, session_name)

@@ -745,10 +745,10 @@ def app_commands(ops: str, suppress_output: bool = False):
             memory_manager.save_history(
                 character_name,
                 history,
-                relationship_score=metadata.get("relationship_score", 0),
-                current_scene=metadata.get("current_scene", "Unknown Location"),
-                memory_core=metadata.get("memory_core", ""),
-                last_summarized_index=metadata.get("last_summarized_index", 0),
+                relationship_score=metadata.get("relationship_score"),
+                current_scene=metadata.get("current_scene"),
+                memory_core=metadata.get("memory_core"),
+                last_summarized_index=metadata.get("last_summarized_index"),
                 session_name=name
             )
             
