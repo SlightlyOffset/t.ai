@@ -56,6 +56,14 @@ def _get_repetition_penalty() -> float:
     return penalty if penalty > 0 else 1.15
 
 
+def _get_max_tokens() -> int:
+    val = get_setting("max_tokens", 300)
+    try:
+        return max(1, int(val))
+    except (TypeError, ValueError):
+        return 300
+
+
 def _normalize_for_duplicate_check(text: str) -> str:
     normalized = re.sub(r"\s+", " ", (text or "").strip().lower())
     return normalized
@@ -443,7 +451,7 @@ def _call_llm_once(messages: list, model: str, remote_url: str = None, temperatu
 
 def _generate_candidate_replies(messages: list, model: str, remote_url: str | None = None, candidate_count: int = 1, user_name: str = "User", char_name: str = "Assistant", temp_offset: float = 0.0, repetition_penalty: float = None) -> list[str]:
     candidate_count = max(1, candidate_count)
-    max_tokens = get_setting("max_tokens", 300)
+    max_tokens = _get_max_tokens()
 
     # Optimization: Batch remote call for Colab/Kaggle
     if remote_url:
@@ -662,7 +670,7 @@ def get_respond_stream(user_input: str, profile: dict, profile_path: str = None,
     model = profile.get("llm_model") or get_setting("default_llm_model", "llama3")
     remote_url = get_setting("remote_llm_url")
     repetition_penalty = _get_repetition_penalty()
-    max_tokens = get_setting("max_tokens", 300)
+    max_tokens = _get_max_tokens()
 
     if not history_profile_name:
         if profile_path:
