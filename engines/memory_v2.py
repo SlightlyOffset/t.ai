@@ -4,17 +4,18 @@ Handles per-profile history storage, metadata (timestamps, mood), and history tr
 """
 
 import json
-import re
 import os
 import threading
 from datetime import datetime
 from engines.utilities import sanitize_profile_name, save_json_atomic
+
 
 class HistoryManager:
     """
     Manages loading, saving, and truncation of conversation history.
     Thread-safe writes to prevent concurrent modification corruption.
     """
+
     REWIND_MEMORY_CORE_RESET_THRESHOLD = 15
 
     def __init__(self, history_dir: str = "history"):
@@ -34,8 +35,9 @@ class HistoryManager:
         """Generates a safe filename for the history JSON file in the character's subfolder."""
         if session_name is None:
             from engines.config import get_active_session
+
             session_name = get_active_session(profile_name)
-            
+
             # Fall back to default session if target session does not exist
             safe_char = sanitize_profile_name(profile_name) or "session"
             safe_session = sanitize_profile_name(session_name) or "default"
@@ -44,11 +46,12 @@ class HistoryManager:
             if safe_session != "default" and not os.path.exists(temp_path):
                 session_name = "default"
                 from engines.config import set_active_session
+
                 set_active_session(profile_name, "default")
 
         safe_char = sanitize_profile_name(profile_name) or "session"
         safe_session = sanitize_profile_name(session_name) or "default"
-        
+
         char_dir = os.path.join(self.history_dir, safe_char)
         new_path = os.path.join(char_dir, f"{safe_session}_history.json")
 
@@ -109,21 +112,80 @@ class HistoryManager:
         data = self.get_full_data(profile_name, session_name)
         return len(data.get("history", [])) if data else 0
 
-    def save_history(self, profile_name: str, history: list, relationship_score: int = 0,
-                     current_scene: str = "Unknown Location", memory_core: str = "",
-                     last_summarized_index: int = 0, session_name: str = None) -> None:
+    def save_history(
+        self,
+        profile_name: str,
+        history: list,
+        relationship_score: int = None,
+        current_scene: str = None,
+        memory_core: str = None,
+        last_summarized_index: int = None,
+        session_name: str = None,
+    ) -> None:
         """
         Saves history to a JSON file with metadata (thread-safe).
 
         Args:
             profile_name (str): The name of the character.
             history (list): List of message dictionaries.
-            relationship_score (int): Current relationship score.
-            current_scene (str): The physical location or state of the RP.
-            memory_core (str): The consolidated rolling summary.
-            last_summarized_index (int): The index of the last message included in the summary.
+            relationship_score (int, optional): Current relationship score.
+            current_scene (str, optional): The physical location or state of the RP.
+            memory_core (str, optional): The consolidated rolling summary.
+            last_summarized_index (int, optional): The index of the last message included in the summary.
             session_name (str, optional): The name of the session.
         """
+        filename = self._get_filename(profile_name, session_name)
+
+        # Load existing data if file exists to preserve metadata fields
+        existing_metadata = {}
+        if os.path.exists(filename):
+            try:
+                with open(filename, "r", encoding="utf-8") as f:
+                    existing_data = json.load(f)
+                existing_metadata = existing_data.get("metadata", {})
+            except Exception:
+                pass
+
+        if relationship_score is None:
+            relationship_score = existing_metadata.get("relationship_score")
+            if relationship_score is None:
+                try:
+                    profile_path = os.path.join("profiles", f"{profile_name}.json")
+                    if os.path.exists(profile_path):
+                        with open(profile_path, "r", encoding="utf-8") as f:
+                            profile_data = json.load(f)
+                        relationship_score = profile_data.get("relationship_score", 0)
+                    else:
+                        relationship_score = 0
+                except Exception:
+                    relationship_score = 0
+        try:
+            relationship_score = int(relationship_score)
+        except (ValueError, TypeError):
+            relationship_score = 0
+
+        if current_scene is None:
+            current_scene = existing_metadata.get("current_scene") or "Unknown Location"
+        else:
+            current_scene = str(current_scene) or "Unknown Location"
+
+        if memory_core is None:
+            memory_core = existing_metadata.get("memory_core") or ""
+        else:
+            memory_core = str(memory_core)
+
+        if last_summarized_index is None:
+            val = existing_metadata.get("last_summarized_index")
+            try:
+                last_summarized_index = int(val) if val is not None else 0
+            except (ValueError, TypeError):
+                last_summarized_index = 0
+        else:
+            try:
+                last_summarized_index = int(last_summarized_index)
+            except (ValueError, TypeError):
+                last_summarized_index = 0
+
         lock = self._get_profile_lock(profile_name)
         with lock:
             filename = self._get_filename(profile_name, session_name)
@@ -131,6 +193,7 @@ class HistoryManager:
             current_time = now.strftime("%Y-%m-%d | %H:%M:%S")
 
             from engines.config import get_setting
+
             user_profile = get_setting("current_user_profile")
 
             data_to_save = {
@@ -140,9 +203,9 @@ class HistoryManager:
                     "current_scene": current_scene,
                     "memory_core": memory_core,
                     "last_summarized_index": last_summarized_index,
-                    "user_profile": user_profile
+                    "user_profile": user_profile,
                 },
-                "history": history
+                "history": history,
             }
 
             save_json_atomic(filename, data_to_save)
@@ -164,7 +227,7 @@ class HistoryManager:
                 "narrative_state": {},
                 "last_turn_metrics": {},
             },
-            "history": []
+            "history": [],
         }
 
         bak_file = filename + ".bak"
@@ -197,7 +260,9 @@ class HistoryManager:
                 # Try to find the timestamp in the last message (legacy behavior)
                 last_time = None
                 for msg in reversed(data):
-                    if msg.get("role") == "system" and "Timestamp: " in msg.get("content", ""):
+                    if msg.get("role") == "system" and "Timestamp: " in msg.get(
+                        "content", ""
+                    ):
                         last_time = msg["content"].replace("Timestamp: ", "").strip()
                         break
 
@@ -211,15 +276,20 @@ class HistoryManager:
                         "narrative_state": {},
                         "last_turn_metrics": {},
                     },
-                    "history": [m for m in data if m.get("role") != "system"]
+                    "history": [m for m in data if m.get("role") != "system"],
                 }
 
             # Ensure all metadata fields exist
             if "metadata" not in data:
                 data["metadata"] = default_data["metadata"]
             else:
-                if "relationship_score" not in data["metadata"] and "mood_score" in data["metadata"]:
-                    data["metadata"]["relationship_score"] = data["metadata"].pop("mood_score")
+                if (
+                    "relationship_score" not in data["metadata"]
+                    and "mood_score" in data["metadata"]
+                ):
+                    data["metadata"]["relationship_score"] = data["metadata"].pop(
+                        "mood_score"
+                    )
                 for key, val in default_data["metadata"].items():
                     if key not in data["metadata"]:
                         data["metadata"][key] = val
@@ -232,7 +302,9 @@ class HistoryManager:
         except Exception:
             return default_data
 
-    def load_history(self, profile_name: str, limit: int = None, session_name: str = None) -> list:
+    def load_history(
+        self, profile_name: str, limit: int = None, session_name: str = None
+    ) -> list:
         """
         Loads history list from a JSON file, optionally truncating it.
 
@@ -252,7 +324,9 @@ class HistoryManager:
             return history[-limit:]
         return history
 
-    def get_last_timestamp(self, profile_name: str, session_name: str = None) -> datetime | None:
+    def get_last_timestamp(
+        self, profile_name: str, session_name: str = None
+    ) -> datetime | None:
         """
         Retrieves the last interaction timestamp for mood decay.
         """
@@ -265,7 +339,9 @@ class HistoryManager:
                 return None
         return None
 
-    def is_recent_interaction(self, profile_name: str, hours: int = 24, session_name: str = None) -> bool:
+    def is_recent_interaction(
+        self, profile_name: str, hours: int = 24, session_name: str = None
+    ) -> bool:
         """
         Checks if the last interaction was within a certain number of hours.
         """
@@ -282,12 +358,16 @@ class HistoryManager:
         data = self.get_full_data(profile_name, session_name)
         return data.get("metadata", {}).get("memory_core", "")
 
-    def get_last_summarized_index(self, profile_name: str, session_name: str = None) -> int:
+    def get_last_summarized_index(
+        self, profile_name: str, session_name: str = None
+    ) -> int:
         """Retrieves the index of the last summarized message."""
         data = self.get_full_data(profile_name, session_name)
         return data.get("metadata", {}).get("last_summarized_index", 0)
 
-    def update_memory_core(self, profile_name: str, summary: str, last_index: int, session_name: str = None) -> None:
+    def update_memory_core(
+        self, profile_name: str, summary: str, last_index: int, session_name: str = None
+    ) -> None:
         """Updates the Memory Core and its last summarized index without losing history (thread-safe)."""
         lock = self._get_profile_lock(profile_name)
         with lock:
@@ -303,7 +383,13 @@ class HistoryManager:
         data = self.get_full_data(profile_name, session_name)
         return data.get("metadata", {}).get("narrative_state", {})
 
-    def update_narrative_state(self, profile_name: str, narrative_state: dict, turn_metrics: dict | None = None, session_name: str = None) -> None:
+    def update_narrative_state(
+        self,
+        profile_name: str,
+        narrative_state: dict,
+        turn_metrics: dict | None = None,
+        session_name: str = None,
+    ) -> None:
         """Persists narrative state and optional turn metrics without touching history messages (thread-safe)."""
         lock = self._get_profile_lock(profile_name)
         with lock:
@@ -316,7 +402,9 @@ class HistoryManager:
             filename = self._get_filename(profile_name, session_name)
             save_json_atomic(filename, data)
 
-    def rewind_history(self, profile_name: str, keep_count: int, session_name: str = None) -> tuple[int, int]:
+    def rewind_history(
+        self, profile_name: str, keep_count: int, session_name: str = None
+    ) -> tuple[int, int]:
         """
         Truncates conversation history to the first `keep_count` messages.
 
@@ -341,7 +429,10 @@ class HistoryManager:
 
         metadata = data.setdefault("metadata", {})
         old_last_summarized = int(metadata.get("last_summarized_index", 0) or 0)
-        if removed_count >= self.REWIND_MEMORY_CORE_RESET_THRESHOLD or keep_count < old_last_summarized:
+        if (
+            removed_count >= self.REWIND_MEMORY_CORE_RESET_THRESHOLD
+            or keep_count < old_last_summarized
+        ):
             metadata["memory_core"] = ""
             metadata["last_summarized_index"] = 0
         else:
@@ -356,6 +447,7 @@ class HistoryManager:
             save_json_atomic(filename, data)
 
         return original_count, keep_count
+
 
 # Global instance for easy access across the application
 memory_manager = HistoryManager()
