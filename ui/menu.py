@@ -269,8 +269,7 @@ class TaiMenu(App):
 
     TTS_ENGINES = [
         ("Edge TTS", "edge-tts"),
-        ("XTTS-V2", "xtts"),
-        ("Piper TTS", "piper")
+        ("XTTS-V2", "xtts")
     ]
 
     INTERACTION_MODES = [

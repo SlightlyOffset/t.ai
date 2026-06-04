@@ -200,10 +200,7 @@ def generate_audio(text, filename, voice=None, engine="edge-tts", clone_ref=None
         else:
             ref_key = os.path.basename(clone_ref)
         cache_key_engine = f"xtts_{ref_key}_{language}"
-    elif engine == "piper":
-        piper_model = get_setting("piper_model_path", "models/piper/en_US-lessac-medium.onnx")
-        model_name = os.path.splitext(os.path.basename(piper_model))[0]
-        cache_key_engine = f"piper_{model_name}"
+
 
     # Check if we have this cached
     cached_path = get_cache_path(cleaned_text, cache_voice, cache_key_engine)
@@ -267,53 +264,7 @@ def generate_audio(text, filename, voice=None, engine="edge-tts", clone_ref=None
             print(Fore.YELLOW + "[XTTS FALLBACK] Switching to Edge-TTS." + Fore.RESET)
         engine = "edge-tts"
 
-    # 1.5 Attempt Piper TTS if requested
-    if engine == "piper":
-        piper_success = False
-        piper_path = get_setting("piper_path", "piper")
-        piper_model = get_setting("piper_model_path", "models/piper/en_US-lessac-medium.onnx")
-        
-        if os.path.exists(piper_model):
-            try:
-                piper_filename = filename if filename.endswith(".wav") else filename.replace(".mp3", ".wav")
-                cmd = [piper_path, "--model", piper_model, "--output_file", piper_filename]
-                
-                speaker_id = get_setting("piper_speaker_id", None)
-                if speaker_id is not None:
-                    cmd.extend(["--speaker", str(speaker_id)])
-                
-                res = subprocess.run(cmd, input=cleaned_text.encode("utf-8"), capture_output=True)
-                if res.returncode == 0 and os.path.exists(piper_filename):
-                    if piper_filename != filename:
-                        if os.path.exists(filename):
-                            os.remove(filename)
-                        os.rename(piper_filename, filename)
-                    
-                    with open(filename, "rb") as f:
-                        save_to_cache(cleaned_text, cache_voice, cache_key_engine, f.read())
-                    piper_success = True
-                else:
-                    err_msg = res.stderr.decode("utf-8", errors="replace")
-                    log_debug("TTS_GEN_ERROR", {"engine": "piper", "error": err_msg})
-                    if not get_setting("suppress_errors", False):
-                        print(Fore.YELLOW + f"[Piper TTS ERROR] {err_msg}" + Fore.RESET)
-            except Exception as e:
-                log_debug("TTS_GEN_ERROR", {"engine": "piper", "error": str(e)})
-                if not get_setting("suppress_errors", False):
-                    print(Fore.YELLOW + f"[Piper TTS ERROR] {e}" + Fore.RESET)
-        else:
-            msg = f"Piper model file not found at: {piper_model}"
-            log_debug("TTS_GEN_ERROR", {"engine": "piper", "error": msg})
-            if not get_setting("suppress_errors", False):
-                print(Fore.YELLOW + f"[Piper TTS ERROR] {msg}" + Fore.RESET)
-                
-        if piper_success:
-            log_debug("TTS_GEN_SUCCESS", {"engine": "piper", "filename": filename})
-            return True
-            
-        if not get_setting("suppress_errors", False):
-            print(Fore.YELLOW + "[Piper FALLBACK] Switching to Edge-TTS." + Fore.RESET)
-        engine = "edge-tts"
+
 
     # 2. Attempt Edge-TTS
     if engine == "edge-tts":
