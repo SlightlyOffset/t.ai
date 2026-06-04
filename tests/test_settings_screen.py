@@ -30,6 +30,7 @@ class TestSettingsScreen(unittest.TestCase):
             "#remote_tts_url": MagicMock(value=""),
             "#memory_limit": MagicMock(value="15"),
             "#repetition_penalty": MagicMock(value="1.15"),
+            "#max_tokens": MagicMock(value="300"),
             "#tts_rate": MagicMock(value="170"),
             "#overhaul_candidate_count": MagicMock(value="2"),
             "#interaction_mode": MagicMock(value="rp"),
@@ -107,6 +108,7 @@ class TestSettingsScreen(unittest.TestCase):
         dismissed_dict = self.screen.dismiss.call_args[0][0]
         self.assertEqual(dismissed_dict["memory_limit"], 15)
         self.assertEqual(dismissed_dict["repetition_penalty"], 1.15)
+        self.assertEqual(dismissed_dict["max_tokens"], 300)
         self.assertEqual(dismissed_dict["tts_rate"], 170)
         self.assertEqual(dismissed_dict["overhaul_candidate_count"], 2)
         self.assertEqual(dismissed_dict["interaction_mode"], "rp")
@@ -164,8 +166,17 @@ class TestSettingsScreen(unittest.TestCase):
         mock_update.assert_not_called()
         self.screen.show_error.reset_mock()
 
-        # Reset repetition penalty, test invalid tts rate
+        # Reset repetition penalty, test invalid max tokens
         self.widgets["#repetition_penalty"].value = "1.15"
+        self.widgets["#max_tokens"].value = "not-an-int"
+        self.screen.action_save()
+        self.screen.show_error.assert_called_with("Max Response Tokens must be a positive integer.")
+        self.screen.dismiss.assert_not_called()
+        mock_update.assert_not_called()
+        self.screen.show_error.reset_mock()
+
+        # Reset max tokens, test invalid tts rate
+        self.widgets["#max_tokens"].value = "300"
         self.widgets["#tts_rate"].value = "invalid-int"
         self.screen.action_save()
         self.screen.show_error.assert_called_with("TTS Speech Rate must be a positive integer.")

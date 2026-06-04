@@ -123,3 +123,54 @@ def update_settings(updates):
         settings[key] = value
     return save_json_atomic(SETTINGS_FILE, settings)
 
+
+def get_active_session(character_name: str) -> str:
+    """
+    Retrieves the active session name for a specific character profile.
+    Falls back to global 'current_history_session' or 'default'.
+    
+    Args:
+        character_name (str): Name of the character profile.
+        
+    Returns:
+        str: Active session name.
+    """
+    from engines.utilities import sanitize_profile_name
+    if not character_name:
+        return get_setting("current_history_session", "default")
+    
+    safe_char = sanitize_profile_name(character_name) or "session"
+    char_session = get_setting(f"session_{safe_char}")
+    if char_session is not None:
+        return char_session
+        
+    # Fallback to legacy global setting
+    global_session = get_setting("current_history_session")
+    if global_session is not None:
+        # Migrate/save it to the character setting
+        update_setting(f"session_{safe_char}", global_session)
+        return global_session
+        
+    return "default"
+
+
+def set_active_session(character_name: str, session_name: str) -> bool:
+    """
+    Updates the active session name for a specific character profile.
+    Also updates the legacy global setting to maintain compatibility.
+    
+    Args:
+        character_name (str): Name of the character profile.
+        session_name (str): Name of the session.
+        
+    Returns:
+        bool: True if successful, False otherwise.
+    """
+    from engines.utilities import sanitize_profile_name
+    updates = {"current_history_session": session_name}
+    if character_name:
+        safe_char = sanitize_profile_name(character_name) or "session"
+        updates[f"session_{safe_char}"] = session_name
+    return update_settings(updates)
+
+

@@ -13,7 +13,7 @@ import json
 from colorama import Fore, init
 
 # Local imports
-from engines.config import update_setting, get_setting
+from engines.config import update_setting, get_setting, get_active_session, set_active_session
 from engines.utilities import pick_history
 from engines.utilities import pick_profile
 from engines.utilities import pick_user_profile, render_historical_message # Import render_historical_message
@@ -635,7 +635,7 @@ def app_commands(ops: str, suppress_output: bool = False):
         subcmd = parts[0].lower()
         sub_args = parts[1:]
 
-        active_session = get_setting("current_history_session", "default")
+        active_session = get_active_session(character_name)
 
         if subcmd == "current":
             _log(f"[SYSTEM] Currently active session: {active_session}", Fore.GREEN)
@@ -673,7 +673,7 @@ def app_commands(ops: str, suppress_output: bool = False):
                 return
             
             memory_manager.save_history(character_name, [], session_name=name)
-            update_setting("current_history_session", name)
+            set_active_session(character_name, name)
             _log(f"[SYSTEM] Created and switched to new session: {name}", Fore.GREEN)
             raise SessionNewRequested(name)
             
@@ -695,7 +695,7 @@ def app_commands(ops: str, suppress_output: bool = False):
                     _log(f"[ERROR] Session '{name}' does not exist.", Fore.RED)
                     return
                 
-            update_setting("current_history_session", name)
+            set_active_session(character_name, name)
             _log(f"[SYSTEM] Switched to session: {name}", Fore.GREEN)
             raise SessionChangedRequested(name)
             
@@ -748,7 +748,7 @@ def app_commands(ops: str, suppress_output: bool = False):
                 session_name=name
             )
             
-            update_setting("current_history_session", name)
+            set_active_session(character_name, name)
             _log(f"[SYSTEM] Branched current session to: {name}", Fore.GREEN)
             raise SessionChangedRequested(name)
             
@@ -787,7 +787,7 @@ def app_commands(ops: str, suppress_output: bool = False):
                 _log(f"[SYSTEM] Renamed session '{old_name}' to '{new_name}'.", Fore.GREEN)
                 
                 if old_name == active_session:
-                    update_setting("current_history_session", new_name)
+                    set_active_session(character_name, new_name)
                     raise SessionChangedRequested(new_name)
             except SessionChangedRequested:
                 raise

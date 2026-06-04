@@ -690,7 +690,8 @@ class TaiMenu(App):
         Returns the (possibly new) session name.
         """
         if session_name is None:
-            session_name = get_setting("current_history_session", "default")
+            from engines.config import get_active_session
+            session_name = get_active_session(self.history_profile_name)
             
         full_data = memory_manager.get_full_data(self.history_profile_name, session_name)
         history = full_data.get("history", [])
@@ -699,7 +700,7 @@ class TaiMenu(App):
         
         current_user = os.path.basename(self.user_path) if self.user_path else None
         
-        if len(history) > 0 and history_user != current_user:
+        if len(history) > 0 and history_user is not None and history_user != current_user:
             # User profile doesn't match! Start a new conversation/session.
             user_base = os.path.splitext(current_user)[0] if current_user else "user"
             from engines.utilities import sanitize_profile_name
@@ -710,7 +711,8 @@ class TaiMenu(App):
             timestamp = time.strftime("%Y%m%d_%H%M%S")
             new_session_name = f"{safe_user}_{timestamp}"
             
-            update_setting("current_history_session", new_session_name)
+            from engines.config import set_active_session
+            set_active_session(self.history_profile_name, new_session_name)
             # Save empty history for new session
             memory_manager.save_history(self.history_profile_name, [], session_name=new_session_name)
             
@@ -768,9 +770,14 @@ class TaiMenu(App):
     async def _wait_and_exit(self, alive_threads: list) -> None:
         """Asynchronously wait for active post-processing threads to finish, then exit."""
         import asyncio
+        import time
         def join_all():
+            start_time = time.time()
+            max_wait = 4.0
             for t in alive_threads:
-                t.join()
+                elapsed = time.time() - start_time
+                remaining = max(0.1, max_wait - elapsed)
+                t.join(timeout=remaining)
 
         await asyncio.to_thread(join_all)
         self.exit()
@@ -894,8 +901,13 @@ class TaiMenu(App):
         from engines.responses import active_post_process_threads
         alive_threads = [t for t in active_post_process_threads if t.is_alive()]
         if alive_threads:
+            import time
+            start_time = time.time()
+            max_wait = 2.0
             for t in alive_threads:
-                t.join()
+                elapsed = time.time() - start_time
+                remaining = max(0.1, max_wait - elapsed)
+                t.join(timeout=remaining)
 
     def on_profile_selected(self, result: dict) -> None:
         """Callback handled when ProfileSelect screen is dismissed."""
@@ -1393,7 +1405,8 @@ class TaiMenu(App):
             self.user_name = "User"
 
         # Verify and switch session if user profile mismatch
-        active_session = get_setting("current_history_session", "default")
+        from engines.config import get_active_session
+        active_session = get_active_session(self.history_profile_name)
         self.verify_session_user_profile(active_session)
 
         self.update_sidebar()

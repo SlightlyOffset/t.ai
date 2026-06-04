@@ -394,6 +394,7 @@ class TestResponsesRegeneration(unittest.TestCase):
         called_options = mock_ollama_chat.call_args_list[0][1]["options"]
         self.assertAlmostEqual(called_options["temperature"], 0.95)
         self.assertAlmostEqual(called_options["repeat_penalty"], 1.20)
+        self.assertEqual(called_options["num_predict"], 300)
         
         # Verify the first regeneration diversity constraint is in the system prompt
         called_messages = mock_ollama_chat.call_args_list[0][1]["messages"]
@@ -425,10 +426,39 @@ class TestResponsesRegeneration(unittest.TestCase):
         called_options2 = mock_ollama_chat.call_args_list[0][1]["options"]
         self.assertAlmostEqual(called_options2["temperature"], 1.05)
         self.assertAlmostEqual(called_options2["repeat_penalty"], 1.24)
+        self.assertEqual(called_options2["num_predict"], 300)
 
         # Verify first-regeneration prompt is NOT in the system prompt because n_regen = 3 != 1
         called_messages2 = mock_ollama_chat.call_args_list[0][1]["messages"]
         self.assertNotIn("Ensure this new response is completely different", called_messages2[0]["content"])
+
+        # Test Case 3: Tenth regeneration (n_regen = 10) to verify capping
+        prompt_history3 = [
+            {"role": "user", "content": "Question"},
+            {"role": "assistant", "content": "Old answer", "alternatives": [f"Ans {i}" for i in range(1, 11)], "selected_index": 9},
+        ]
+        full_history3 = list(prompt_history3)
+        mock_memory_manager.load_history.side_effect = [prompt_history3, full_history3]
+        mock_ollama_chat.reset_mock()
+        mock_ollama_chat.return_value = [{"message": {"content": "Ans 11"}}]
+
+        list(
+            get_respond_stream(
+                "Question",
+                profile,
+                history_profile_name="test_profile",
+                is_regeneration=True,
+            )
+        )
+
+        # For n_regen = 10:
+        # temp_offset = min(0.35, 0.15 + 0.05 * 9) = 0.35
+        # temperature = 0.8 + 0.35 = 1.15
+        # repeat_penalty = min(1.15 + 0.10, 1.15 + 0.05 + 0.02 * 9) = 1.25
+        called_options3 = mock_ollama_chat.call_args_list[0][1]["options"]
+        self.assertAlmostEqual(called_options3["temperature"], 1.15)
+        self.assertAlmostEqual(called_options3["repeat_penalty"], 1.25)
+        self.assertEqual(called_options3["num_predict"], 300)
 
     @patch("engines.responses.get_pipeline_flags", return_value={
         "enabled": False,
