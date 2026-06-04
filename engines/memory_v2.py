@@ -159,15 +159,32 @@ class HistoryManager:
                         relationship_score = 0
                 except Exception:
                     relationship_score = 0
+        try:
+            relationship_score = int(relationship_score)
+        except (ValueError, TypeError):
+            relationship_score = 0
 
         if current_scene is None:
-            current_scene = existing_metadata.get("current_scene", "Unknown Location")
+            current_scene = existing_metadata.get("current_scene") or "Unknown Location"
+        else:
+            current_scene = str(current_scene) or "Unknown Location"
 
         if memory_core is None:
-            memory_core = existing_metadata.get("memory_core", "")
+            memory_core = existing_metadata.get("memory_core") or ""
+        else:
+            memory_core = str(memory_core)
 
         if last_summarized_index is None:
-            last_summarized_index = existing_metadata.get("last_summarized_index", 0)
+            val = existing_metadata.get("last_summarized_index")
+            try:
+                last_summarized_index = int(val) if val is not None else 0
+            except (ValueError, TypeError):
+                last_summarized_index = 0
+        else:
+            try:
+                last_summarized_index = int(last_summarized_index)
+            except (ValueError, TypeError):
+                last_summarized_index = 0
 
         lock = self._get_profile_lock(profile_name)
         with lock:

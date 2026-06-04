@@ -1487,9 +1487,25 @@ class TaiMenu(App):
         if self.character_profile:
             if self.history_profile_name and memory_manager.has_history(self.history_profile_name):
                 full_data = memory_manager.get_full_data(self.history_profile_name)
-                rel_score = full_data.get("metadata", {}).get("relationship_score", self.character_profile.get("relationship_score", 0))
+                metadata_score = full_data.get("metadata", {}).get("relationship_score")
+                if metadata_score is None:
+                    try:
+                        rel_score = int(self.character_profile.get("relationship_score", 0))
+                    except (ValueError, TypeError):
+                        rel_score = 0
+                else:
+                    try:
+                        rel_score = int(metadata_score)
+                    except (ValueError, TypeError):
+                        try:
+                            rel_score = int(self.character_profile.get("relationship_score", 0))
+                        except (ValueError, TypeError):
+                            rel_score = 0
             else:
-                rel_score = self.character_profile.get("relationship_score", 0)
+                try:
+                    rel_score = int(self.character_profile.get("relationship_score", 0))
+                except (ValueError, TypeError):
+                    rel_score = 0
             
             self.character_profile["relationship_score"] = rel_score
 

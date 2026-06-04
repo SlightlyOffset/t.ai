@@ -703,9 +703,25 @@ def get_respond_stream(user_input: str, profile: dict, profile_path: str = None,
 
     # Determine relationship score and interaction mode
     if history_profile_name and memory_manager.has_history(history_profile_name):
-        rel_score = full_data.get("metadata", {}).get("relationship_score", profile.get("relationship_score", 0))
+        metadata_score = full_data.get("metadata", {}).get("relationship_score")
+        if metadata_score is None:
+            try:
+                rel_score = int(profile.get("relationship_score", 0))
+            except (ValueError, TypeError):
+                rel_score = 0
+        else:
+            try:
+                rel_score = int(metadata_score)
+            except (ValueError, TypeError):
+                try:
+                    rel_score = int(profile.get("relationship_score", 0))
+                except (ValueError, TypeError):
+                    rel_score = 0
     else:
-        rel_score = profile.get("relationship_score", 0)
+        try:
+            rel_score = int(profile.get("relationship_score", 0))
+        except (ValueError, TypeError):
+            rel_score = 0
     
     # Ensure profile dict has the session-scoped score for any downstream helpers
     profile = {**profile, "relationship_score": rel_score}
