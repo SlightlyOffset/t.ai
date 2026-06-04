@@ -1751,7 +1751,7 @@ class TaiMenu(App):
         assistant_message_number = message_number
         if assistant_message_number is None:
             visible_len = self._visible_message_count
-            assistant_message_number = visible_len if is_regeneration else visible_len + 2
+            assistant_message_number = visible_len if is_regeneration else visible_len + 1
         header = self._message_header("assistant", assistant_message_number)
 
         if is_regeneration:
