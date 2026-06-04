@@ -45,5 +45,31 @@ class TestTTSModule(unittest.TestCase):
         from engines.audio_cache import CACHE_DIR
         self.assertTrue(os.path.exists(CACHE_DIR))
 
+    @patch('engines.tts_module.get_setting')
+    @patch('subprocess.run')
+    @patch('os.path.exists')
+    @patch('os.remove')
+    def test_play_audio_darwin_and_linux(self, mock_remove, mock_exists, mock_sub_run, mock_get_setting):
+        from engines.tts_module import play_audio
+        
+        mock_get_setting.side_effect = lambda key, default=None: True if key == "tts_enabled" else default
+        mock_exists.return_value = True
+        
+        # Test macOS darwin
+        with patch('sys.platform', 'darwin'):
+            play_audio("test.wav")
+            mock_sub_run.assert_any_call(["afplay", "test.wav"], check=True)
+            mock_remove.assert_any_call("test.wav")
+
+        mock_sub_run.reset_mock()
+        mock_remove.reset_mock()
+
+        # Test Linux with paplay (WAV)
+        with patch('sys.platform', 'linux'):
+            with patch('shutil.which', return_value="/usr/bin/paplay"):
+                play_audio("test.wav")
+                mock_sub_run.assert_any_call(["paplay", "test.wav"], check=True)
+                mock_remove.assert_any_call("test.wav")
+
 if __name__ == '__main__':
     unittest.main()

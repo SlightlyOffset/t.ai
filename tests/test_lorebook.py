@@ -75,5 +75,35 @@ class TestLorebook(unittest.TestCase):
         lore_text = scan_for_lore(messages, self.lore_data)
         self.assertEqual(lore_text, "")
 
+    def test_pure_ahocorasick_direct(self):
+        from engines.lorebook import PureAhoCorasick
+        pa = PureAhoCorasick()
+        pa.add_word("elf", "elf_val")
+        pa.add_word("tavern", "tavern_val")
+        pa.make_automaton()
+        
+        matches = list(pa.iter("an elf in a tavern"))
+        matched_vals = [val for _, val in matches]
+        self.assertIn("elf_val", matched_vals)
+        self.assertIn("tavern_val", matched_vals)
+
+    def test_scan_for_lore_pure_python_fallback(self):
+        # Force HAS_PYAHOCORASICK = False to test pure-Python codepath
+        import engines.lorebook
+        orig_has = engines.lorebook.HAS_PYAHOCORASICK
+        engines.lorebook.HAS_PYAHOCORASICK = False
+        try:
+            messages = [{"role": "user", "content": "An elf in a tavern."}]
+            lore_text = scan_for_lore(messages, self.lore_data)
+            self.assertIn("Elves have pointy ears.", lore_text)
+            self.assertIn("The tavern is cozy.", lore_text)
+            
+            # Test whole word
+            messages_hw = [{"role": "user", "content": "He did it himself."}]
+            lore_text_hw = scan_for_lore(messages_hw, self.lore_data)
+            self.assertEqual(lore_text_hw, "")
+        finally:
+            engines.lorebook.HAS_PYAHOCORASICK = orig_has
+
 if __name__ == "__main__":
     unittest.main()
