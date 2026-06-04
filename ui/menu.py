@@ -250,6 +250,7 @@ class TaiMenu(App):
         ("ctrl+t", "open_session_select", "Sessions"),
         ("ctrl+s", "open_settings", "Settings"),
         ("ctrl+q", "quit", "Quit"),
+        ("ctrl+r", "toggle_resource_monitor", "Toggle Metrics"),
         ("alt+left", "previous_response", "Prev Resp"),
         ("alt+right", "next_or_regenerate_response", "Next/Regen"),
     ]
@@ -307,6 +308,7 @@ class TaiMenu(App):
         self._current_char_avatar_path = None
         self._current_user_avatar_path = None
         self._visible_message_count = 0
+        self.show_resource_monitor = get_setting("show_resource_monitor", True)
 
     def _resolve_image_widget_type(self) -> type[Image] | None:
         protocol = get_setting("image_protocol", "auto")
@@ -876,6 +878,11 @@ class TaiMenu(App):
         """Initializes the app and load character profiles."""
         self.start_tts_worker()
         self.load_initial_state()
+
+        # Initialize header title and subtitle based on resource monitor setting
+        if not getattr(self, "show_resource_monitor", True):
+            self.title = "t.ai"
+            self.sub_title = ""
 
         if not self.char_path:
             from ui.ProfileSelectScreen import ProfileSelect
@@ -2073,6 +2080,9 @@ class TaiMenu(App):
     @work(exclusive=True, thread=True)
     def update_usage_metrics(self) -> None:
         """Background worker to query system resources and remote bridge status periodically."""
+        if not getattr(self, "show_resource_monitor", True):
+            return
+
         cpu, ram = self._get_local_metrics()
 
         # Check remote bridge status
@@ -2151,6 +2161,20 @@ class TaiMenu(App):
                 f"[ERROR] Context compression failed: {e}",
                 role="command"
             )
+
+    def action_toggle_resource_monitor(self) -> None:
+        """Toggle resource monitor on/off to prevent TUI image widget flickering."""
+        self.show_resource_monitor = not self.show_resource_monitor
+        from engines.config import update_setting
+        update_setting("show_resource_monitor", self.show_resource_monitor)
+        
+        if self.show_resource_monitor:
+            self.add_message("Resource Monitor: [bold green]ENABLED[/bold green]", role="system")
+            self.update_usage_metrics()
+        else:
+            self.add_message("Resource Monitor: [bold red]DISABLED[/bold red] (No image flicker)", role="system")
+            self.title = "t.ai"
+            self.sub_title = ""
 
 
 if __name__ == "__main__":

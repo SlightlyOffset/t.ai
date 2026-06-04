@@ -557,5 +557,28 @@ class TestMenu(unittest.TestCase):
         self.assertEqual(saved_history[0]["alternatives"], msg_data["alternatives"])
         self.assertEqual(saved_history[0]["selected_index"], 0)
 
+    @patch('engines.config.update_setting')
+    def test_toggle_resource_monitor(self, mock_update_setting):
+        app = MagicMock(spec=TaiMenu)
+        app.show_resource_monitor = True
+        app.title = "t.ai"
+        app.sub_title = "metrics"
+        app.add_message = MagicMock()
+        app.update_usage_metrics = MagicMock()
+        
+        # Toggle off
+        TaiMenu.action_toggle_resource_monitor(app)
+        self.assertFalse(app.show_resource_monitor)
+        self.assertEqual(app.sub_title, "")
+        mock_update_setting.assert_called_with("show_resource_monitor", False)
+        app.add_message.assert_called_with("Resource Monitor: [bold red]DISABLED[/bold red] (No image flicker)", role="system")
+        
+        # Toggle back on
+        TaiMenu.action_toggle_resource_monitor(app)
+        self.assertTrue(app.show_resource_monitor)
+        mock_update_setting.assert_called_with("show_resource_monitor", True)
+        app.add_message.assert_called_with("Resource Monitor: [bold green]ENABLED[/bold green]", role="system")
+        app.update_usage_metrics.assert_called_once()
+
 if __name__ == "__main__":
     unittest.main()
