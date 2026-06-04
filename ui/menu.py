@@ -2077,6 +2077,48 @@ class TaiMenu(App):
 
         return cpu, ram
 
+    def _get_local_gpu_metrics(self) -> str:
+        """Fetch local NVIDIA GPU memory and utilization using nvidia-smi if available."""
+        import shutil
+        import subprocess
+        
+        if not shutil.which("nvidia-smi"):
+            # Check PyTorch fallback if loaded
+            try:
+                import torch
+                if torch.cuda.is_available():
+                    allocated = torch.cuda.memory_allocated() / (1024 ** 3)
+                    total = torch.cuda.get_device_properties(0).total_memory / (1024 ** 3)
+                    return f" | GPU VRAM: {allocated:.1f}/{total:.1f} GB"
+            except Exception:
+                pass
+            return ""
+            
+        try:
+            result = subprocess.run(
+                ["nvidia-smi", "--query-gpu=utilization.gpu,memory.used,memory.total", "--format=csv,noheader,nounits"],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+                check=True,
+                timeout=1.0
+            )
+            lines = result.stdout.strip().split("\n")
+            if lines and lines[0]:
+                parts = lines[0].split(",")
+                if len(parts) == 3:
+                    gpu_util = float(parts[0].strip())
+                    used_mib = float(parts[1].strip())
+                    total_mib = float(parts[2].strip())
+                    
+                    used_gb = used_mib / 1024.0
+                    total_gb = total_mib / 1024.0
+                    
+                    return f" | GPU: {gpu_util:.0f}% (VRAM: {used_gb:.1f}/{total_gb:.1f} GB)"
+        except Exception:
+            pass
+        return ""
+
     @work(exclusive=True, thread=True)
     def update_usage_metrics(self) -> None:
         """Background worker to query system resources and remote bridge status periodically."""
@@ -2084,6 +2126,7 @@ class TaiMenu(App):
             return
 
         cpu, ram = self._get_local_metrics()
+        gpu_info = self._get_local_gpu_metrics()
 
         # Check remote bridge status
         remote_url = get_setting("remote_llm_url")
@@ -2109,7 +2152,7 @@ class TaiMenu(App):
             except Exception:
                 vram_info = " | Bridge: Offline"
 
-        metric_str = f"CPU: {cpu:.0f}% | RAM: {ram:.0f}%{vram_info}"
+        metric_str = f"CPU: {cpu:.0f}% | RAM: {ram:.0f}%{gpu_info}{vram_info}"
 
         def apply_update():
             # Update the title bar of the terminal dynamically

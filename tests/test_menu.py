@@ -579,6 +579,39 @@ class TestMenu(unittest.TestCase):
         mock_update_setting.assert_called_with("show_resource_monitor", True)
         app.add_message.assert_called_with("Resource Monitor: [bold green]ENABLED[/bold green]", role="system")
         app.update_usage_metrics.assert_called_once()
+    @patch('shutil.which')
+    @patch('subprocess.run')
+    def test_get_local_gpu_metrics_nvidia_smi(self, mock_sub_run, mock_which):
+        import subprocess
+        app = MagicMock(spec=TaiMenu)
+        mock_which.return_value = "/usr/bin/nvidia-smi"
+        
+        # Mock successful nvidia-smi run
+        mock_res = MagicMock()
+        mock_res.returncode = 0
+        mock_res.stdout = "15, 2048, 8192\n"
+        mock_sub_run.return_value = mock_res
+        
+        gpu_str = TaiMenu._get_local_gpu_metrics(app)
+        self.assertEqual(gpu_str, " | GPU: 15% (VRAM: 2.0/8.0 GB)")
+        mock_sub_run.assert_called_with(
+            ["nvidia-smi", "--query-gpu=utilization.gpu,memory.used,memory.total", "--format=csv,noheader,nounits"],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            check=True,
+            timeout=1.0
+        )
+
+    @patch('shutil.which')
+    def test_get_local_gpu_metrics_not_available(self, mock_which):
+        app = MagicMock(spec=TaiMenu)
+        mock_which.return_value = None
+        
+        # Test fallback path when PyTorch is not available
+        with patch.dict('sys.modules', {'torch': None}):
+            gpu_str = TaiMenu._get_local_gpu_metrics(app)
+            self.assertEqual(gpu_str, "")
 
 if __name__ == "__main__":
     unittest.main()
