@@ -776,7 +776,7 @@ class TaiMenu(App):
             max_wait = 4.0
             for t in alive_threads:
                 elapsed = time.time() - start_time
-                remaining = max(0.1, max_wait - elapsed)
+                remaining = max(0.0, max_wait - elapsed)
                 t.join(timeout=remaining)
 
         await asyncio.to_thread(join_all)
@@ -906,7 +906,7 @@ class TaiMenu(App):
             max_wait = 2.0
             for t in alive_threads:
                 elapsed = time.time() - start_time
-                remaining = max(0.1, max_wait - elapsed)
+                remaining = max(0.0, max_wait - elapsed)
                 t.join(timeout=remaining)
 
     def on_profile_selected(self, result: dict) -> None:
