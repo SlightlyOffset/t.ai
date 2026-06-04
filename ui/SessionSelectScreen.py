@@ -4,9 +4,10 @@ from textual.containers import Container, Horizontal
 from textual.screen import ModalScreen
 from textual.widgets import Label, Input, Button, OptionList
 from textual.widgets.option_list import Option
-from engines.config import get_setting, update_setting, get_active_session, set_active_session
+from engines.config import get_active_session, set_active_session
 from engines.memory_v2 import memory_manager
 from engines.utilities import sanitize_profile_name
+
 
 class SessionSelectScreen(ModalScreen):
     """Modal screen for managing conversation sessions (load, new, branch, rename, delete)."""
@@ -97,18 +98,28 @@ class SessionSelectScreen(ModalScreen):
 
     def compose(self) -> ComposeResult:
         yield Container(
-            Label(f"Session Manager for {self.character_name.upper()}", id="session_title"),
+            Label(
+                f"Session Manager for {self.character_name.upper()}", id="session_title"
+            ),
             Label("", id="session_error"),
             OptionList(id="session_list"),
             Horizontal(
                 Label("Session Name:", classes="session_input_label"),
-                Input(placeholder="Enter name for new/rename/branch", id="txt_session_name", classes="session_input_widget"),
-                classes="session_input_row"
+                Input(
+                    placeholder="Enter name for new/rename/branch",
+                    id="txt_session_name",
+                    classes="session_input_widget",
+                ),
+                classes="session_input_row",
             ),
             Horizontal(
                 Label("Branch From Msg #:", classes="session_input_label"),
-                Input(placeholder="Optional message number to branch from", id="txt_branch_index", classes="session_input_widget"),
-                classes="session_input_row"
+                Input(
+                    placeholder="Optional message number to branch from",
+                    id="txt_branch_index",
+                    classes="session_input_widget",
+                ),
+                classes="session_input_row",
             ),
             Horizontal(
                 Button("Load", id="btn_load", variant="primary"),
@@ -117,9 +128,9 @@ class SessionSelectScreen(ModalScreen):
                 Button("Rename", id="btn_rename", variant="default"),
                 Button("Delete", id="btn_delete", variant="error"),
                 Button("Cancel", id="btn_cancel", variant="error"),
-                id="session_actions"
+                id="session_actions",
             ),
-            id="session_container"
+            id="session_container",
         )
 
     def on_mount(self) -> None:
@@ -140,7 +151,7 @@ class SessionSelectScreen(ModalScreen):
             memory_manager.save_history(self.character_name, [], session_name="default")
 
         active_session = get_active_session(self.character_name)
-        
+
         selected_index = 0
         for idx, f in enumerate(sorted(files)):
             sname = f.replace("_history.json", "")
@@ -152,7 +163,9 @@ class SessionSelectScreen(ModalScreen):
         if files:
             option_list.highlighted = selected_index
 
-    def on_option_list_option_highlighted(self, event: OptionList.OptionHighlighted) -> None:
+    def on_option_list_option_highlighted(
+        self, event: OptionList.OptionHighlighted
+    ) -> None:
         """Pre-populate the session name text box with the highlighted option's ID."""
         if event.option:
             self.query_one("#txt_session_name", Input).value = event.option.id
@@ -190,12 +203,14 @@ class SessionSelectScreen(ModalScreen):
 
         selected_option = option_list.get_option_at_index(option_list.highlighted)
         session_name = selected_option.id
-        
+
         session_file = os.path.join(self.char_dir, f"{session_name}_history.json")
         if not os.path.exists(session_file):
             if session_name == "default":
                 # Create empty default session on the fly
-                memory_manager.save_history(self.character_name, [], session_name="default")
+                memory_manager.save_history(
+                    self.character_name, [], session_name="default"
+                )
             else:
                 self.show_error(f"Session '{session_name}' file not found.")
                 return
@@ -258,7 +273,9 @@ class SessionSelectScreen(ModalScreen):
                 return
 
         # Load source data
-        current_data = memory_manager.get_full_data(self.character_name, session_name=source_name)
+        current_data = memory_manager.get_full_data(
+            self.character_name, session_name=source_name
+        )
         history = current_data.get("history", [])
         metadata = current_data.get("metadata", {}).copy()
 
@@ -266,7 +283,10 @@ class SessionSelectScreen(ModalScreen):
             keep_count = max(0, min(len(history), msg_index))
             removed_count = len(history) - keep_count
             old_last_summarized = int(metadata.get("last_summarized_index", 0) or 0)
-            if removed_count >= memory_manager.REWIND_MEMORY_CORE_RESET_THRESHOLD or keep_count < old_last_summarized:
+            if (
+                removed_count >= memory_manager.REWIND_MEMORY_CORE_RESET_THRESHOLD
+                or keep_count < old_last_summarized
+            ):
                 metadata["memory_core"] = ""
                 metadata["last_summarized_index"] = 0
             else:
@@ -281,7 +301,7 @@ class SessionSelectScreen(ModalScreen):
             current_scene=metadata.get("current_scene"),
             memory_core=metadata.get("memory_core"),
             last_summarized_index=metadata.get("last_summarized_index"),
-            session_name=new_name
+            session_name=new_name,
         )
 
         set_active_session(self.character_name, new_name)
