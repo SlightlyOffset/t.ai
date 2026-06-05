@@ -87,6 +87,36 @@ class TestChatBubble(unittest.TestCase):
             self.assertNotIn("bubble_image_loading", getattr(widget, "classes", set()))
             self.assertFalse(hasattr(widget, "image_url"))
 
+    @patch('ui.menu.get_setting')
+    def test_chat_bubble_pagination_placement_last_text_chunk(self, mock_get_setting):
+        """Pagination indicator should be appended to the LAST text chunk if there are multiple text chunks (e.g. split by images)."""
+        mock_get_setting.return_value = "auto"
+        
+        mock_app = MagicMock()
+        mock_app.format_rp = lambda text, role: text
+        
+        msg_data = {"alternatives": ["A", "B"], "selected_index": 0}
+        
+        bubble = ChatBubble(
+            header=" Nova:",
+            raw_content="First text chunk. ![pic](cache/image.png) Second text chunk.",
+            role="assistant",
+            msg_data=msg_data
+        )
+        type(bubble).app = property(lambda self: mock_app)
+        
+        widgets = list(bubble.compose())
+        
+        # widgets[0]: Header
+        # widgets[1]: First text chunk (should NOT contain the indicator)
+        # widgets[2]: Image indicator
+        # widgets[3]: Second text chunk (should contain the indicator "< 1/2 >")
+        
+        self.assertEqual(len(widgets), 4)
+        self.assertEqual(str(widgets[1].render()), "First text chunk. ")
+        self.assertIn("< 1/2 >", str(widgets[3].render()))
+        self.assertIn("Second text chunk.", str(widgets[3].render()))
+
 
 class TestImageBubble(unittest.TestCase):
     def test_image_bubble_compose(self):

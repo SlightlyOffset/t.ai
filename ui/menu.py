@@ -173,10 +173,17 @@ class ChatBubble(Vertical):
 
         chunks = parse_message_content(self.raw_content)
 
-        for chunk in chunks:
+        # Find the index of the last text chunk to place the indicator there
+        last_text_idx = -1
+        for i in range(len(chunks) - 1, -1, -1):
+            if chunks[i]["type"] == "text":
+                last_text_idx = i
+                break
+
+        for i, chunk in enumerate(chunks):
             if chunk["type"] == "text":
                 formatted_text = self.app.format_rp(chunk["content"], role=self.role)
-                if indicator:
+                if indicator and i == last_text_idx:
                     formatted_text += indicator
                     indicator = ""
                 yield Static(formatted_text, markup=True, classes="bubble_text")
@@ -250,6 +257,7 @@ class TaiMenu(App):
         ("ctrl+t", "open_session_select", "Sessions"),
         ("ctrl+s", "open_settings", "Settings"),
         ("ctrl+q", "quit", "Quit"),
+        ("ctrl+r", "toggle_resource_monitor", "Toggle Metrics"),
         ("alt+left", "previous_response", "Prev Resp"),
         ("alt+right", "next_or_regenerate_response", "Next/Regen"),
     ]
@@ -306,6 +314,7 @@ class TaiMenu(App):
         self._current_char_avatar_path = None
         self._current_user_avatar_path = None
         self._visible_message_count = 0
+        self.show_resource_monitor = get_setting("show_resource_monitor", True)
 
     def _resolve_image_widget_type(self) -> type[Image] | None:
         protocol = get_setting("image_protocol", "auto")
@@ -875,6 +884,11 @@ class TaiMenu(App):
         """Initializes the app and load character profiles."""
         self.start_tts_worker()
         self.load_initial_state()
+
+        # Initialize header title and subtitle based on resource monitor setting
+        if not getattr(self, "show_resource_monitor", True):
+            self.title = "t.ai"
+            self.sub_title = ""
 
         if not self.char_path:
             from ui.ProfileSelectScreen import ProfileSelect
@@ -2069,10 +2083,56 @@ class TaiMenu(App):
 
         return cpu, ram
 
+    def _get_local_gpu_metrics(self) -> str:
+        """Fetch local NVIDIA GPU memory and utilization using nvidia-smi if available."""
+        import shutil
+        import subprocess
+        
+        if not shutil.which("nvidia-smi"):
+            # Check PyTorch fallback if loaded
+            try:
+                import torch
+                if torch.cuda.is_available():
+                    allocated = torch.cuda.memory_allocated() / (1024 ** 3)
+                    total = torch.cuda.get_device_properties(0).total_memory / (1024 ** 3)
+                    return f" | GPU VRAM: {allocated:.1f}/{total:.1f} GB"
+            except Exception:
+                pass
+            return ""
+            
+        try:
+            result = subprocess.run(
+                ["nvidia-smi", "--query-gpu=utilization.gpu,memory.used,memory.total", "--format=csv,noheader,nounits"],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+                check=True,
+                timeout=1.0
+            )
+            lines = result.stdout.strip().split("\n")
+            if lines and lines[0]:
+                parts = lines[0].split(",")
+                if len(parts) == 3:
+                    gpu_util = float(parts[0].strip())
+                    used_mib = float(parts[1].strip())
+                    total_mib = float(parts[2].strip())
+                    
+                    used_gb = used_mib / 1024.0
+                    total_gb = total_mib / 1024.0
+                    
+                    return f" | GPU: {gpu_util:.0f}% (VRAM: {used_gb:.1f}/{total_gb:.1f} GB)"
+        except Exception:
+            pass
+        return ""
+
     @work(exclusive=True, thread=True)
     def update_usage_metrics(self) -> None:
         """Background worker to query system resources and remote bridge status periodically."""
+        if not getattr(self, "show_resource_monitor", True):
+            return
+
         cpu, ram = self._get_local_metrics()
+        gpu_info = self._get_local_gpu_metrics()
 
         # Check remote bridge status
         remote_url = get_setting("remote_llm_url")
@@ -2098,7 +2158,7 @@ class TaiMenu(App):
             except Exception:
                 vram_info = " | Bridge: Offline"
 
-        metric_str = f"CPU: {cpu:.0f}% | RAM: {ram:.0f}%{vram_info}"
+        metric_str = f"CPU: {cpu:.0f}% | RAM: {ram:.0f}%{gpu_info}{vram_info}"
 
         def apply_update():
             # Update the title bar of the terminal dynamically
@@ -2150,6 +2210,20 @@ class TaiMenu(App):
                 f"[ERROR] Context compression failed: {e}",
                 role="command"
             )
+
+    def action_toggle_resource_monitor(self) -> None:
+        """Toggle resource monitor on/off to prevent TUI image widget flickering."""
+        self.show_resource_monitor = not self.show_resource_monitor
+        from engines.config import update_setting
+        update_setting("show_resource_monitor", self.show_resource_monitor)
+        
+        if self.show_resource_monitor:
+            self.add_message("Resource Monitor: [bold green]ENABLED[/bold green]", role="system")
+            self.update_usage_metrics()
+        else:
+            self.add_message("Resource Monitor: [bold red]DISABLED[/bold red] (No image flicker)", role="system")
+            self.title = "t.ai"
+            self.sub_title = ""
 
 
 if __name__ == "__main__":

@@ -102,58 +102,38 @@ async def generate_edge_tts(text, filename, voice="en-GB-SoniaNeural"):
     await communicate.save(filename)
 
 def play_audio_windows(filename):
-    """Plays audio via VBScript or fallback on Windows."""
+    """Plays audio via direct Windows Multimedia API integration (MCI) in-memory, avoiding VBScript."""
     abspath = os.path.abspath(filename)
-
-    # Method 1: VBScript (Hidden playback)
-    vbs_path = os.path.join(os.environ["TEMP"], f"play_sound_{int(time.time())}.vbs")
-    vbs_content = """
-    On Error Resume Next
-    Set Sound = CreateObject("WMPlayer.OCX")
-    If Err.Number <> 0 Then
-        WScript.Quit 1
-    End If
-    Sound.settings.volume = 100
-    If WScript.Arguments.Count > 0 Then
-        Sound.URL = WScript.Arguments(0)
-    Else
-        WScript.Quit 1
-    End If
-    Sound.Controls.play
-
-    ' Wait for media to load (max 5 seconds)
-    count = 0
-    do while Sound.currentmedia.duration = 0 and count < 100
-        wscript.sleep 50
-        count = count + 1
-    loop
-
-    ' Play until finished (with a safety timeout)
-    if Sound.currentmedia.duration > 0 then
-        wscript.sleep (Sound.currentmedia.duration * 1000)
-    else
-        ' Fallback wait if duration is somehow not reported but it's playing
-        wscript.sleep 2000
-    end if
-    """
     try:
-        with open(vbs_path, "w") as f: f.write(vbs_content)
-        # We use wscript.exe to run it and pass the abspath as a command-line argument.
-        # This prevents VBScript injection as arguments are handled safely.
-        result = subprocess.run(["wscript.exe", vbs_path, abspath], capture_output=True, timeout=35)
-        if result.returncode != 0:
-            raise Exception("VBScript failed")
-    except:
-        # Method 2: os.startfile (Fallback)
+        import ctypes
+        from ctypes import wintypes
+        
+        winmm = ctypes.windll.winmm
+        mciSendString = winmm.mciSendStringW
+        mciSendString.argtypes = (wintypes.LPCWSTR, wintypes.LPWSTR, wintypes.UINT, wintypes.HANDLE)
+        mciSendString.restype = wintypes.DWORD
+
+        alias = f"tts_audio_{int(time.time() * 1000)}"
+        
+        # open the file with mpegvideo type (works for both WAV and MP3)
+        res = mciSendString(f'open "{abspath}" type mpegvideo alias {alias}', None, 0, None)
+        if res != 0:
+            # Fallback open without specifying a type
+            res = mciSendString(f'open "{abspath}" alias {alias}', None, 0, None)
+            
+        if res == 0:
+            # Play and block until finished (wait flag)
+            mciSendString(f'play {alias} wait', None, 0, None)
+            mciSendString(f'close {alias}', None, 0, None)
+        else:
+            raise Exception(f"MCI open failed with code {res}")
+    except Exception as e:
+        # Fallback to os.startfile
         try:
             os.startfile(abspath)
-            time.sleep(2) # Give it some time to start the player
-        except Exception as e:
-            print(Fore.RED + f"[PLAY ERROR] {e}")
-    finally:
-        if os.path.exists(vbs_path):
-            try: os.remove(vbs_path)
-            except: pass
+            time.sleep(2)  # Give it some time to start the player
+        except Exception as fallback_err:
+            print(Fore.RED + f"[PLAY ERROR] {e} (Fallback failed: {fallback_err})")
 
 def resolve_voice_refs(clone_ref):
     """
@@ -221,6 +201,7 @@ def generate_audio(text, filename, voice=None, engine="edge-tts", clone_ref=None
             ref_key = os.path.basename(clone_ref)
         cache_key_engine = f"xtts_{ref_key}_{language}"
 
+
     # Check if we have this cached
     cached_path = get_cache_path(cleaned_text, cache_voice, cache_key_engine)
 
@@ -283,6 +264,8 @@ def generate_audio(text, filename, voice=None, engine="edge-tts", clone_ref=None
             print(Fore.YELLOW + "[XTTS FALLBACK] Switching to Edge-TTS." + Fore.RESET)
         engine = "edge-tts"
 
+
+
     # 2. Attempt Edge-TTS
     if engine == "edge-tts":
         if not EDGE_AVAILABLE or not is_online():
@@ -314,9 +297,43 @@ def play_audio(filename):
         return
     log_debug("TTS_PLAY_START", {"filename": filename})
     try:
-        if os.name == "nt":
+        import sys
+        if sys.platform == "win32":
             play_audio_windows(filename)
+        elif sys.platform == "darwin":
+            # macOS: play silently in CLI using afplay (blocks until done)
+            subprocess.run(["afplay", filename], check=True)
+        elif sys.platform.startswith("linux"):
+            # Linux: try paplay (for WAV), or mpg123 / aplay, or fallback to xdg-open
+            played = False
+            is_wav = filename.lower().endswith(".wav")
+            if is_wav and shutil.which("paplay"):
+                try:
+                    subprocess.run(["paplay", filename], check=True)
+                    played = True
+                except subprocess.SubprocessError:
+                    pass
+            
+            if not played and not is_wav and shutil.which("mpg123"):
+                try:
+                    subprocess.run(["mpg123", "-q", filename], check=True)
+                    played = True
+                except subprocess.SubprocessError:
+                    pass
+
+            if not played and is_wav and shutil.which("aplay"):
+                try:
+                    subprocess.run(["aplay", "-q", filename], check=True)
+                    played = True
+                except subprocess.SubprocessError:
+                    pass
+
+            if not played:
+                # Fallback to xdg-open
+                subprocess.run(["xdg-open", filename], check=True)
+                time.sleep(2)
         else:
+            # Generic POSIX fallback
             cmd = "xdg-open" if os.name == "posix" else "open"
             subprocess.run([cmd, filename])
             time.sleep(2)
