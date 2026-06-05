@@ -1891,12 +1891,18 @@ class TaiMenu(App):
         full_response = ""
         user_name = self.user_profile.get("name", "User") if self.user_profile else "User"
 
+        def on_post_processed(new_score):
+            # Update local profile score and refresh UI immediately
+            self.character_profile["relationship_score"] = new_score
+            self.app.call_from_thread(self.update_sidebar)
+
         for event in iterate_response_events(
             message=message,
             character_profile=self.character_profile,
             history_profile_name=self.history_profile_name,
             is_regeneration=is_regeneration,
             user_name=user_name,
+            post_process_callback=on_post_processed,
         ):
 
             if event["type"] == "chunk":
@@ -1953,7 +1959,6 @@ class TaiMenu(App):
             full_data = memory_manager.get_full_data(self.history_profile_name)
             self.character_profile["relationship_score"] = full_data.get("metadata", {}).get("relationship_score", self.character_profile.get("relationship_score", 0))
         self.app.call_from_thread(self.update_sidebar)
-        self.app.call_from_thread(self.app.set_timer, 2.0, self.update_sidebar)
 
         # Swap the streaming Static widget to a fully formatted ChatBubble widget
         def swap_to_bubble():

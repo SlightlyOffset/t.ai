@@ -532,6 +532,7 @@ def _perform_post_processing(
     selected_metrics: dict,
     candidate_metrics: list,
     critic_applied: bool,
+    post_process_callback=None,
 ):
     """Handles background tasks like sentiment scoring and saving history."""
     try:
@@ -628,12 +629,19 @@ def _perform_post_processing(
                 "plan": narrative_plan or {},
             },
         )
+
+        if post_process_callback:
+            try:
+                post_process_callback(new_rel_score)
+            except Exception as cb_err:
+                if get_setting("debug_mode", False):
+                    print(f"Post-process callback failed: {cb_err}")
     except Exception as e:
         if get_setting("debug_mode", False):
             print(f"Background post-processing failed: {e}")
             traceback.print_exc()
 
-def get_respond_stream(user_input: str, profile: dict, profile_path: str = None, system_extra_info: str = None, history_profile_name: str = None, is_regeneration: bool = False, user_name: str = "User"):
+def get_respond_stream(user_input: str, profile: dict, profile_path: str = None, system_extra_info: str = None, history_profile_name: str = None, is_regeneration: bool = False, user_name: str = "User", post_process_callback=None):
     """
     Generates a streaming response from the LLM (Local Ollama or Remote API).
     Parses sentiment tags [REL: +X] to update relationship status in real-time.
@@ -1082,6 +1090,7 @@ def get_respond_stream(user_input: str, profile: dict, profile_path: str = None,
                 "selected_metrics": selected_metrics,
                 "candidate_metrics": candidate_metrics,
                 "critic_applied": critic_applied,
+                "post_process_callback": post_process_callback,
             },
             daemon=True,
         )
