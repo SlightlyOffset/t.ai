@@ -568,8 +568,36 @@ def _perform_post_processing(
         else:
             score_change = get_sentiment_score(user_input, model, remote_url, profile)
 
-        # Calculate new relationship score for the session, capped between -100 and 100
-        new_rel_score = max(-100, min(100, rel_score + score_change))
+        # Calculate new relationship score with damped logarithmic scaling
+        # Cap between -100 and 100
+        if score_change > 0:
+            if rel_score >= 0:
+                # Diminishing returns scaling: closer to 100 means harder to grow
+                factor = (100.0 - rel_score) / 100.0
+                actual_change = score_change * factor
+                # Guarantee at least a +0.01 progression if raw score_change was positive
+                if actual_change > 0 and actual_change < 0.01:
+                    actual_change = 0.01
+                new_rel_score = round(rel_score + actual_change, 2)
+            else:
+                # Recovery towards neutral (0) is linear
+                new_rel_score = round(rel_score + score_change, 2)
+        elif score_change < 0:
+            if rel_score <= 0:
+                # Diminishing returns scaling: closer to -100 means harder to drop
+                factor = (100.0 - abs(rel_score)) / 100.0
+                actual_change = score_change * factor
+                # Guarantee at least a -0.01 progression if raw score_change was negative
+                if actual_change < 0 and actual_change > -0.01:
+                    actual_change = -0.01
+                new_rel_score = round(rel_score + actual_change, 2)
+            else:
+                # Decay towards neutral (0) is linear
+                new_rel_score = round(rel_score + score_change, 2)
+        else:
+            new_rel_score = rel_score
+
+        new_rel_score = max(-100.0, min(100.0, new_rel_score))
 
         # Save to persistent memory
         full_history = memory_manager.load_history(history_profile_name)
@@ -714,22 +742,22 @@ def get_respond_stream(user_input: str, profile: dict, profile_path: str = None,
         metadata_score = full_data.get("metadata", {}).get("relationship_score")
         if metadata_score is None:
             try:
-                rel_score = int(profile.get("relationship_score", 0))
+                rel_score = round(float(profile.get("relationship_score", 0)), 2)
             except (ValueError, TypeError):
-                rel_score = 0
+                rel_score = 0.0
         else:
             try:
-                rel_score = int(metadata_score)
+                rel_score = round(float(metadata_score), 2)
             except (ValueError, TypeError):
                 try:
-                    rel_score = int(profile.get("relationship_score", 0))
+                    rel_score = round(float(profile.get("relationship_score", 0)), 2)
                 except (ValueError, TypeError):
-                    rel_score = 0
+                    rel_score = 0.0
     else:
         try:
-            rel_score = int(profile.get("relationship_score", 0))
+            rel_score = round(float(profile.get("relationship_score", 0)), 2)
         except (ValueError, TypeError):
-            rel_score = 0
+            rel_score = 0.0
     
     # Ensure profile dict has the session-scoped score for any downstream helpers
     profile = {**profile, "relationship_score": rel_score}

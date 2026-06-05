@@ -110,9 +110,9 @@ class TestSessionRelationshipScores(unittest.TestCase):
                 )
             )
 
-            # Check that the session history file was saved with the updated score 13
+            # Check that the session history file was saved with the updated score 12.7
             data = self.manager.get_full_data("TestAI")
-            self.assertEqual(data["metadata"]["relationship_score"], 13)
+            self.assertEqual(data["metadata"]["relationship_score"], 12.7)
 
             # Check that the base profile JSON on disk remained UNCHANGED (10)
             with open(profile_path, "r", encoding="utf-8") as f:
@@ -120,8 +120,8 @@ class TestSessionRelationshipScores(unittest.TestCase):
             self.assertEqual(disk_profile["relationship_score"], 10)
 
             # 3. Run respond stream again (second turn)
-            # Since history exists, it should load the score from metadata (13).
-            # Sentiment returns +3. New score should be 13 + 3 = 16.
+            # Since history exists, it should load the score from metadata (12.7).
+            # Sentiment returns +3. New score should be 12.7 + damped(+3) = 15.32.
             # We mock the chat to return another message.
             mock_ollama_chat.reset_mock()
             mock_ollama_chat.return_value = [
@@ -137,9 +137,9 @@ class TestSessionRelationshipScores(unittest.TestCase):
                 )
             )
 
-            # Check that the session history file was saved with the updated score 16
+            # Check that the session history file was saved with the updated score 15.32
             data = self.manager.get_full_data("TestAI")
-            self.assertEqual(data["metadata"]["relationship_score"], 16)
+            self.assertEqual(data["metadata"]["relationship_score"], 15.32)
 
             # Check that the base profile JSON on disk still remained UNCHANGED (10)
             with open(profile_path, "r", encoding="utf-8") as f:
@@ -275,6 +275,67 @@ class TestSessionRelationshipScores(unittest.TestCase):
         finally:
             if os.path.exists(profile_path):
                 os.remove(profile_path)
+
+    @patch("engines.responses.get_sentiment_score")
+    @patch("engines.responses.get_pipeline_flags")
+    @patch("engines.responses.build_system_prompt")
+    @patch("engines.responses.get_setting")
+    @patch("engines.responses.ollama.chat")
+    def test_relationship_score_damping_math(
+        self,
+        mock_ollama_chat,
+        mock_get_setting,
+        mock_build_system_prompt,
+        mock_pipeline_flags,
+        mock_get_sentiment
+    ):
+        profile = {"name": "TestAI", "llm_model": "test-model"}
+        mock_get_setting.return_value = None
+        mock_pipeline_flags.return_value = {"enabled": False}
+        mock_ollama_chat.return_value = [{"message": {"content": "dummy"}}]
+
+        # Case 1: positive change, positive score (damped)
+        # Score = 50.0, raw change = +5.0
+        # Expected actual_change = 5.0 * (100 - 50)/100 = 2.50
+        # Expected new score = 52.50
+        self.manager.save_history("TestAI", [], relationship_score=50.0)
+        mock_get_sentiment.return_value = 5
+        list(get_respond_stream("hi", profile, history_profile_name="TestAI"))
+        self.assertEqual(self.manager.get_full_data("TestAI")["metadata"]["relationship_score"], 52.5)
+
+        # Case 2: positive change, negative score (linear recovery)
+        # Score = -50.0, raw change = +5.0
+        # Expected new score = -45.0
+        self.manager.save_history("TestAI", [], relationship_score=-50.0)
+        mock_get_sentiment.return_value = 5
+        list(get_respond_stream("hi", profile, history_profile_name="TestAI"))
+        self.assertEqual(self.manager.get_full_data("TestAI")["metadata"]["relationship_score"], -45.0)
+
+        # Case 3: negative change, negative score (damped)
+        # Score = -50.0, raw change = -5.0
+        # Expected actual_change = -5.0 * (100 - 50)/100 = -2.50
+        # Expected new score = -52.50
+        self.manager.save_history("TestAI", [], relationship_score=-50.0)
+        mock_get_sentiment.return_value = -5
+        list(get_respond_stream("hi", profile, history_profile_name="TestAI"))
+        self.assertEqual(self.manager.get_full_data("TestAI")["metadata"]["relationship_score"], -52.5)
+
+        # Case 4: negative change, positive score (linear decay)
+        # Score = 50.0, raw change = -5.0
+        # Expected new score = 45.0
+        self.manager.save_history("TestAI", [], relationship_score=50.0)
+        mock_get_sentiment.return_value = -5
+        list(get_respond_stream("hi", profile, history_profile_name="TestAI"))
+        self.assertEqual(self.manager.get_full_data("TestAI")["metadata"]["relationship_score"], 45.0)
+
+        # Case 5: positive change close to cap (guaranteed minimum change of 0.01)
+        # Score = 99.9, raw change = +5.0
+        # Expected actual_change = 5 * (100 - 99.9)/100 = 0.005 -> clamped to 0.01
+        # Expected new score = 99.9 + 0.01 = 99.91
+        self.manager.save_history("TestAI", [], relationship_score=99.9)
+        mock_get_sentiment.return_value = 5
+        list(get_respond_stream("hi", profile, history_profile_name="TestAI"))
+        self.assertEqual(self.manager.get_full_data("TestAI")["metadata"]["relationship_score"], 99.91)
 
 
 if __name__ == "__main__":

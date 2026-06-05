@@ -116,7 +116,7 @@ class HistoryManager:
         self,
         profile_name: str,
         history: list,
-        relationship_score: int = None,
+        relationship_score: float = None,
         current_scene: str = None,
         memory_core: str = None,
         last_summarized_index: int = None,
@@ -160,9 +160,9 @@ class HistoryManager:
                 except Exception:
                     relationship_score = 0
         try:
-            relationship_score = int(relationship_score)
+            relationship_score = round(float(relationship_score), 2)
         except (ValueError, TypeError):
-            relationship_score = 0
+            relationship_score = 0.0
 
         if current_scene is None:
             current_scene = existing_metadata.get("current_scene") or "Unknown Location"

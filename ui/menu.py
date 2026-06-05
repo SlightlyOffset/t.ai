@@ -1504,22 +1504,22 @@ class TaiMenu(App):
                 metadata_score = full_data.get("metadata", {}).get("relationship_score")
                 if metadata_score is None:
                     try:
-                        rel_score = int(self.character_profile.get("relationship_score", 0))
+                        rel_score = round(float(self.character_profile.get("relationship_score", 0)), 2)
                     except (ValueError, TypeError):
-                        rel_score = 0
+                        rel_score = 0.0
                 else:
                     try:
-                        rel_score = int(metadata_score)
+                        rel_score = round(float(metadata_score), 2)
                     except (ValueError, TypeError):
                         try:
-                            rel_score = int(self.character_profile.get("relationship_score", 0))
+                            rel_score = round(float(self.character_profile.get("relationship_score", 0)), 2)
                         except (ValueError, TypeError):
-                            rel_score = 0
+                            rel_score = 0.0
             else:
                 try:
-                    rel_score = int(self.character_profile.get("relationship_score", 0))
+                    rel_score = round(float(self.character_profile.get("relationship_score", 0)), 2)
                 except (ValueError, TypeError):
-                    rel_score = 0
+                    rel_score = 0.0
             
             self.character_profile["relationship_score"] = rel_score
 
