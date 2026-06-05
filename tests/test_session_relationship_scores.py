@@ -337,6 +337,31 @@ class TestSessionRelationshipScores(unittest.TestCase):
         list(get_respond_stream("hi", profile, history_profile_name="TestAI"))
         self.assertEqual(self.manager.get_full_data("TestAI")["metadata"]["relationship_score"], 99.91)
 
+    @patch("engines.responses.ollama.chat")
+    @patch("engines.responses.get_setting")
+    def test_get_sentiment_score_passes_recent_history_context(self, mock_get_setting, mock_ollama_chat):
+        from engines.responses import get_sentiment_score
+        mock_get_setting.return_value = "llama3.2"
+        mock_ollama_chat.return_value = {"message": {"content": '{"rel": 3}'}}
+
+        recent_history = [
+            {"role": "user", "content": "Hello!"},
+            {"role": "assistant", "content": "How can I help you?"},
+            {"role": "user", "content": "Do you like cookies?"}
+        ]
+
+        profile = {"name": "TestAI"}
+        score = get_sentiment_score("Yes, I love them!", model="llama3.2", profile=profile, recent_history=recent_history)
+        
+        self.assertEqual(score, 3)
+        # Verify the messages list passed to ollama.chat contains the history context
+        called_messages = mock_ollama_chat.call_args[1]["messages"]
+        self.assertEqual(len(called_messages), 5) # 1 system, 3 history, 1 user_input
+        self.assertEqual(called_messages[1]["content"], "Hello!")
+        self.assertEqual(called_messages[2]["content"], "How can I help you?")
+        self.assertEqual(called_messages[3]["content"], "Do you like cookies?")
+        self.assertIn("[USER_MSG]\nYes, I love them!", called_messages[4]["content"])
+
 
 if __name__ == "__main__":
     unittest.main()
