@@ -98,8 +98,8 @@ class ChatInput(TextArea):
             base = TextAreaTheme.get_builtin_theme("vscode_dark")
             syntax_styles = {
                 "speech": Style(color=color),
-                "narration": Style(italic=True, color="dim"),
-                "exposition": Style(color="dim"),
+                "narration": Style(italic=True, dim=True),
+                "exposition": Style(dim=True),
             }
             if base:
                 for k, v in base.syntax_styles.items():
@@ -207,8 +207,8 @@ class InlineEditor(TextArea):
             base = TextAreaTheme.get_builtin_theme("vscode_dark")
             syntax_styles = {
                 "speech": Style(color=color),
-                "narration": Style(italic=True, color="dim"),
-                "exposition": Style(color="dim"),
+                "narration": Style(italic=True, dim=True),
+                "exposition": Style(dim=True),
             }
             if base:
                 for k, v in base.syntax_styles.items():
