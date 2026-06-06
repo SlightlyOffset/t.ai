@@ -424,6 +424,8 @@ class ChatBubble(Vertical):
             pass
 
     def on_click(self, event: events.Click) -> None:
+        if self.editing:
+            return
         if getattr(event, "chain", 0) == 2 or getattr(event, "click_count", 0) == 2:
             self.editing = True
             event.stop()
