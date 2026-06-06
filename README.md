@@ -193,6 +193,6 @@ Edit `settings.json` to customize your experience:
 * [x] **Cloud & Audio**: Colab Bridge, Streaming TTS, and XTTS v2 Integration.
 * [x] **TUI Overhaul**: High-fidelity bubble layout and terminal image rendering.
 * [x] **Security Sprint**: Comprehensive vulnerability remediation and hardening.
-* [ ] **Agentic Intelligence (v0.2.0)**: Transform t.ai into an autonomous agent (File I/O, Code Execution).
+* [ ] **Agentic Intelligence (v2.0.0)**: Transform t.ai into an autonomous agent (File I/O, Code Execution).
 * [ ] **Dedicated Command Mode**: Structured `Ctrl+!` input for complex task handling.
 * [ ] **Live2D Integration**: Map relationship scores and future emotional states to sprite changes and animations.
