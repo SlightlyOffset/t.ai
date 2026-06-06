@@ -15,7 +15,9 @@ import re
 import ollama
 from textual.app import App, ComposeResult
 from textual.screen import ModalScreen
-from textual.widgets import Header, Footer, Input, Static, Label, Select, ProgressBar, Switch, TextArea
+from textual.widgets import Header, Footer, Input, Static, Label, Select, ProgressBar, Switch, TextArea, Button
+from rich.style import Style
+from textual.widgets.text_area import TextAreaTheme
 from textual_image.widget import Image, SixelImage, TGPImage, HalfcellImage
 from textual.containers import Vertical, Horizontal, ScrollableContainer
 from textual import work, events
@@ -85,6 +87,73 @@ class ChatInput(TextArea):
         # Height 3 allows for 1 line of text + top/bottom borders
         self.height = 3
         self.focus()
+        self.update_highlight_theme()
+
+    def update_highlight_theme(self) -> None:
+        user_profile = getattr(self.app, "user_profile", None) or {}
+        color = user_profile.get("colors", {}).get("speech_highlight", "") or "yellow"
+        
+        theme_name = f"rp_theme_{color.replace('#', 'hex_')}"
+        if theme_name not in self._themes:
+            base = TextAreaTheme.get_builtin_theme("vscode_dark")
+            syntax_styles = {
+                "speech": Style(color=color),
+                "narration": Style(italic=True, dim=True),
+                "exposition": Style(dim=True),
+            }
+            if base:
+                for k, v in base.syntax_styles.items():
+                    if k not in syntax_styles:
+                        syntax_styles[k] = v
+                theme = TextAreaTheme(
+                    name=theme_name,
+                    base_style=base.base_style,
+                    gutter_style=base.gutter_style,
+                    cursor_style=base.cursor_style,
+                    cursor_line_style=base.cursor_line_style,
+                    cursor_line_gutter_style=base.cursor_line_gutter_style,
+                    bracket_matching_style=base.bracket_matching_style,
+                    selection_style=base.selection_style,
+                    syntax_styles=syntax_styles
+                )
+            else:
+                theme = TextAreaTheme(name=theme_name, syntax_styles=syntax_styles)
+            self.register_theme(theme)
+            
+        self.theme = theme_name
+
+    def _build_highlight_map(self) -> None:
+        """Override to build custom regex-based highlights for roleplay."""
+        self._line_cache.clear()
+        self._highlights.clear()
+        
+        for line_idx, line in enumerate(self.document.lines):
+            ranges = []
+            
+            # 1. Exposition
+            for m in re.finditer(r"\([^)\n]+\)|\[[^\]\n]+\]", line):
+                ranges.append((m.start(), m.end(), "exposition"))
+                
+            # 2. Narration
+            for m in re.finditer(r"\*[^*\n]+\*", line):
+                ranges.append((m.start(), m.end(), "narration"))
+                
+            # 3. Speech
+            for m in re.finditer(r'["“][^"“”\n]*["”]', line):
+                ranges.append((m.start(), m.end(), "speech"))
+                
+            ranges.sort(key=lambda x: (x[0], -x[1]))
+            resolved_ranges = []
+            last_end = 0
+            for start, end, token_type in ranges:
+                if start >= last_end:
+                    resolved_ranges.append((start, end, token_type))
+                    last_end = end
+                    
+            for start, end, token_type in resolved_ranges:
+                start_byte = len(line[:start].encode("utf-8"))
+                end_byte = len(line[:end].encode("utf-8"))
+                self._highlights[line_idx].append((start_byte, end_byte, token_type))
 
     def on_text_area_changed(self, event: TextArea.Changed) -> None:
         """Resize height based on content, accounting for borders."""
@@ -108,6 +177,113 @@ class ChatInput(TextArea):
             # as a dedicated "Force Newline" shortcut.
             self.insert("\n")
             event.prevent_default()
+
+
+class InlineEditor(TextArea):
+    """An inline editor for ChatBubble that handles custom syntax highlighting and shortcuts."""
+    def __init__(self, role: str, **kwargs):
+        super().__init__(**kwargs)
+        self.role = role
+
+    def on_mount(self) -> None:
+        self.show_line_numbers = False
+        self.update_highlight_theme()
+        self.focus()
+
+    def update_highlight_theme(self) -> None:
+        color = "yellow"
+        if self.role == "user":
+            user_profile = getattr(self.app, "user_profile", None) or {}
+            color = user_profile.get("colors", {}).get("speech_highlight", "") or "yellow"
+        else:
+            char_profile = getattr(self.app, "character_profile", None) or {}
+            color = char_profile.get("colors", {}).get("speech_highlight", "") or "yellow"
+            
+        theme_name = f"rp_theme_{color.replace('#', 'hex_')}"
+        if theme_name not in self._themes:
+            base = TextAreaTheme.get_builtin_theme("vscode_dark")
+            syntax_styles = {
+                "speech": Style(color=color),
+                "narration": Style(italic=True, dim=True),
+                "exposition": Style(dim=True),
+            }
+            if base:
+                for k, v in base.syntax_styles.items():
+                    if k not in syntax_styles:
+                        syntax_styles[k] = v
+                theme = TextAreaTheme(
+                    name=theme_name,
+                    base_style=base.base_style,
+                    gutter_style=base.gutter_style,
+                    cursor_style=base.cursor_style,
+                    cursor_line_style=base.cursor_line_style,
+                    cursor_line_gutter_style=base.cursor_line_gutter_style,
+                    bracket_matching_style=base.bracket_matching_style,
+                    selection_style=base.selection_style,
+                    syntax_styles=syntax_styles
+                )
+            else:
+                theme = TextAreaTheme(name=theme_name, syntax_styles=syntax_styles)
+            self.register_theme(theme)
+            
+        self.theme = theme_name
+
+    def _build_highlight_map(self) -> None:
+        """Override to build custom regex-based highlights for roleplay."""
+        self._line_cache.clear()
+        self._highlights.clear()
+        
+        for line_idx, line in enumerate(self.document.lines):
+            ranges = []
+            
+            # 1. Exposition
+            for m in re.finditer(r"\([^)\n]+\)|\[[^\]\n]+\]", line):
+                ranges.append((m.start(), m.end(), "exposition"))
+                
+            # 2. Narration
+            for m in re.finditer(r"\*[^*\n]+\*", line):
+                ranges.append((m.start(), m.end(), "narration"))
+                
+            # 3. Speech
+            for m in re.finditer(r'["“][^"“”\n]*["”]', line):
+                ranges.append((m.start(), m.end(), "speech"))
+                
+            ranges.sort(key=lambda x: (x[0], -x[1]))
+            resolved_ranges = []
+            last_end = 0
+            for start, end, token_type in ranges:
+                if start >= last_end:
+                    resolved_ranges.append((start, end, token_type))
+                    last_end = end
+                    
+            for start, end, token_type in resolved_ranges:
+                start_byte = len(line[:start].encode("utf-8"))
+                end_byte = len(line[:end].encode("utf-8"))
+                self._highlights[line_idx].append((start_byte, end_byte, token_type))
+
+    def on_key(self, event: events.Key) -> None:
+        """Handle Esc for cancel and Ctrl+S for save."""
+        if event.key == "escape":
+            event.prevent_default()
+            event.stop()
+            # Cancel editing on parent ChatBubble
+            node = self.parent
+            while node is not None:
+                if isinstance(node, ChatBubble):
+                    node.editing = False
+                    node.focus()
+                    break
+                node = node.parent
+        elif event.key == "ctrl+s":
+            event.prevent_default()
+            event.stop()
+            # Save editing on parent ChatBubble
+            node = self.parent
+            while node is not None:
+                if isinstance(node, ChatBubble):
+                    node.save_edit(self.text)
+                    break
+                node = node.parent
 
 class ExitSavingScreen(ModalScreen):
     """Modal screen displaying a message while saving history and exiting."""
@@ -149,20 +325,25 @@ class ExitSavingScreen(ModalScreen):
         )
 
 class ChatBubble(Vertical):
-    def __init__(self, header: str, raw_content: str, role: str, message_number: int | None = None, msg_data: dict | None = None, **kwargs):
+    editing = reactive(False)
+
+    def __init__(self, header: str, raw_content: str, role: str, message_number: int | None = None, msg_data: dict | None = None, history_index: int | None = None, **kwargs):
         super().__init__(**kwargs)
         self.header = header
         self.raw_content = raw_content
         self.role = role
         self.message_number = message_number
         self.msg_data = msg_data
+        self.history_index = history_index
+        self.can_focus = True
 
         bubble_class = "user_bubble" if role == "user" else "ai_bubble"
         self.add_class("message")
         self.add_class(bubble_class)
 
     def compose(self) -> ComposeResult:
-        yield Static(self.header, markup=True, classes="bubble_header")
+        normal_widgets = []
+        normal_widgets.append(Static(self.header, markup=True, classes="bubble_header"))
 
         indicator = ""
         if self.msg_data and self.role == "assistant":
@@ -186,18 +367,173 @@ class ChatBubble(Vertical):
                 if indicator and i == last_text_idx:
                     formatted_text += indicator
                     indicator = ""
-                yield Static(formatted_text, markup=True, classes="bubble_text")
+                normal_widgets.append(Static(formatted_text, markup=True, classes="bubble_text"))
             elif chunk["type"] == "image":
                 image_protocol = get_setting("image_protocol", "auto")
                 if image_protocol == "none":
                     desc = chunk["alt"] if chunk["alt"] else chunk["url"]
-                    yield Static(f"🖼️ [Image: {desc}]", classes="bubble_image_fallback")
+                    normal_widgets.append(Static(f"🖼️ [Image: {desc}]", classes="bubble_image_fallback"))
                 else:
                     desc = chunk["alt"] if chunk["alt"] else os.path.basename(chunk["url"])
-                    yield Static(f"[dim]🖼️ Image: {desc}[/dim]", markup=True, classes="bubble_image_indicator")
+                    normal_widgets.append(Static(f"[dim]🖼️ Image: {desc}[/dim]", markup=True, classes="bubble_image_indicator"))
 
         if indicator:
-            yield Static(indicator, markup=True, classes="bubble_text")
+            normal_widgets.append(Static(indicator, markup=True, classes="bubble_text"))
+
+        yield Vertical(*normal_widgets, id="normal_content")
+
+        yield Vertical(
+            InlineEditor(role=self.role, id="editor_textarea"),
+            Horizontal(
+                Button("Save (Ctrl+S)", id="btn_save", variant="primary"),
+                Button("Cancel (Esc)", id="btn_cancel"),
+                id="editor_buttons"
+            ),
+            id="editor_content"
+        )
+
+    def on_mount(self) -> None:
+        try:
+            self.query_one("#editor_content", Vertical).display = self.editing
+            self.query_one("#normal_content", Vertical).display = not self.editing
+        except Exception:
+            pass
+
+    def watch_editing(self, editing: bool) -> None:
+        try:
+            normal = self.query_one("#normal_content", Vertical)
+            editor = self.query_one("#editor_content", Vertical)
+            normal_height = normal.size.height
+            normal.display = not editing
+            editor.display = editing
+            if editing:
+                ta = self.query_one("#editor_textarea", InlineEditor)
+                ta.text = self.raw_content
+                if normal_height > 0:
+                    ta.styles.height = max(4, normal_height)
+                else:
+                    ta.styles.height = 6
+                ta.focus()
+        except Exception:
+            pass
+
+    def on_click(self, event: events.Click) -> None:
+        if self.editing:
+            return
+        if getattr(event, "chain", 0) == 2 or getattr(event, "click_count", 0) == 2:
+            self.editing = True
+            event.stop()
+
+    def on_key(self, event: events.Key) -> None:
+        if event.key.lower() == "e" and not self.editing:
+            self.editing = True
+            event.stop()
+        elif event.key == "escape" and self.editing:
+            self.editing = False
+            self.focus()
+            event.stop()
+
+    def on_button_pressed(self, event: Button.Pressed) -> None:
+        if event.button.id == "btn_save":
+            ta = self.query_one("#editor_textarea", InlineEditor)
+            self.save_edit(ta.text)
+        elif event.button.id == "btn_cancel":
+            self.editing = False
+            self.focus()
+
+    def save_edit(self, new_text: str) -> None:
+        new_text = new_text.strip()
+        
+        history_index = self.history_index
+        if history_index is None:
+            try:
+                history = memory_manager.load_history(self.app.history_profile_name)
+                for idx in range(len(history) - 1, -1, -1):
+                    msg = history[idx]
+                    if msg.get("role") == self.role:
+                        content = msg.get("content", "").strip()
+                        raw_to_match = getattr(self, "raw_text", self.raw_content)
+                        if content == self.raw_content.strip() or content == raw_to_match.strip():
+                            history_index = idx
+                            self.history_index = idx
+                            break
+            except Exception:
+                pass
+
+        if history_index is None:
+            self.editing = False
+            self.focus()
+            return
+
+        self.raw_content = new_text
+        if self.role == "user":
+            self.raw_text = new_text
+
+        try:
+            history = memory_manager.load_history(self.app.history_profile_name)
+            if 0 <= self.history_index < len(history):
+                history[self.history_index]["content"] = new_text
+                
+                # Variant Swiping Support
+                if "alternatives" in history[self.history_index]:
+                    alternatives = history[self.history_index]["alternatives"]
+                    selected_index = history[self.history_index].get("selected_index", 0)
+                    if 0 <= selected_index < len(alternatives):
+                        alternatives[selected_index] = new_text
+                        
+                memory_manager.save_history(self.app.history_profile_name, history)
+        except Exception as e:
+            self.app.add_message(f"[ERROR] Failed to save edited message: {e}", role="system")
+
+        self.rebuild_normal_content()
+        self.editing = False
+        self.focus()
+
+    def rebuild_normal_content(self) -> None:
+        try:
+            normal_container = self.query_one("#normal_content", Vertical)
+            for child in list(normal_container.children):
+                child.remove()
+
+            normal_container.mount(Static(self.header, markup=True, classes="bubble_header"))
+
+            indicator = ""
+            if self.msg_data and self.role == "assistant":
+                alternatives = self.msg_data.get("alternatives", [])
+                if alternatives:
+                    idx = self.msg_data.get("selected_index", 0)
+                    indicator = f"\n\n[dim]< {idx + 1}/{len(alternatives)} >[/dim]"
+
+            chunks = parse_message_content(self.raw_content)
+
+            last_text_idx = -1
+            for i in range(len(chunks) - 1, -1, -1):
+                if chunks[i]["type"] == "text":
+                    last_text_idx = i
+                    break
+
+            for i, chunk in enumerate(chunks):
+                if chunk["type"] == "text":
+                    formatted_text = self.app.format_rp(chunk["content"], role=self.role)
+                    if indicator and i == last_text_idx:
+                        formatted_text += indicator
+                        indicator = ""
+                    normal_container.mount(Static(formatted_text, markup=True, classes="bubble_text"))
+                elif chunk["type"] == "image":
+                    image_protocol = get_setting("image_protocol", "auto")
+                    if image_protocol == "none":
+                        desc = chunk["alt"] if chunk["alt"] else chunk["url"]
+                        normal_container.mount(Static(f"🖼️ [Image: {desc}]", classes="bubble_image_fallback"))
+                    else:
+                        desc = chunk["alt"] if chunk["alt"] else os.path.basename(chunk["url"])
+                        normal_container.mount(Static(f"[dim]🖼️ Image: {desc}[/dim]", markup=True, classes="bubble_image_indicator"))
+
+            if indicator:
+                normal_container.mount(Static(indicator, markup=True, classes="bubble_text"))
+                
+            self.refresh(layout=True)
+        except Exception:
+            pass
 
 
 class ImageBubble(Vertical):
@@ -453,6 +789,19 @@ class TaiMenu(App):
                 pass
             self.optimize_and_mount_bubble_image(bubble.image_url, bubble)
 
+    def update_highlight_themes(self) -> None:
+        """Refresh syntax highlight themes on the active ChatInput and any visible InlineEditors."""
+        try:
+            chat_input = self.query_one("#user_input", ChatInput)
+            chat_input.update_highlight_theme()
+        except Exception:
+            pass
+        for editor in self.query(InlineEditor):
+            try:
+                editor.update_highlight_theme()
+            except Exception:
+                pass
+
     def watch_show_sidebar(self, show: bool) -> None:
         """Called when show_sidebar reactive property changes."""
         try:
@@ -553,12 +902,20 @@ class TaiMenu(App):
             if total > 1:
                 msg_data = {"alternatives": [""] * total, "selected_index": index}
 
+            history_index = None
+            if self.history_profile_name:
+                try:
+                    history_index = len(memory_manager.load_history(self.history_profile_name)) - 1
+                except Exception:
+                    pass
+
             new_bubble = ChatBubble(
                 header=header,
                 raw_content=content,
                 role="assistant",
                 message_number=msg_number,
                 msg_data=msg_data,
+                history_index=history_index,
             )
             msg_row.mount(new_bubble, before=last_ai)
             last_ai.remove()
@@ -814,6 +1171,7 @@ class TaiMenu(App):
         self.remount_avatar_widgets()
         self.update_sidebar()
         self.remount_all_image_bubbles()
+        self.update_highlight_themes()
 
     def compose(self) -> ComposeResult:
         self._current_char_avatar_path, self._current_user_avatar_path = get_initial_avatar_paths(
@@ -957,6 +1315,7 @@ class TaiMenu(App):
         self.populate_tts_engines()
         self.populate_image_protocols()
         self.populate_interaction_modes()
+        self.update_highlight_themes()
 
     @staticmethod
     def format_summary(summary: str) -> str:
@@ -1303,7 +1662,7 @@ class TaiMenu(App):
             # Short history: show all in full
             self.add_message(f"--- Recap: {len(messages_history)} messages loaded ---", role="system")
             visible_count = 0
-            for msg_data in messages_history:
+            for idx, msg_data in enumerate(messages_history):
                 role = msg_data.get("role", "assistant")
                 content = msg_data.get("content", "")
                 if role != "system":
@@ -1313,7 +1672,7 @@ class TaiMenu(App):
                     if not (role == "user" and not content):
                         visible_count += 1
                         message_number = visible_count
-                self.add_message(content, role=role, msg_data=msg_data, message_number=message_number)
+                self.add_message(content, role=role, msg_data=msg_data, message_number=message_number, history_index=idx)
             self._visible_message_count = visible_count
             self.add_message("--- Recap complete ---", role="system")
             return
@@ -1337,7 +1696,7 @@ class TaiMenu(App):
                     if r in ("user", "assistant"):
                         if not (r == "user" and not c):
                             visible_count += 1
-                for msg_data in recent_history:
+                for idx, msg_data in enumerate(recent_history):
                     role = msg_data.get("role", "assistant")
                     content = msg_data.get("content", "")
                     if role != "system":
@@ -1347,7 +1706,7 @@ class TaiMenu(App):
                         if not (role == "user" and not content):
                             visible_count += 1
                             message_number = visible_count
-                    self.add_message(content, role=role, msg_data=msg_data, message_number=message_number)
+                    self.add_message(content, role=role, msg_data=msg_data, message_number=message_number, history_index=last_index + idx)
                 self._visible_message_count = visible_count
 
                 self.add_message("--- Recap complete ---", role="system")
@@ -1400,7 +1759,7 @@ class TaiMenu(App):
                 if r in ("user", "assistant"):
                     if not (r == "user" and not c):
                         visible_count += 1
-            for msg_data in recent_history:
+            for idx, msg_data in enumerate(recent_history):
                 role = msg_data.get("role", "assistant")
                 content = msg_data.get("content", "")
                 if role != "system":
@@ -1410,7 +1769,7 @@ class TaiMenu(App):
                     if not (role == "user" and not content):
                         visible_count += 1
                         message_number = visible_count
-                self.add_message(content, role=role, msg_data=msg_data, message_number=message_number)
+                self.add_message(content, role=role, msg_data=msg_data, message_number=message_number, history_index=recent_start_index + idx)
             self._visible_message_count = visible_count
             self.add_message("--- Recap complete ---", role="system")
 
@@ -1560,7 +1919,7 @@ class TaiMenu(App):
         else:
             self.remote_status = ""
 
-    def add_message(self, text, role="user", msg_data=None, message_number: int | None = None, raw_text: str | None = None):
+    def add_message(self, text, role="user", msg_data=None, message_number: int | None = None, raw_text: str | None = None, history_index: int | None = None):
         if role == "user" and not text:
             # Skip empty user messages to keep UI clean of empty bubble boxes
             return
@@ -1621,7 +1980,8 @@ class TaiMenu(App):
                 raw_content=raw_content,
                 role=role,
                 message_number=message_number,
-                msg_data=msg_data
+                msg_data=msg_data,
+                history_index=history_index
             )
             if role == "user":
                 bubble.raw_text = raw_content
@@ -1656,7 +2016,7 @@ class TaiMenu(App):
 
         history = memory_manager.load_history(self.history_profile_name)
         visible_count = 0
-        for index, msg_data in enumerate(history, start=1):
+        for idx, msg_data in enumerate(history):
             role = msg_data.get("role", "assistant")
             content = msg_data.get("content", "")
             if role != "system":
@@ -1666,7 +2026,7 @@ class TaiMenu(App):
                 if not (role == "user" and not content):
                     visible_count += 1
                     message_number = visible_count
-            self.add_message(content, role=role, msg_data=msg_data, message_number=message_number)
+            self.add_message(content, role=role, msg_data=msg_data, message_number=message_number, history_index=idx)
         self._visible_message_count = visible_count
 
     async def on_chat_input_submitted(self, event: ChatInput.Submitted) -> None:
@@ -1963,12 +2323,20 @@ class TaiMenu(App):
         # Swap the streaming Static widget to a fully formatted ChatBubble widget
         def swap_to_bubble():
             try:
+                history_index = None
+                if self.history_profile_name:
+                    try:
+                        history_index = len(memory_manager.load_history(self.history_profile_name)) - 1
+                    except Exception:
+                        pass
+
                 bubble = ChatBubble(
                     header=header,
                     raw_content=full_response,
                     role="assistant",
                     message_number=assistant_message_number,
-                    msg_data=msg_data
+                    msg_data=msg_data,
+                    history_index=history_index
                 )
 
                 parent = ai_msg.parent

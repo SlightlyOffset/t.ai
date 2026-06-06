@@ -28,8 +28,9 @@ class TestChatBubble(unittest.TestCase):
         # Override the read-only app property
         type(bubble).app = property(lambda self: mock_app)
         
-        # Get composed widgets from generator
-        widgets = list(bubble.compose())
+        # Get composed widgets from normal_content generator
+        normal_content = next(w for w in bubble.compose() if w.id == "normal_content")
+        widgets = list(normal_content._pending_children)
         
         # Verify the children widgets were composed correctly
         # Header, Text 1, Fallback image, Text 2
@@ -56,7 +57,8 @@ class TestChatBubble(unittest.TestCase):
         )
         type(bubble).app = property(lambda self: mock_app)
         
-        widgets = list(bubble.compose())
+        normal_content = next(w for w in bubble.compose() if w.id == "normal_content")
+        widgets = list(normal_content._pending_children)
         
         # Header, Text, Inline indicator (NOT a loading placeholder)
         self.assertEqual(len(widgets), 3)
@@ -80,7 +82,8 @@ class TestChatBubble(unittest.TestCase):
         )
         type(bubble).app = property(lambda self: mock_app)
 
-        widgets = list(bubble.compose())
+        normal_content = next(w for w in bubble.compose() if w.id == "normal_content")
+        widgets = list(normal_content._pending_children)
         
         # Ensure NO widgets have the old loading class
         for widget in widgets:
@@ -105,7 +108,8 @@ class TestChatBubble(unittest.TestCase):
         )
         type(bubble).app = property(lambda self: mock_app)
         
-        widgets = list(bubble.compose())
+        normal_content = next(w for w in bubble.compose() if w.id == "normal_content")
+        widgets = list(normal_content._pending_children)
         
         # widgets[0]: Header
         # widgets[1]: First text chunk (should NOT contain the indicator)
@@ -162,6 +166,96 @@ class TestImageBubble(unittest.TestCase):
         """ImageBubble starts collapsed by default."""
         bubble = ImageBubble(image_url="test.png")
         self.assertTrue(bubble.collapsed)
+
+
+class TestChatBubbleEditingAndFormatting(unittest.TestCase):
+    def test_bubble_focusability(self):
+        bubble = ChatBubble(header="Nova:", raw_content="Hello", role="assistant")
+        self.assertTrue(bubble.can_focus)
+
+    def test_bubble_double_click_trigger(self):
+        bubble = ChatBubble(header="Nova:", raw_content="Hello", role="assistant")
+        self.assertFalse(bubble.editing)
+        
+        # Simulate click count 2 event
+        mock_event = MagicMock()
+        mock_event.click_count = 2
+        bubble.on_click(mock_event)
+        self.assertTrue(bubble.editing)
+
+    def test_bubble_key_e_trigger(self):
+        bubble = ChatBubble(header="Nova:", raw_content="Hello", role="assistant")
+        self.assertFalse(bubble.editing)
+        
+        # Simulate 'e' key press
+        mock_event = MagicMock()
+        mock_event.key = "e"
+        bubble.on_key(mock_event)
+        self.assertTrue(bubble.editing)
+
+    def test_bubble_save_edit_mutates_history(self):
+        """save_edit() should update history content and alternatives via memory_manager."""
+        bubble = ChatBubble(
+            header="Nova:",
+            raw_content="Original reply",
+            role="assistant",
+            history_index=1,
+            msg_data={"alternatives": ["First draft", "Original reply"], "selected_index": 1},
+        )
+        mock_app = MagicMock()
+        mock_app.format_rp = lambda text, role: text
+        mock_app.history_profile_name = "TestAI"
+        type(bubble).app = property(lambda self: mock_app)
+
+        mock_history = [
+            {"role": "user", "content": "Hello"},
+            {"role": "assistant", "content": "Original reply", "alternatives": ["First draft", "Original reply"], "selected_index": 1},
+        ]
+
+        with patch("ui.menu.memory_manager") as mock_mm:
+            mock_mm.load_history.return_value = mock_history
+            # Stub rebuild to avoid widget tree operations
+            bubble.rebuild_normal_content = MagicMock()
+
+            bubble.save_edit("Edited reply")
+
+            # Verify history was mutated
+            self.assertEqual(mock_history[1]["content"], "Edited reply")
+            self.assertEqual(mock_history[1]["alternatives"][1], "Edited reply")
+            mock_mm.save_history.assert_called_once_with("TestAI", mock_history)
+
+        self.assertFalse(bubble.editing)
+        self.assertEqual(bubble.raw_content, "Edited reply")
+
+    def test_bubble_save_edit_resolves_history_index_fallback(self):
+        """save_edit() should resolve history_index via reverse lookup when not pre-set."""
+        bubble = ChatBubble(
+            header="User:",
+            raw_content="My message",
+            role="user",
+            history_index=None,
+        )
+        mock_app = MagicMock()
+        mock_app.format_rp = lambda text, role: text
+        mock_app.history_profile_name = "TestAI"
+        type(bubble).app = property(lambda self: mock_app)
+
+        mock_history = [
+            {"role": "assistant", "content": "Hi there"},
+            {"role": "user", "content": "My message"},
+            {"role": "assistant", "content": "Response"},
+        ]
+
+        with patch("ui.menu.memory_manager") as mock_mm:
+            mock_mm.load_history.return_value = mock_history
+            bubble.rebuild_normal_content = MagicMock()
+
+            bubble.save_edit("Edited message")
+
+            # Verify the index was resolved via reverse lookup
+            self.assertEqual(bubble.history_index, 1)
+            self.assertEqual(mock_history[1]["content"], "Edited message")
+            mock_mm.save_history.assert_called_once_with("TestAI", mock_history)
 
 
 if __name__ == "__main__":
