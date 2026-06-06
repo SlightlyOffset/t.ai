@@ -445,7 +445,24 @@ class ChatBubble(Vertical):
 
     def save_edit(self, new_text: str) -> None:
         new_text = new_text.strip()
-        if self.history_index is None:
+        
+        history_index = self.history_index
+        if history_index is None:
+            try:
+                history = memory_manager.load_history(self.app.history_profile_name)
+                for idx in range(len(history) - 1, -1, -1):
+                    msg = history[idx]
+                    if msg.get("role") == self.role:
+                        content = msg.get("content", "").strip()
+                        raw_to_match = getattr(self, "raw_text", self.raw_content)
+                        if content == self.raw_content.strip() or content == raw_to_match.strip():
+                            history_index = idx
+                            self.history_index = idx
+                            break
+            except Exception:
+                pass
+
+        if history_index is None:
             self.editing = False
             self.focus()
             return
@@ -874,12 +891,20 @@ class TaiMenu(App):
             if total > 1:
                 msg_data = {"alternatives": [""] * total, "selected_index": index}
 
+            history_index = None
+            if self.history_profile_name:
+                try:
+                    history_index = len(memory_manager.load_history(self.history_profile_name)) - 1
+                except Exception:
+                    pass
+
             new_bubble = ChatBubble(
                 header=header,
                 raw_content=content,
                 role="assistant",
                 message_number=msg_number,
                 msg_data=msg_data,
+                history_index=history_index,
             )
             msg_row.mount(new_bubble, before=last_ai)
             last_ai.remove()
@@ -2285,12 +2310,20 @@ class TaiMenu(App):
         # Swap the streaming Static widget to a fully formatted ChatBubble widget
         def swap_to_bubble():
             try:
+                history_index = None
+                if self.history_profile_name:
+                    try:
+                        history_index = len(memory_manager.load_history(self.history_profile_name)) - 1
+                    except Exception:
+                        pass
+
                 bubble = ChatBubble(
                     header=header,
                     raw_content=full_response,
                     role="assistant",
                     message_number=assistant_message_number,
-                    msg_data=msg_data
+                    msg_data=msg_data,
+                    history_index=history_index
                 )
 
                 parent = ai_msg.parent
