@@ -15,7 +15,10 @@ A lightweight, highly immersive, profile-based AI companion that lives in your t
 * **Sixel/Kitty Image Rendering**: High-fidelity character portraits integrated directly into the terminal for deeper immersion.
 * **Real-time Streaming**: Watch your companion "think" and type in real-time within immersive side-bordered bubbles.
 * **Immersive Styling**: Automatic italicization and dimming of RP narration (`*actions*`) to separate dialogue from description.
+* **Live As-You-Type Highlight**: Real-time syntax highlighting in the chat input and message editor as you type. Highlights speech (`"dialogue"`, color-customized to active character/user profiles), narration (`*actions*`), and exposition (`(thoughts)`) dynamically.
+* **In-App Message Editing & History Mutation**: Edit any sent or received message inline within the chat list. Changes are dynamically persisted to the session history.
 * **Persistent Sidebars & Header Optimizations**: Real-time tracking of relationship scores, status labels, and active profiles (Toggle with `Ctrl+B`). Optimized rendering loops (clockless headers) to eliminate lagging and flickering.
+
 
 ### 🎙️ Advanced Audio & Voice Cloning
 
@@ -159,6 +162,9 @@ Inside the chat, you can use operational commands or keyboard shortcuts:
 * `Ctrl+B`: Toggle sidebar visibility.
 * `Ctrl+S`: Open settings configuration window.
 * `Ctrl+T`: Open the session selection and management modal screen.
+* `Double-Click` or `e` (on a message bubble): Edit the message inline.
+  * `Ctrl+S` (while editing): Save modifications and atomically update history.
+  * `Esc` (while editing): Revert changes and exit edit mode.
 * `//help`: Show all commands.
 * `//settings`: Open the tabbed configuration settings screen.
 * `//mode [rp|casual]`: Displays or changes the active interaction mode.
