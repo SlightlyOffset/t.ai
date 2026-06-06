@@ -28,8 +28,9 @@ class TestChatBubble(unittest.TestCase):
         # Override the read-only app property
         type(bubble).app = property(lambda self: mock_app)
         
-        # Get composed widgets from generator
-        widgets = list(bubble.compose())
+        # Get composed widgets from normal_content generator
+        normal_content = next(w for w in bubble.compose() if w.id == "normal_content")
+        widgets = list(normal_content._pending_children)
         
         # Verify the children widgets were composed correctly
         # Header, Text 1, Fallback image, Text 2
@@ -56,7 +57,8 @@ class TestChatBubble(unittest.TestCase):
         )
         type(bubble).app = property(lambda self: mock_app)
         
-        widgets = list(bubble.compose())
+        normal_content = next(w for w in bubble.compose() if w.id == "normal_content")
+        widgets = list(normal_content._pending_children)
         
         # Header, Text, Inline indicator (NOT a loading placeholder)
         self.assertEqual(len(widgets), 3)
@@ -80,7 +82,8 @@ class TestChatBubble(unittest.TestCase):
         )
         type(bubble).app = property(lambda self: mock_app)
 
-        widgets = list(bubble.compose())
+        normal_content = next(w for w in bubble.compose() if w.id == "normal_content")
+        widgets = list(normal_content._pending_children)
         
         # Ensure NO widgets have the old loading class
         for widget in widgets:
@@ -105,7 +108,8 @@ class TestChatBubble(unittest.TestCase):
         )
         type(bubble).app = property(lambda self: mock_app)
         
-        widgets = list(bubble.compose())
+        normal_content = next(w for w in bubble.compose() if w.id == "normal_content")
+        widgets = list(normal_content._pending_children)
         
         # widgets[0]: Header
         # widgets[1]: First text chunk (should NOT contain the indicator)
@@ -162,6 +166,50 @@ class TestImageBubble(unittest.TestCase):
         """ImageBubble starts collapsed by default."""
         bubble = ImageBubble(image_url="test.png")
         self.assertTrue(bubble.collapsed)
+
+
+class TestChatBubbleEditingAndFormatting(unittest.TestCase):
+    def test_bubble_focusability(self):
+        bubble = ChatBubble(header="Nova:", raw_content="Hello", role="assistant")
+        self.assertTrue(bubble.can_focus)
+
+    def test_bubble_double_click_trigger(self):
+        bubble = ChatBubble(header="Nova:", raw_content="Hello", role="assistant")
+        self.assertFalse(bubble.editing)
+        
+        # Simulate click count 2 event
+        mock_event = MagicMock()
+        mock_event.click_count = 2
+        bubble.on_click(mock_event)
+        self.assertTrue(bubble.editing)
+
+    def test_bubble_key_e_trigger(self):
+        bubble = ChatBubble(header="Nova:", raw_content="Hello", role="assistant")
+        self.assertFalse(bubble.editing)
+        
+        # Simulate 'e' key press
+        mock_event = MagicMock()
+        mock_event.key = "e"
+        bubble.on_key(mock_event)
+        self.assertTrue(bubble.editing)
+
+    def test_syntax_highlighting_parsing(self):
+        from ui.menu import InlineEditor
+        editor = InlineEditor(role="user")
+        editor.text = 'He said, "Hello *world*." (sitting down)'
+        
+        # Manually trigger _build_highlight_map
+        editor._build_highlight_map()
+        
+        # Verify the highlights populated in line 0
+        highlights = editor._highlights[0]
+        # Exposition: (sitting down)
+        # Narration: *world* (skipped due to overlap in speech)
+        # Speech: "Hello *world*."
+        
+        token_types = [h[2] for h in highlights]
+        self.assertIn("speech", token_types)
+        self.assertIn("exposition", token_types)
 
 
 if __name__ == "__main__":
