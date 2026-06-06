@@ -95,7 +95,10 @@ def build_sidebar_state(
     char_avatar_abs = resolve_avatar_abs_path(character_profile.get("avatar_path", DEFAULT_AVATAR_PATH))
     user_avatar_abs = resolve_avatar_abs_path((user_profile or {}).get("avatar_path", DEFAULT_AVATAR_PATH))
 
-    rel = character_profile.get("relationship_score", 0)
+    try:
+        rel = float(character_profile.get("relationship_score", 0))
+    except (ValueError, TypeError):
+        rel = 0.0
     rel_rule = get_relationship_rule(rel)
  
     return {
@@ -103,7 +106,7 @@ def build_sidebar_state(
         "user_avatar_abs": user_avatar_abs,
         "char_label": f"Name: [bold {char_name_lbl_color}]{ch_name}[/bold {char_name_lbl_color}]",
         "status_label": f"Status: [bold {rel_rule.get('color', '#6e88ff')}]{rel_rule.get('label', 'Neutral / Acquaintance')}[/bold {rel_rule.get('color', '#6e88ff')}]",
-        "rel_label": f"Score: [bold]{rel}[/bold]",
+        "rel_label": f"Score: [bold]{rel:.2f}[/bold]",
         "user_label": f"User: [bold {user_name_lbl_color}]{user_name}[/bold {user_name_lbl_color}]",
         "rel_progress": rel + 100,
     }

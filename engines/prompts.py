@@ -12,7 +12,7 @@ RP_RULES_PATH = "response_rule/rp_rule.md"
 CASUAL_RULES_PATH = "response_rule/casual_rule.md"
 RELATIONSHIP_INTENSITY_PATH = "response_rule/relationship_intensity.json"
 
-def get_relationship_rule(rel_score: int) -> dict:
+def get_relationship_rule(rel_score: int | float) -> dict:
     """
     Loads the relationship_intensity.json and returns the correct rule object
     based on the current relationship score.
@@ -55,7 +55,7 @@ def load_user_profile():
             return None
     return None
 
-def build_system_prompt(profile: dict, rel_score: int, mode: str = "rp", system_extra_info: str = None) -> str:
+def build_system_prompt(profile: dict, rel_score: int | float, mode: str = "rp", system_extra_info: str = None) -> str:
     """
     Constructs the master system prompt for the LLM.
     Combines character backstory, mannerisms, user details, and behavioral rules.
@@ -115,7 +115,7 @@ Mannerisms to watch for: {', '.join(user_profile.get('rp_mannerisms', []))}
 {user_details}
 
 [CONTEXT]
-Rel: {rel_label} ({rel_score}/100)
+Rel: {rel_label} ({rel_score:.2f}/100)
 Mode: {mode.upper()}
 {rel_instruction}
 """

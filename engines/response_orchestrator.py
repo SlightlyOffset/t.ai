@@ -37,6 +37,7 @@ def iterate_response_events(
     history_profile_name: str,
     is_regeneration: bool = False,
     user_name: str = "User",
+    post_process_callback = None,
 ):
     """
     Yield response streaming events decoupled from UI concerns.
@@ -56,6 +57,7 @@ def iterate_response_events(
         history_profile_name=history_profile_name,
         is_regeneration=is_regeneration,
         user_name=user_name,
+        post_process_callback=post_process_callback,
     ):
         full_response += chunk
         current_buffer += chunk
