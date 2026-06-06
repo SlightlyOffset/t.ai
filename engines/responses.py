@@ -152,10 +152,14 @@ def get_sentiment_score(user_input: str, model: str, remote_url: str = None, pro
     # Prepend up to 3 past messages for context
     if recent_history:
         for msg in recent_history[-3:]:
-            messages.append({
-                "role": msg.get("role"),
-                "content": msg.get("content")
-            })
+            if isinstance(msg, dict):
+                role = msg.get("role")
+                content = msg.get("content")
+                if role in ("user", "assistant") and isinstance(content, str) and content.strip():
+                    messages.append({
+                        "role": role,
+                        "content": content
+                    })
 
     messages.append({
         "role": "user",

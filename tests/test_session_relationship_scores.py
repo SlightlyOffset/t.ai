@@ -362,6 +362,33 @@ class TestSessionRelationshipScores(unittest.TestCase):
         self.assertEqual(called_messages[3]["content"], "Do you like cookies?")
         self.assertIn("[USER_MSG]\nYes, I love them!", called_messages[4]["content"])
 
+    @patch("engines.responses.ollama.chat")
+    @patch("engines.responses.get_setting")
+    def test_get_sentiment_score_handles_malformed_history(self, mock_get_setting, mock_ollama_chat):
+        from engines.responses import get_sentiment_score
+        mock_get_setting.return_value = "llama3.2"
+        mock_ollama_chat.return_value = {"message": {"content": '{"rel": 2}'}}
+
+        # Malformed entries: non-dict, missing role/content, wrong role, empty content
+        recent_history = [
+            "corrupt_string_entry",
+            {"role": "user", "content": None},
+            {"role": "system", "content": "should be ignored"},
+            {"role": "assistant", "content": "  "},
+            {"role": "assistant", "content": "Valid helper message"},
+            None
+        ]
+
+        profile = {"name": "TestAI"}
+        score = get_sentiment_score("Hello", model="llama3.2", profile=profile, recent_history=recent_history)
+        
+        self.assertEqual(score, 2)
+        called_messages = mock_ollama_chat.call_args[1]["messages"]
+        # Should contain: 1 system, 1 valid assistant history message, 1 user_input = 3 total messages
+        self.assertEqual(len(called_messages), 3)
+        self.assertEqual(called_messages[1]["role"], "assistant")
+        self.assertEqual(called_messages[1]["content"], "Valid helper message")
+
 
 if __name__ == "__main__":
     unittest.main()
