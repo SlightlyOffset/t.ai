@@ -149,9 +149,6 @@ class ChatInput(TextArea):
                 if start >= last_end:
                     resolved_ranges.append((start, end, token_type))
                     last_end = end
-                elif end > last_end and start >= last_end:
-                    resolved_ranges.append((last_end, end, token_type))
-                    last_end = end
                     
             for start, end, token_type in resolved_ranges:
                 start_byte = len(line[:start].encode("utf-8"))
@@ -257,9 +254,6 @@ class InlineEditor(TextArea):
             for start, end, token_type in ranges:
                 if start >= last_end:
                     resolved_ranges.append((start, end, token_type))
-                    last_end = end
-                elif end > last_end and start >= last_end:
-                    resolved_ranges.append((last_end, end, token_type))
                     last_end = end
                     
             for start, end, token_type in resolved_ranges:
@@ -433,6 +427,10 @@ class ChatBubble(Vertical):
     def on_key(self, event: events.Key) -> None:
         if event.key.lower() == "e" and not self.editing:
             self.editing = True
+            event.stop()
+        elif event.key == "escape" and self.editing:
+            self.editing = False
+            self.focus()
             event.stop()
 
     def on_button_pressed(self, event: Button.Pressed) -> None:
@@ -790,6 +788,23 @@ class TaiMenu(App):
             except Exception:
                 pass
             self.optimize_and_mount_bubble_image(bubble.image_url, bubble)
+
+    def update_highlight_themes(self) -> None:
+        """Helper to trigger theme updates on input and editing fields when profiles/settings change."""
+        if not getattr(self, "_screen_stack", None):
+            return
+        try:
+            self.query_one("#user_input", ChatInput).update_highlight_theme()
+        except Exception:
+            pass
+        try:
+            for editor in self.query(InlineEditor):
+                try:
+                    editor.update_highlight_theme()
+                except Exception:
+                    pass
+        except Exception:
+            pass
 
     def watch_show_sidebar(self, show: bool) -> None:
         """Called when show_sidebar reactive property changes."""
@@ -1160,6 +1175,7 @@ class TaiMenu(App):
         self.remount_avatar_widgets()
         self.update_sidebar()
         self.remount_all_image_bubbles()
+        self.update_highlight_themes()
 
     def compose(self) -> ComposeResult:
         self._current_char_avatar_path, self._current_user_avatar_path = get_initial_avatar_paths(
@@ -1303,6 +1319,7 @@ class TaiMenu(App):
         self.populate_tts_engines()
         self.populate_image_protocols()
         self.populate_interaction_modes()
+        self.update_highlight_themes()
 
     @staticmethod
     def format_summary(summary: str) -> str:

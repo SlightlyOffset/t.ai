@@ -211,6 +211,71 @@ class TestChatBubbleEditingAndFormatting(unittest.TestCase):
         self.assertIn("speech", token_types)
         self.assertIn("exposition", token_types)
 
+    @patch('ui.menu.memory_manager')
+    def test_bubble_save_edit_mutates_history(self, mock_memory_manager):
+        # Setup mock app and mock history
+        mock_app = MagicMock()
+        mock_app.history_profile_name = "TestAI"
+        mock_app.format_rp = lambda text, role: text
+        
+        mock_history = [
+            {"role": "user", "content": "Original message"},
+            {"role": "assistant", "content": "Original response", "alternatives": ["Alt 1", "Original response"], "selected_index": 1}
+        ]
+        mock_memory_manager.load_history.return_value = mock_history
+        
+        bubble = ChatBubble(
+            header="Nova:",
+            raw_content="Original response",
+            role="assistant",
+            history_index=1,
+            msg_data=mock_history[1]
+        )
+        type(bubble).app = property(lambda self: mock_app)
+        
+        # We mock rebuild_normal_content to avoid needing to compose/mount widgets
+        with patch.object(bubble, 'rebuild_normal_content'):
+            bubble.save_edit("New response content")
+            
+            # Assert history is updated
+            self.assertEqual(mock_history[1]["content"], "New response content")
+            # Assert variant is also updated
+            self.assertEqual(mock_history[1]["alternatives"][1], "New response content")
+            
+            # Assert save_history was called with updated history
+            mock_memory_manager.save_history.assert_called_once_with("TestAI", mock_history)
+            
+            # Assert editing state is set to False
+            self.assertFalse(bubble.editing)
+
+    @patch('ui.menu.memory_manager')
+    def test_bubble_save_edit_resolves_history_index_fallback(self, mock_memory_manager):
+        mock_app = MagicMock()
+        mock_app.history_profile_name = "TestAI"
+        mock_app.format_rp = lambda text, role: text
+        
+        mock_history = [
+            {"role": "user", "content": "Original user message"},
+            {"role": "assistant", "content": "Original response"}
+        ]
+        mock_memory_manager.load_history.return_value = mock_history
+        
+        bubble = ChatBubble(
+            header="User:",
+            raw_content="Original user message",
+            role="user",
+            history_index=None
+        )
+        type(bubble).app = property(lambda self: mock_app)
+        
+        with patch.object(bubble, 'rebuild_normal_content'):
+            bubble.save_edit("New user message")
+            
+            # Assert index was resolved to 0
+            self.assertEqual(bubble.history_index, 0)
+            self.assertEqual(mock_history[0]["content"], "New user message")
+            mock_memory_manager.save_history.assert_called_once_with("TestAI", mock_history)
+
 
 if __name__ == "__main__":
     unittest.main()
