@@ -409,11 +409,16 @@ class ChatBubble(Vertical):
         try:
             normal = self.query_one("#normal_content", Vertical)
             editor = self.query_one("#editor_content", Vertical)
+            normal_height = normal.size.height
             normal.display = not editing
             editor.display = editing
             if editing:
                 ta = self.query_one("#editor_textarea", InlineEditor)
                 ta.text = self.raw_content
+                if normal_height > 0:
+                    ta.styles.height = max(4, normal_height)
+                else:
+                    ta.styles.height = 6
                 ta.focus()
         except Exception:
             pass

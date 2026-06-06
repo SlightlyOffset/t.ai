@@ -245,4 +245,8 @@ Label {
 
 #editor_buttons Button {
     margin-right: 2;
+    height: 1;
+    min-width: 12;
+    border: none;
+    padding: 0 1;
 }
