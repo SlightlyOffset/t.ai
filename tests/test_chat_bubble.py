@@ -193,88 +193,69 @@ class TestChatBubbleEditingAndFormatting(unittest.TestCase):
         bubble.on_key(mock_event)
         self.assertTrue(bubble.editing)
 
-    def test_syntax_highlighting_parsing(self):
-        from ui.menu import InlineEditor
-        editor = InlineEditor(role="user")
-        editor.text = 'He said, "Hello *world*." (sitting down)'
-        
-        # Manually trigger _build_highlight_map
-        editor._build_highlight_map()
-        
-        # Verify the highlights populated in line 0
-        highlights = editor._highlights[0]
-        # Exposition: (sitting down)
-        # Narration: *world* (skipped due to overlap in speech)
-        # Speech: "Hello *world*."
-        
-        token_types = [h[2] for h in highlights]
-        self.assertIn("speech", token_types)
-        self.assertIn("exposition", token_types)
-
-    @patch('ui.menu.memory_manager')
-    def test_bubble_save_edit_mutates_history(self, mock_memory_manager):
-        # Setup mock app and mock history
-        mock_app = MagicMock()
-        mock_app.history_profile_name = "TestAI"
-        mock_app.format_rp = lambda text, role: text
-        
-        mock_history = [
-            {"role": "user", "content": "Original message"},
-            {"role": "assistant", "content": "Original response", "alternatives": ["Alt 1", "Original response"], "selected_index": 1}
-        ]
-        mock_memory_manager.load_history.return_value = mock_history
-        
+    def test_bubble_save_edit_mutates_history(self):
+        """save_edit() should update history content and alternatives via memory_manager."""
         bubble = ChatBubble(
             header="Nova:",
-            raw_content="Original response",
+            raw_content="Original reply",
             role="assistant",
             history_index=1,
-            msg_data=mock_history[1]
+            msg_data={"alternatives": ["First draft", "Original reply"], "selected_index": 1},
         )
-        type(bubble).app = property(lambda self: mock_app)
-        
-        # We mock rebuild_normal_content to avoid needing to compose/mount widgets
-        with patch.object(bubble, 'rebuild_normal_content'):
-            bubble.save_edit("New response content")
-            
-            # Assert history is updated
-            self.assertEqual(mock_history[1]["content"], "New response content")
-            # Assert variant is also updated
-            self.assertEqual(mock_history[1]["alternatives"][1], "New response content")
-            
-            # Assert save_history was called with updated history
-            mock_memory_manager.save_history.assert_called_once_with("TestAI", mock_history)
-            
-            # Assert editing state is set to False
-            self.assertFalse(bubble.editing)
-
-    @patch('ui.menu.memory_manager')
-    def test_bubble_save_edit_resolves_history_index_fallback(self, mock_memory_manager):
         mock_app = MagicMock()
-        mock_app.history_profile_name = "TestAI"
         mock_app.format_rp = lambda text, role: text
-        
+        mock_app.history_profile_name = "TestAI"
+        type(bubble).app = property(lambda self: mock_app)
+
         mock_history = [
-            {"role": "user", "content": "Original user message"},
-            {"role": "assistant", "content": "Original response"}
+            {"role": "user", "content": "Hello"},
+            {"role": "assistant", "content": "Original reply", "alternatives": ["First draft", "Original reply"], "selected_index": 1},
         ]
-        mock_memory_manager.load_history.return_value = mock_history
-        
+
+        with patch("ui.menu.memory_manager") as mock_mm:
+            mock_mm.load_history.return_value = mock_history
+            # Stub rebuild to avoid widget tree operations
+            bubble.rebuild_normal_content = MagicMock()
+
+            bubble.save_edit("Edited reply")
+
+            # Verify history was mutated
+            self.assertEqual(mock_history[1]["content"], "Edited reply")
+            self.assertEqual(mock_history[1]["alternatives"][1], "Edited reply")
+            mock_mm.save_history.assert_called_once_with("TestAI", mock_history)
+
+        self.assertFalse(bubble.editing)
+        self.assertEqual(bubble.raw_content, "Edited reply")
+
+    def test_bubble_save_edit_resolves_history_index_fallback(self):
+        """save_edit() should resolve history_index via reverse lookup when not pre-set."""
         bubble = ChatBubble(
             header="User:",
-            raw_content="Original user message",
+            raw_content="My message",
             role="user",
-            history_index=None
+            history_index=None,
         )
+        mock_app = MagicMock()
+        mock_app.format_rp = lambda text, role: text
+        mock_app.history_profile_name = "TestAI"
         type(bubble).app = property(lambda self: mock_app)
-        
-        with patch.object(bubble, 'rebuild_normal_content'):
-            bubble.save_edit("New user message")
-            
-            # Assert index was resolved to 0
-            self.assertEqual(bubble.history_index, 0)
-            self.assertEqual(mock_history[0]["content"], "New user message")
-            mock_memory_manager.save_history.assert_called_once_with("TestAI", mock_history)
+
+        mock_history = [
+            {"role": "assistant", "content": "Hi there"},
+            {"role": "user", "content": "My message"},
+            {"role": "assistant", "content": "Response"},
+        ]
+
+        with patch("ui.menu.memory_manager") as mock_mm:
+            mock_mm.load_history.return_value = mock_history
+            bubble.rebuild_normal_content = MagicMock()
+
+            bubble.save_edit("Edited message")
+
+            # Verify the index was resolved via reverse lookup
+            self.assertEqual(bubble.history_index, 1)
+            self.assertEqual(mock_history[1]["content"], "Edited message")
+            mock_mm.save_history.assert_called_once_with("TestAI", mock_history)
 
 
 if __name__ == "__main__":

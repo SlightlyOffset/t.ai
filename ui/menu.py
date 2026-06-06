@@ -790,21 +790,17 @@ class TaiMenu(App):
             self.optimize_and_mount_bubble_image(bubble.image_url, bubble)
 
     def update_highlight_themes(self) -> None:
-        """Helper to trigger theme updates on input and editing fields when profiles/settings change."""
-        if not getattr(self, "_screen_stack", None):
-            return
+        """Refresh syntax highlight themes on the active ChatInput and any visible InlineEditors."""
         try:
-            self.query_one("#user_input", ChatInput).update_highlight_theme()
+            chat_input = self.query_one("#user_input", ChatInput)
+            chat_input.update_highlight_theme()
         except Exception:
             pass
-        try:
-            for editor in self.query(InlineEditor):
-                try:
-                    editor.update_highlight_theme()
-                except Exception:
-                    pass
-        except Exception:
-            pass
+        for editor in self.query(InlineEditor):
+            try:
+                editor.update_highlight_theme()
+            except Exception:
+                pass
 
     def watch_show_sidebar(self, show: bool) -> None:
         """Called when show_sidebar reactive property changes."""
