@@ -213,6 +213,11 @@ Label {
     border: double $primary;
 }
 
+#normal_content {
+    width: 100%;
+    height: auto;
+}
+
 #editor_content {
     display: none;
     width: 100%;
