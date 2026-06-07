@@ -901,7 +901,15 @@ class TaiMenu(App):
             header = self._message_header("assistant", msg_number)
             msg_data = None
             if total > 1:
-                msg_data = {"alternatives": [""] * total, "selected_index": index}
+                alts = [""] * total
+                if self.history_profile_name:
+                    try:
+                        history = memory_manager.load_history(self.history_profile_name)
+                        if history and history[-1].get("role") == "assistant":
+                            alts = history[-1].get("alternatives", [""] * total)
+                    except Exception:
+                        pass
+                msg_data = {"alternatives": alts, "selected_index": index}
 
             history_index = None
             if self.history_profile_name:
@@ -1606,6 +1614,7 @@ class TaiMenu(App):
 
     def print_starter_message(self) -> None:
         """Prints starter messages to the chat list and extracts the initial scene in the background."""
+        self._visible_message_count = 0
         if not self.character_profile:
             return
         starter_messages = list(self.character_profile.get("starter_messages", []))
