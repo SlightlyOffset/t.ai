@@ -41,6 +41,13 @@ A lightweight, highly immersive, profile-based AI companion that lives in your t
 * **User Profile-Session Binding & Separation**: Sessions automatically bind to the user profile active during the conversation, seamlessly switching profiles when reloading. Automatically splits off and separates sessions on active user profile mismatch.
 * **Legacy Auto-Migration**: Automatically and transparently migrates legacy flat history and backup files into the character-scoped directory structure on launch.
 
+### 🔌 Plugin & Lifecycle Hook Architecture
+
+* **Thread-safe Hook Registry**: Safely register callbacks with priority-sorted queues to run side-effects or pipe/mutate data dynamically.
+* **Core Interceptors**: Lifecycle hooks injected at critical phases (e.g., `on_startup`, `on_ui_ready`, `on_user_message`, `before_prompt_build`, `before_tts`, and `after_llm_generation`).
+* **Settings Integration**: Auto-scans the `plugins/` directory and renders corresponding configuration switches and inputs in the **Settings > Plugins** tab dynamically based on `plugin.json` schemas.
+* **Isolated Loading**: Loads plugins as isolated sub-packages of the `plugins` package to prevent namespace collisions and avoid modifying `sys.path`.
+
 ### 🎭 Creating & Importing Characters
 
 t.ai is highly customizable. You can import existing characters from the AI community or build your own from scratch.
