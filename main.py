@@ -196,7 +196,8 @@ def main():
             pass
         finally:
             execute_hooks("on_shutdown", context)
-        return
+            import os
+            os._exit(0)
 
     while True:
         try:
@@ -230,6 +231,8 @@ def main():
             
     # Execute shutdown hooks after loop breaks normally
     execute_hooks("on_shutdown", context)
+    import os
+    os._exit(0)
 
 if __name__ == "__main__":
     main()

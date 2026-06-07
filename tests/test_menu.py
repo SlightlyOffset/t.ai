@@ -466,34 +466,37 @@ class TestMenu(unittest.TestCase):
         app = DummyMenu()
         mock_threads.__iter__.return_value = []
         
-        import asyncio
-        asyncio.run(app.action_quit())
+        app.action_quit()
         self.assertTrue(app.exit_called)
 
+    @patch("threading.Thread")
     @patch("engines.responses.active_post_process_threads")
-    def test_action_quit_with_alive_threads(self, mock_threads):
+    def test_action_quit_with_alive_threads(self, mock_threads, mock_thread_cls):
         class DummyMenu(TaiMenu):
             def __init__(self):
                 self.pushed_screen = None
-                self.run_worker_called_with = None
             def push_screen(self, screen):
                 self.pushed_screen = screen
-            def run_worker(self, coro):
-                self.run_worker_called_with = coro
         app = DummyMenu()
         mock_thread_alive = MagicMock()
         mock_thread_alive.is_alive.return_value = True
         mock_threads.__iter__.return_value = [mock_thread_alive]
         
-        import asyncio
-        asyncio.run(app.action_quit())
+        mock_thread_instance = MagicMock()
+        mock_thread_cls.return_value = mock_thread_instance
+        
+        app.action_quit()
         
         from ui.menu import ExitSavingScreen
         self.assertIsInstance(app.pushed_screen, ExitSavingScreen)
-        self.assertIsNotNone(app.run_worker_called_with)
-        app.run_worker_called_with.close()
+        mock_thread_cls.assert_called_once_with(
+            target=app._wait_and_exit_thread,
+            args=([mock_thread_alive],),
+            daemon=True
+        )
+        mock_thread_instance.start.assert_called_once()
 
-    def test_wait_and_exit(self):
+    def test_wait_and_exit_thread(self):
         class DummyMenu(TaiMenu):
             def __init__(self):
                 self.exit_called = False
@@ -503,8 +506,7 @@ class TestMenu(unittest.TestCase):
         mock_thread = MagicMock()
         mock_thread.is_alive.return_value = True
         
-        import asyncio
-        asyncio.run(app._wait_and_exit([mock_thread]))
+        app._wait_and_exit_thread([mock_thread])
         
         mock_thread.join.assert_called_once()
         self.assertTrue(app.exit_called)
