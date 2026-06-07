@@ -16,8 +16,8 @@ def split_recap_history(messages_history: list, short_history_limit: int = 15, r
     }
 
 
-def generate_recap_summary(older_history: list, user_name: str, char_name: str) -> str:
-    summarizer_model = get_setting("summarizer_model", "gemma2:2b")
+def generate_recap_summary(older_history: list, user_name: str, char_name: str, model: str = None) -> str:
+    summarizer_model = model or get_setting("summarizer_model", "gemma2:2b")
     remote_url = get_setting("remote_llm_url")
     return generate_summary(
         older_history,
@@ -38,8 +38,8 @@ def rolling_summary_target_index(history_len: int, last_index: int, memory_limit
     return to_summarize_count
 
 
-def generate_updated_memory_core(existing_core: str, new_messages: list, user_name: str, char_name: str) -> str:
-    summarizer_model = get_setting("summarizer_model", "gemma2:2b")
+def generate_updated_memory_core(existing_core: str, new_messages: list, user_name: str, char_name: str, model: str = None) -> str:
+    summarizer_model = model or get_setting("summarizer_model", "gemma2:2b")
     remote_url = get_setting("remote_llm_url")
     return update_rolling_summary(
         existing_core,

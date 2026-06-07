@@ -242,6 +242,7 @@ class CharacterImporter:
                 messages=messages,
                 stream=False,
                 format="json",
+                think=False,
                 options={"temperature": 0.1}
             )
 
