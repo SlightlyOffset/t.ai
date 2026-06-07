@@ -79,6 +79,12 @@ class SettingsScreen(ModalScreen):
     #settings_actions Button {
         margin-left: 2;
     }
+
+    .plugin_divider {
+        width: 100%;
+        color: $primary;
+        margin: 1 0;
+    }
     """
 
     BINDINGS = [
@@ -321,7 +327,7 @@ class SettingsScreen(ModalScreen):
                                             classes="settings_row"
                                         )
                                         
-                                yield Label("─" * 40, classes="settings_label")
+                                yield Label("─" * 70, classes="plugin_divider")
 
             with Horizontal(id="settings_actions"):
                 yield Button("Cancel", id="btn_cancel", variant="error")
