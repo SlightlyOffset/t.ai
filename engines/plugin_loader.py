@@ -1,6 +1,6 @@
 import os
 import json
-import importlib.util
+import importlib
 import traceback
 import concurrent.futures
 
@@ -66,37 +66,23 @@ def discover_and_load_plugins(context: dict) -> None:
             config = _load_plugin_config(item_path, is_package, plugin_name)
             context["plugin_configs"][plugin_name] = config
 
-            # 2. Import module
-            if is_package:
-                init_path = os.path.join(item_path, "__init__.py")
-                spec = importlib.util.spec_from_file_location(plugin_name, init_path)
-            else:
-                spec = importlib.util.spec_from_file_location(plugin_name, item_path)
+            # 2. Import module cleanly using python's package import system
+            module = importlib.import_module(f"plugins.{plugin_name}")
 
-            if spec and spec.loader:
-                module = importlib.util.module_from_spec(spec)
-                # We need to add the plugin's dir to sys.path if it's a package so it can import its own modules
-                if is_package:
-                    import sys
-                    if item_path not in sys.path:
-                        sys.path.insert(0, item_path)
+            # 3. Initialize with timeout
+            if hasattr(module, "initialize"):
+                with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
+                    future = executor.submit(module.initialize, context)
+                    # Wait for the initialization to complete, or timeout
+                    future.result(timeout=PLUGIN_LOAD_TIMEOUT)
                 
-                spec.loader.exec_module(module)
-
-                # 3. Initialize with timeout
-                if hasattr(module, "initialize"):
-                    with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
-                        future = executor.submit(module.initialize, context)
-                        # Wait for the initialization to complete, or timeout
-                        future.result(timeout=PLUGIN_LOAD_TIMEOUT)
-                    
-                    if debug_mode:
-                        print(f"[PLUGIN] Successfully loaded: {plugin_name}")
-                        log_debug("plugin_load", {"plugin_name": plugin_name})
-                else:
-                    if debug_mode:
-                        print(f"[PLUGIN WARN] Plugin '{plugin_name}' has no initialize(context) function.")
-                        log_debug("plugin_warn", {"plugin_name": plugin_name, "message": "no initialize function"})
+                if debug_mode:
+                    print(f"[PLUGIN] Successfully loaded: {plugin_name}")
+                    log_debug("plugin_load", {"plugin_name": plugin_name})
+            else:
+                if debug_mode:
+                    print(f"[PLUGIN WARN] Plugin '{plugin_name}' has no initialize(context) function.")
+                    log_debug("plugin_warn", {"plugin_name": plugin_name, "message": "no initialize function"})
 
         except concurrent.futures.TimeoutError:
             err_msg = f"Plugin '{plugin_name}' initialization timed out after {PLUGIN_LOAD_TIMEOUT}s."

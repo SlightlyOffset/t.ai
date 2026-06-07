@@ -555,6 +555,12 @@ def _perform_post_processing(
 ):
     """Handles background tasks like sentiment scoring and saving history."""
     try:
+        # Run after_llm_generation pipeline hook on the final response before saving to history
+        full_reply = execute_pipeline("after_llm_generation", full_reply, {
+            "character_profile": profile,
+            "history_profile_name": history_profile_name,
+            "is_regeneration": is_regeneration,
+        })
         reply = full_reply.strip()
 
         # BLOCKER: Do not save error messages to history

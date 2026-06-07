@@ -18,6 +18,10 @@ def initialize(context):
     """
     Entry point for the plugin.
     Registers hooks based on the config.
+    
+    WARNING: Do NOT perform blocking synchronous operations in this function.
+    It executes on application startup with a 5.0-second timeout.
+    If it times out, the loader thread will leak and continue to run in the background.
     """
     plugin_configs = context.get("plugin_configs", {})
     my_config = plugin_configs.get("example_plugin", {})

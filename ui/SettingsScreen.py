@@ -313,6 +313,8 @@ class SettingsScreen(ModalScreen):
                                 
                                 # Render config fields
                                 for k, v in p_info["config"].items():
+                                    if k.lower() in ("enabled", "name", "version"):
+                                        continue
                                     widget_id = f"plugin_cfg_{p_name}_{k}"
                                     if isinstance(v, bool):
                                         yield Horizontal(
@@ -453,9 +455,22 @@ class SettingsScreen(ModalScreen):
             if p_info["config"]:
                 new_config = {}
                 for k, v in p_info["config"].items():
+                    if k.lower() in ("enabled", "name", "version"):
+                        new_config[k] = v
+                        continue
                     widget = self.query_one(f"#plugin_cfg_{p_name}_{k}")
                     if isinstance(v, bool):
                         new_config[k] = widget.value
+                    elif isinstance(v, int):
+                        try:
+                            new_config[k] = int(widget.value.strip())
+                        except ValueError:
+                            new_config[k] = v
+                    elif isinstance(v, float):
+                        try:
+                            new_config[k] = float(widget.value.strip())
+                        except ValueError:
+                            new_config[k] = v
                     else:
                         new_config[k] = widget.value.strip()
                 
