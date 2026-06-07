@@ -188,7 +188,6 @@ class InlineEditor(TextArea):
     def on_mount(self) -> None:
         self.show_line_numbers = False
         self.update_highlight_theme()
-        self.focus()
 
     def update_highlight_theme(self) -> None:
         color = "yellow"
@@ -263,27 +262,26 @@ class InlineEditor(TextArea):
 
     def on_key(self, event: events.Key) -> None:
         """Handle Esc for cancel and Ctrl+S for save."""
+        bubble = None
+        node = self.parent
+        while node is not None:
+            if isinstance(node, ChatBubble):
+                bubble = node
+                break
+            node = node.parent
+
+        if bubble is None or not bubble.editing:
+            return
+
         if event.key == "escape":
             event.prevent_default()
             event.stop()
-            # Cancel editing on parent ChatBubble
-            node = self.parent
-            while node is not None:
-                if isinstance(node, ChatBubble):
-                    node.editing = False
-                    node.focus()
-                    break
-                node = node.parent
+            bubble.editing = False
+            bubble.focus()
         elif event.key == "ctrl+s":
             event.prevent_default()
             event.stop()
-            # Save editing on parent ChatBubble
-            node = self.parent
-            while node is not None:
-                if isinstance(node, ChatBubble):
-                    node.save_edit(self.text)
-                    break
-                node = node.parent
+            bubble.save_edit(self.text)
 
 class ExitSavingScreen(ModalScreen):
     """Modal screen displaying a message while saving history and exiting."""
