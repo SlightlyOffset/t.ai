@@ -395,7 +395,7 @@ def update_rolling_summary(existing_core: str, new_messages: list, model: str,
         # Hybrid Offloading: Summarization is always local, but respects caller-provided model
         summarizer_model = model or get_setting("summarizer_model", get_setting("local_utility_model", "llama3.2"))
         log_debug("ROLLING_SUMMARY_START", {"model": summarizer_model, "new_message_count": len(new_messages)})
-        result = ollama.chat(model=summarizer_model, messages=summary_messages, stream=False)
+        result = ollama.chat(model=summarizer_model, messages=summary_messages, stream=False, think=False)
         content = result['message']['content'].strip()
         
         # Clean generated summary of any legacy/hallucinated tags, headers or brackets
@@ -443,6 +443,7 @@ def _call_llm_once(messages: list, model: str, remote_url: str = None, temperatu
             model=model,
             messages=messages,
             stream=False,
+            think=False,
             options={"temperature": temperature, "repeat_penalty": repetition_penalty, "num_predict": max_tokens},
         )
         content = result["message"]["content"].strip()
@@ -1084,6 +1085,7 @@ def get_respond_stream(user_input: str, profile: dict, profile_path: str = None,
                     model=model,
                     messages=messages,
                     stream=True,
+                    think=False,
                     options={"temperature": generation_temperature, "repeat_penalty": generation_repetition_penalty, "num_predict": max_tokens},
                 )
 
