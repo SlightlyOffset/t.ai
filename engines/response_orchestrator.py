@@ -2,6 +2,7 @@ from engines.config import get_setting
 from engines.formatting import get_tts_split_points
 from engines.responses import get_respond_stream
 from engines.tts_module import clean_text_for_tts
+from engines.hooks import execute_hooks, execute_pipeline
 
 
 def _resolve_tts_runtime(character_profile: dict) -> dict:
@@ -61,6 +62,7 @@ def iterate_response_events(
     ):
         full_response += chunk
         current_buffer += chunk
+        execute_hooks("on_llm_chunk", {"chunk": chunk, "full_response": full_response})
         yield {"type": "chunk", "full_response": full_response}
 
         # Preserve legacy behavior: the TTS master toggle should apply immediately
@@ -112,5 +114,10 @@ def iterate_response_events(
         ):
             yield {"type": "tts", "payload": (cleaned, voice, engine, clone_ref, language, user_name)}
 
+    full_response = execute_pipeline("after_llm_generation", full_response, {
+        "character_profile": character_profile,
+        "history_profile_name": history_profile_name,
+        "is_regeneration": is_regeneration,
+    })
     yield {"type": "complete", "full_response": full_response}
 

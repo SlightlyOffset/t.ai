@@ -796,11 +796,14 @@ class TaiMenu(App):
             chat_input.update_highlight_theme()
         except Exception:
             pass
-        for editor in self.query(InlineEditor):
-            try:
-                editor.update_highlight_theme()
-            except Exception:
-                pass
+        try:
+            for editor in self.query(InlineEditor):
+                try:
+                    editor.update_highlight_theme()
+                except Exception:
+                    pass
+        except Exception:
+            pass
 
     def watch_show_sidebar(self, show: bool) -> None:
         """Called when show_sidebar reactive property changes."""
@@ -1261,6 +1264,10 @@ class TaiMenu(App):
 
         # Start usage metrics update loop
         self.set_interval(2.0, self.update_usage_metrics)
+        
+        # Trigger UI Ready hook
+        from engines.hooks import execute_hooks
+        execute_hooks("on_ui_ready", {"app": self})
 
     def on_unmount(self) -> None:
         """Wait for any active background post-processing threads to finish saving history before exiting."""

@@ -24,7 +24,8 @@ def ensure_directories():
         "voices",
         "template",
         "response_rule",
-        "lorebooks"
+        "lorebooks",
+        "plugins"
     ]
     for directory in required_dirs:
         if not os.path.exists(directory):
@@ -176,7 +177,27 @@ def main():
     check_dependencies()
     check_ollama_and_models()
 
-    # 2. Launch the Application loop
+    # 2. Plugin System Initialization
+    from engines.hooks import build_hook_context, execute_hooks
+    from engines.plugin_loader import discover_and_load_plugins
+    
+    context = build_hook_context()
+    discover_and_load_plugins(context)
+    execute_hooks("on_startup", context)
+
+    # 3. Launch the Application loop
+    if context.get("skip_tui"):
+        # Headless mode: plugins have taken control
+        import time
+        try:
+            while True:
+                time.sleep(1)
+        except KeyboardInterrupt:
+            pass
+        finally:
+            execute_hooks("on_shutdown", context)
+        return
+
     while True:
         try:
             from ui.menu import TaiMenu
@@ -206,6 +227,9 @@ def main():
         except Exception as e:
             print(f"[CRITICAL ERROR] Application failed to start: {e}")
             sys.exit(1)
+            
+    # Execute shutdown hooks after loop breaks normally
+    execute_hooks("on_shutdown", context)
 
 if __name__ == "__main__":
     main()

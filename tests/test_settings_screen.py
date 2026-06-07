@@ -21,6 +21,7 @@ class TestSettingsScreen(unittest.TestCase):
             json.dump({}, f)
 
         self.screen = SettingsScreen()
+        self.screen._plugins_info = {} # Override to empty to prevent unmocked widget lookups
         self.screen.dismiss = MagicMock()
         self.screen.show_error = MagicMock()
 
