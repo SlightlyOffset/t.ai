@@ -1627,7 +1627,8 @@ class TaiMenu(App):
             def extract_and_save_starter_scene():
                 try:
                     from engines.responses import extract_scene_from_starter
-                    scene = extract_scene_from_starter(starter_text)
+                    char_model = self.character_profile.get("llm_model") if self.character_profile else None
+                    scene = extract_scene_from_starter(starter_text, model=char_model)
                     if scene:
                         full_data = memory_manager.get_full_data(self.history_profile_name)
                         history = full_data.get("history", [])
@@ -1733,6 +1734,7 @@ class TaiMenu(App):
     @work(thread=True)
     def summarize_and_display(self, older_history: list, recent_history: list, recent_start_index: int, existing_core: str = "", last_summarized_index: int = 0):
         """Worker for summarizing history in the background."""
+        char_model = self.character_profile.get("llm_model") if self.character_profile else None
         if existing_core:
             # Incremental update: summarize only new messages up to older_history end
             new_messages_to_sum = older_history[last_summarized_index:]
@@ -1742,6 +1744,7 @@ class TaiMenu(App):
                     new_messages_to_sum,
                     user_name=self.user_name,
                     char_name=self.ch_name,
+                    model=char_model,
                 )
                 # Persist the update
                 new_last_index = len(older_history)
@@ -1749,7 +1752,7 @@ class TaiMenu(App):
             else:
                 summary = existing_core
         else:
-            summary = generate_recap_summary(older_history, user_name=self.user_name, char_name=self.ch_name)
+            summary = generate_recap_summary(older_history, user_name=self.user_name, char_name=self.ch_name, model=char_model)
             # Save the initial memory core
             new_last_index = len(older_history)
             memory_manager.update_memory_core(self.history_profile_name, summary, new_last_index)

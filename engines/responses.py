@@ -133,7 +133,7 @@ def get_sentiment_score(user_input: str, model: str, remote_url: str = None, pro
         int: A score from -5 to +5.
     """
     char_name = profile.get("name", "the character") if profile else "the character"
-    utility_model = get_setting("local_utility_model", "llama3.2")
+    utility_model = model or get_setting("local_utility_model", "llama3.2")
 
     messages = [
         {
@@ -174,6 +174,7 @@ def get_sentiment_score(user_input: str, model: str, remote_url: str = None, pro
             model=utility_model,
             messages=messages,
             stream=False,
+            think=False,
             options={"temperature": 0.1}
         )
         text = result['message']['content']
@@ -189,12 +190,12 @@ def get_sentiment_score(user_input: str, model: str, remote_url: str = None, pro
     return 0
 
 
-def extract_scene_from_text(user_input: str, reply: str) -> str | None:
+def extract_scene_from_text(user_input: str, reply: str, model: str = None) -> str | None:
     """
     Makes a quick lightweight utility LLM call to extract the current scene/location/activity
     from the user input and assistant reply. Requires a High or Medium confidence score.
     """
-    utility_model = get_setting("local_utility_model", "llama3.2")
+    utility_model = model or get_setting("local_utility_model", "llama3.2")
     # Clean tags/markup from input/reply
     cleaned_input = re.sub(r'\[.*?\]', '', user_input).strip()
     cleaned_reply = re.sub(r'\[.*?\]', '', reply).strip()
@@ -222,6 +223,7 @@ def extract_scene_from_text(user_input: str, reply: str) -> str | None:
             model=utility_model,
             messages=messages,
             stream=False,
+            think=False,
             options={"temperature": 0.1}
         )
         scene = result['message']['content'].strip()
@@ -246,12 +248,12 @@ def extract_scene_from_text(user_input: str, reply: str) -> str | None:
     return None
 
 
-def extract_scene_from_starter(starter_text: str) -> str | None:
+def extract_scene_from_starter(starter_text: str, model: str = None) -> str | None:
     """
     Makes a quick lightweight utility LLM call to extract the initial scene/location/activity
     from the character's starter message. Requires a High or Medium confidence score.
     """
-    utility_model = get_setting("local_utility_model", "llama3.2")
+    utility_model = model or get_setting("local_utility_model", "llama3.2")
     cleaned_text = re.sub(r'\[.*?\]', '', starter_text).strip()
     
     prompt = (
@@ -276,6 +278,7 @@ def extract_scene_from_starter(starter_text: str) -> str | None:
             model=utility_model,
             messages=messages,
             stream=False,
+            think=False,
             options={"temperature": 0.1}
         )
         scene = result['message']['content'].strip()
@@ -343,7 +346,7 @@ def generate_summary(messages: list, model: str, remote_url: str = None, user_na
         # Hybrid Offloading: Summarization is always local, but respects caller-provided model
         summarizer_model = model or get_setting("summarizer_model", get_setting("local_utility_model", "llama3.2"))
         log_debug("SUMMARY_START", {"model": summarizer_model, "message_count": len(messages)})
-        result = ollama.chat(model=summarizer_model, messages=summary_messages, stream=False)
+        result = ollama.chat(model=summarizer_model, messages=summary_messages, stream=False, think=False)
         content = result['message']['content'].strip()
         
         # Clean generated summary of any legacy/hallucinated tags, headers or brackets
@@ -584,7 +587,7 @@ def _perform_post_processing(
             reply = re.sub(r'\[SCENE:\s*.*?\]', '', reply).strip()
         else:
             # Attempt to extract scene dynamically from current turn
-            extracted = extract_scene_from_text(user_input, reply)
+            extracted = extract_scene_from_text(user_input, reply, model=model)
             if extracted:
                 new_scene = extracted
 
