@@ -6,6 +6,10 @@ from textual.widgets import Header, Label, Footer, TabbedContent, TabPane, Switc
 
 class SettingsScreen(ModalScreen):
     """Dedicated settings screen with categorized tabs for configuration."""
+    
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self._plugins_info = self._get_plugin_info()
 
     DEFAULT_CSS = """
     SettingsScreen {
@@ -75,6 +79,12 @@ class SettingsScreen(ModalScreen):
     #settings_actions Button {
         margin-left: 2;
     }
+
+    .plugin_divider {
+        width: 100%;
+        color: $primary;
+        margin: 1 0;
+    }
     """
 
     BINDINGS = [
@@ -127,6 +137,8 @@ class SettingsScreen(ModalScreen):
         overhaul_critic_enabled = settings.get("overhaul_critic_enabled", False)
         overhaul_candidate_count = str(settings.get("overhaul_candidate_count", 2))
         overhaul_style_profile = settings.get("overhaul_style_profile", "balanced")
+        
+        disabled_plugins = settings.get("disabled_plugins", [])
 
         yield Header(show_clock=False)
         with Container(id="settings_container"):
@@ -286,6 +298,39 @@ class SettingsScreen(ModalScreen):
                                 classes="settings_widget"
                             )
 
+                with TabPane("Plugins", id="tab_plugins"):
+                    with VerticalScroll(classes="settings_pane"):
+                        if not self._plugins_info:
+                            yield Label("No plugins installed in plugins/ directory.", classes="settings_label")
+                        else:
+                            for p_name, p_info in self._plugins_info.items():
+                                is_disabled = p_name in disabled_plugins
+                                yield Horizontal(
+                                    Label(f"🔌 Plugin: {p_name}", classes="settings_label"),
+                                    Switch(value=not is_disabled, id=f"plugin_enable_{p_name}", classes="settings_widget"),
+                                    classes="settings_row"
+                                )
+                                
+                                # Render config fields
+                                for k, v in p_info["config"].items():
+                                    if k.lower() in ("enabled", "name", "version"):
+                                        continue
+                                    widget_id = f"plugin_cfg_{p_name}_{k}"
+                                    if isinstance(v, bool):
+                                        yield Horizontal(
+                                            Label(f"  ↳ {k}:", classes="settings_label"),
+                                            Switch(value=v, id=widget_id, classes="settings_widget"),
+                                            classes="settings_row"
+                                        )
+                                    else:
+                                        yield Horizontal(
+                                            Label(f"  ↳ {k}:", classes="settings_label"),
+                                            Input(value=str(v), id=widget_id, classes="settings_widget"),
+                                            classes="settings_row"
+                                        )
+                                        
+                                yield Label("─" * 70, classes="plugin_divider")
+
             with Horizontal(id="settings_actions"):
                 yield Button("Cancel", id="btn_cancel", variant="error")
                 yield Button("Save Settings", id="btn_save", variant="primary")
@@ -398,7 +443,44 @@ class SettingsScreen(ModalScreen):
             "overhaul_critic_enabled": self.query_one("#overhaul_critic_enabled", Switch).value,
             "overhaul_candidate_count": overhaul_candidate_count,
             "overhaul_style_profile": self.query_one("#overhaul_style_profile", Select).value,
+            "disabled_plugins": [],
         }
+        
+        # Save plugin settings
+        for p_name, p_info in self._plugins_info.items():
+            enable_switch = self.query_one(f"#plugin_enable_{p_name}", Switch)
+            if not enable_switch.value:
+                updated_settings["disabled_plugins"].append(p_name)
+                
+            if p_info["config"]:
+                new_config = {}
+                for k, v in p_info["config"].items():
+                    if k.lower() in ("enabled", "name", "version"):
+                        new_config[k] = v
+                        continue
+                    widget = self.query_one(f"#plugin_cfg_{p_name}_{k}")
+                    if isinstance(v, bool):
+                        new_config[k] = widget.value
+                    elif isinstance(v, int):
+                        try:
+                            new_config[k] = int(widget.value.strip())
+                        except ValueError:
+                            new_config[k] = v
+                    elif isinstance(v, float):
+                        try:
+                            new_config[k] = float(widget.value.strip())
+                        except ValueError:
+                            new_config[k] = v
+                    else:
+                        new_config[k] = widget.value.strip()
+                
+                import json
+                try:
+                    with open(p_info["config_path"], "w", encoding="utf-8") as f:
+                        json.dump(new_config, f, indent=4)
+                except Exception as e:
+                    self.show_error(f"Failed to save config for plugin {p_name}.")
+                    return
 
         # 3. Save atomically and dismiss screen returning settings dict
         from engines.config import update_settings
@@ -413,3 +495,39 @@ class SettingsScreen(ModalScreen):
         err_label = self.query_one("#settings_error", Label)
         err_label.update(message)
         err_label.display = True
+
+    def _get_plugin_info(self) -> dict:
+        import os
+        import json
+        plugins = {}
+        if not os.path.exists("plugins"):
+            return plugins
+            
+        for item in os.listdir("plugins"):
+            if item.startswith("_") or item.startswith("."):
+                continue
+                
+            item_path = os.path.join("plugins", item)
+            is_package = os.path.isdir(item_path) and os.path.exists(os.path.join(item_path, "__init__.py"))
+            is_module = os.path.isfile(item_path) and item.endswith(".py")
+            
+            if not (is_package or is_module):
+                continue
+                
+            plugin_name = item if is_package else item[:-3]
+            config_path = os.path.join(item_path, "plugin.json") if is_package else f"{os.path.splitext(item_path)[0]}.json"
+            
+            config = {}
+            if os.path.exists(config_path):
+                try:
+                    with open(config_path, "r", encoding="utf-8") as f:
+                        config = json.load(f)
+                except:
+                    pass
+                    
+            plugins[plugin_name] = {
+                "is_package": is_package,
+                "config_path": config_path,
+                "config": config
+            }
+        return plugins

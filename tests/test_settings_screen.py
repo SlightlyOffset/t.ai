@@ -21,6 +21,7 @@ class TestSettingsScreen(unittest.TestCase):
             json.dump({}, f)
 
         self.screen = SettingsScreen()
+        self.screen._plugins_info = {} # Override to empty to prevent unmocked widget lookups
         self.screen.dismiss = MagicMock()
         self.screen.show_error = MagicMock()
 
@@ -218,6 +219,52 @@ class TestSettingsScreen(unittest.TestCase):
         self.screen.show_error("Validation error message")
         mock_err_label.update.assert_called_once_with("Validation error message")
         self.assertTrue(mock_err_label.display)
+
+    @patch('engines.config.update_settings')
+    @patch('builtins.open', new_callable=unittest.mock.mock_open)
+    @patch('json.dump')
+    def test_save_action_coerces_plugin_settings(self, mock_json_dump, mock_open, mock_update):
+        """Test that action_save coerces configuration values to correct types and preserves skipped fields."""
+        mock_update.return_value = True
+        
+        # Set up a mock plugin configuration info
+        self.screen._plugins_info = {
+            "my_test_plugin": {
+                "is_package": True,
+                "config_path": "plugins/my_test_plugin/plugin.json",
+                "config": {
+                    "enabled": True,       # metadata key, skipped
+                    "name": "Test Plugin", # metadata key, skipped
+                    "version": "1.0",      # metadata key, skipped
+                    "count": 5,            # int
+                    "threshold": 0.75,     # float
+                    "flag": False          # bool
+                }
+            }
+        }
+        
+        # Add the mock widgets that compose() would render (skipping metadata keys)
+        self.widgets["#plugin_enable_my_test_plugin"] = MagicMock(value=True)
+        self.widgets["#plugin_cfg_my_test_plugin_count"] = MagicMock(value=" 10 ")
+        self.widgets["#plugin_cfg_my_test_plugin_threshold"] = MagicMock(value=" 0.85 ")
+        self.widgets["#plugin_cfg_my_test_plugin_flag"] = MagicMock(value=True)
+        
+        self.screen.action_save()
+        
+        # Verify JSON dump saved correct coerced types
+        self.assertTrue(mock_json_dump.called)
+        saved_config = mock_json_dump.call_args[0][0]
+        
+        # Skipped keys should be unchanged
+        self.assertEqual(saved_config["enabled"], True)
+        self.assertEqual(saved_config["name"], "Test Plugin")
+        self.assertEqual(saved_config["version"], "1.0")
+        
+        # Coerced keys should have correct types
+        self.assertEqual(saved_config["count"], 10)
+        self.assertEqual(saved_config["threshold"], 0.85)
+        self.assertEqual(saved_config["flag"], True)
+
 
 if __name__ == '__main__':
     unittest.main()

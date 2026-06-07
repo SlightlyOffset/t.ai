@@ -17,6 +17,7 @@ from engines.config import get_setting
 from engines.xtts_local import XTTSWorker, is_xtts_supported
 from engines.audio_cache import get_cache_path, save_to_cache
 from engines.utilities import log_debug
+from engines.hooks import execute_pipeline
 
 # Attempt to import edge-tts
 try:
@@ -177,6 +178,14 @@ def generate_audio(text, filename, voice=None, engine="edge-tts", clone_ref=None
     clone_ref = resolve_voice_refs(clone_ref)
 
     cleaned_text = clean_text_for_tts(text, speak_narration=True)
+    
+    cleaned_text = execute_pipeline("before_tts", cleaned_text, {
+        "voice": voice,
+        "engine": engine,
+        "language": language,
+        "user_name": user_name
+    })
+
     if not cleaned_text:
         return False
 

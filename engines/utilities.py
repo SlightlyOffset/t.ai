@@ -39,7 +39,7 @@ def log_debug(category: str, detail: dict):
 
     try:
         with open(log_file, "a", encoding="utf-8") as f:
-            f.write(json.dumps(log_entry, ensure_ascii=False) + "\n")
+            f.write(json.dumps(log_entry, ensure_ascii=False, default=str) + "\n")
     except OSError:
         pass
 

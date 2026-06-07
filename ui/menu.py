@@ -188,7 +188,6 @@ class InlineEditor(TextArea):
     def on_mount(self) -> None:
         self.show_line_numbers = False
         self.update_highlight_theme()
-        self.focus()
 
     def update_highlight_theme(self) -> None:
         color = "yellow"
@@ -263,27 +262,26 @@ class InlineEditor(TextArea):
 
     def on_key(self, event: events.Key) -> None:
         """Handle Esc for cancel and Ctrl+S for save."""
+        bubble = None
+        node = self.parent
+        while node is not None:
+            if isinstance(node, ChatBubble):
+                bubble = node
+                break
+            node = node.parent
+
+        if bubble is None or not bubble.editing:
+            return
+
         if event.key == "escape":
             event.prevent_default()
             event.stop()
-            # Cancel editing on parent ChatBubble
-            node = self.parent
-            while node is not None:
-                if isinstance(node, ChatBubble):
-                    node.editing = False
-                    node.focus()
-                    break
-                node = node.parent
+            bubble.editing = False
+            bubble.focus()
         elif event.key == "ctrl+s":
             event.prevent_default()
             event.stop()
-            # Save editing on parent ChatBubble
-            node = self.parent
-            while node is not None:
-                if isinstance(node, ChatBubble):
-                    node.save_edit(self.text)
-                    break
-                node = node.parent
+            bubble.save_edit(self.text)
 
 class ExitSavingScreen(ModalScreen):
     """Modal screen displaying a message while saving history and exiting."""
@@ -293,8 +291,8 @@ class ExitSavingScreen(ModalScreen):
         background: rgba(0, 0, 0, 0.75);
     }
     #saving_container {
-        width: 60;
-        height: 12;
+        width: 70;
+        height: auto;
         border: thick $warning;
         background: $panel;
         padding: 2;
@@ -796,11 +794,14 @@ class TaiMenu(App):
             chat_input.update_highlight_theme()
         except Exception:
             pass
-        for editor in self.query(InlineEditor):
-            try:
-                editor.update_highlight_theme()
-            except Exception:
-                pass
+        try:
+            for editor in self.query(InlineEditor):
+                try:
+                    editor.update_highlight_theme()
+                except Exception:
+                    pass
+        except Exception:
+            pass
 
     def watch_show_sidebar(self, show: bool) -> None:
         """Called when show_sidebar reactive property changes."""
@@ -1117,30 +1118,32 @@ class TaiMenu(App):
         from ui.SettingsScreen import SettingsScreen
         self.push_screen(SettingsScreen(), callback=self.on_settings_saved)
 
-    async def action_quit(self) -> None:
+    def action_quit(self) -> None:
         """Override quit action to show saving modal and wait for active background saving threads."""
         from engines.responses import active_post_process_threads
         alive_threads = [t for t in active_post_process_threads if t.is_alive()]
         if alive_threads:
             self.push_screen(ExitSavingScreen())
-            self.run_worker(self._wait_and_exit(alive_threads))
+            import threading
+            threading.Thread(target=self._wait_and_exit_thread, args=(alive_threads,), daemon=True).start()
         else:
             self.exit()
 
-    async def _wait_and_exit(self, alive_threads: list) -> None:
-        """Asynchronously wait for active post-processing threads to finish, then exit."""
-        import asyncio
+    def _wait_and_exit_thread(self, alive_threads: list) -> None:
+        """Wait for active post-processing threads to finish, then exit."""
         import time
-        def join_all():
-            start_time = time.time()
-            max_wait = 4.0
-            for t in alive_threads:
-                elapsed = time.time() - start_time
-                remaining = max(0.0, max_wait - elapsed)
-                t.join(timeout=remaining)
-
-        await asyncio.to_thread(join_all)
-        self.exit()
+        start_time = time.time()
+        max_wait = 4.0
+        for t in alive_threads:
+            elapsed = time.time() - start_time
+            remaining = max(0.0, max_wait - elapsed)
+            t.join(timeout=remaining)
+        
+        # Check if _loop is initialized before calling call_from_thread, otherwise call exit directly
+        if getattr(self, "_loop", None) is not None:
+            self.call_from_thread(self.exit)
+        else:
+            self.exit()
 
     def on_settings_saved(self, result: dict | None) -> None:
         """Callback handled when SettingsScreen is dismissed with saved changes."""
@@ -1261,6 +1264,10 @@ class TaiMenu(App):
 
         # Start usage metrics update loop
         self.set_interval(2.0, self.update_usage_metrics)
+        
+        # Trigger UI Ready hook
+        from engines.hooks import execute_hooks
+        execute_hooks("on_ui_ready", {"app": self})
 
     def on_unmount(self) -> None:
         """Wait for any active background post-processing threads to finish saving history before exiting."""
