@@ -1,4 +1,5 @@
 import pytest
+from unittest.mock import patch
 from engines.plugin_loader import discover_and_load_plugins
 from engines.hooks import build_hook_context, clear_all_hooks, get_registered_hooks
 
@@ -8,7 +9,10 @@ def cleanup_hooks():
     yield
     clear_all_hooks()
 
-def test_plugin_loader():
+@patch('engines.plugin_loader.get_setting')
+def test_plugin_loader(mock_get_setting):
+    mock_get_setting.side_effect = lambda key, default=None: [] if key == "disabled_plugins" else default
+
     context = build_hook_context()
     discover_and_load_plugins(context)
     
