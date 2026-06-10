@@ -707,5 +707,40 @@ class TestMenu(unittest.TestCase):
         self.assertEqual(bi_ranges[0][0], 10)
         self.assertEqual(bi_ranges[0][1], 28)
 
+    def test_highlight_nested_speech_formatting(self):
+        """Verify that ChatInput's highlight map correctly handles formatting nested inside speech."""
+        from ui.menu import ChatInput
+        
+        chat_input = ChatInput()
+        chat_input.document = MagicMock()
+        chat_input.document.lines = [
+            'He said "hello **bold** world"'
+        ]
+        chat_input._line_cache = set()
+        from collections import defaultdict
+        chat_input._highlights = defaultdict(list)
+        
+        chat_input._build_highlight_map()
+        
+        # 'He said "hello **bold** world"'
+        # index 0 to 8: 'He said ' -> None (no highlights)
+        # index 8 to 15: '"hello ' -> speech
+        # index 15 to 23: '**bold**' -> speech_narration_bold
+        # index 23 to 30: ' world"' -> speech
+        h0 = chat_input._highlights[0]
+        self.assertEqual(len(h0), 3)
+        
+        self.assertEqual(h0[0][0], 8)
+        self.assertEqual(h0[0][1], 15)
+        self.assertEqual(h0[0][2], "speech")
+        
+        self.assertEqual(h0[1][0], 15)
+        self.assertEqual(h0[1][1], 23)
+        self.assertEqual(h0[1][2], "speech_narration_bold")
+        
+        self.assertEqual(h0[2][0], 23)
+        self.assertEqual(h0[2][1], 30)
+        self.assertEqual(h0[2][2], "speech")
+
 if __name__ == "__main__":
     unittest.main()

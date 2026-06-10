@@ -102,6 +102,10 @@ class ChatInput(TextArea):
                 "narration_bold": Style(bold=True),
                 "narration_bold_italics": Style(bold=True, italic=True, dim=True),
                 "exposition": Style(dim=True),
+                "speech_narration": Style(color=color, italic=True, dim=True),
+                "speech_narration_bold": Style(color=color, bold=True),
+                "speech_narration_bold_italics": Style(color=color, bold=True, italic=True, dim=True),
+                "speech_exposition": Style(color=color, dim=True),
             }
             if base:
                 for k, v in base.syntax_styles.items():
@@ -130,32 +134,53 @@ class ChatInput(TextArea):
         self._highlights.clear()
         
         for line_idx, line in enumerate(self.document.lines):
-            ranges = []
+            expo_ranges = [(m.start(), m.end()) for m in re.finditer(r"\([^)\n]+\)|\[[^\]\n]+\]", line)]
+            bi_ranges = [(m.start(), m.end()) for m in re.finditer(r"\*{3}[^*\n]+\*{3}", line)]
+            bold_ranges = [(m.start(), m.end()) for m in re.finditer(r"\*{2}[^*\n]+\*{2}", line)]
+            narration_ranges = [(m.start(), m.end()) for m in re.finditer(r"\*[^*\n]+\*", line)]
+            speech_ranges = [(m.start(), m.end()) for m in re.finditer(r'["“][^"“”\n]*["”]', line)]
             
-            # 1. Exposition
-            for m in re.finditer(r"\([^)\n]+\)|\[[^\]\n]+\]", line):
-                ranges.append((m.start(), m.end(), "exposition"))
+            line_tokens = [None] * len(line)
+            for i in range(len(line)):
+                in_expo = any(start <= i < end for start, end in expo_ranges)
+                in_bi = any(start <= i < end for start, end in bi_ranges)
+                in_bold = any(start <= i < end for start, end in bold_ranges)
+                in_narration = any(start <= i < end for start, end in narration_ranges)
+                in_speech = any(start <= i < end for start, end in speech_ranges)
                 
-            # 2. Narration
-            for m in re.finditer(r"\*{3}[^*\n]+\*{3}", line):
-                ranges.append((m.start(), m.end(), "narration_bold_italics"))
-            for m in re.finditer(r"\*{2}[^*\n]+\*{2}", line):
-                ranges.append((m.start(), m.end(), "narration_bold"))
-            for m in re.finditer(r"\*[^*\n]+\*", line):
-                ranges.append((m.start(), m.end(), "narration"))
-                
-            # 3. Speech
-            for m in re.finditer(r'["“][^"“”\n]*["”]', line):
-                ranges.append((m.start(), m.end(), "speech"))
-                
-            ranges.sort(key=lambda x: (x[0], -x[1]))
+                if in_speech:
+                    if in_bi:
+                        line_tokens[i] = "speech_narration_bold_italics"
+                    elif in_bold:
+                        line_tokens[i] = "speech_narration_bold"
+                    elif in_narration:
+                        line_tokens[i] = "speech_narration"
+                    elif in_expo:
+                        line_tokens[i] = "speech_exposition"
+                    else:
+                        line_tokens[i] = "speech"
+                else:
+                    if in_bi:
+                        line_tokens[i] = "narration_bold_italics"
+                    elif in_bold:
+                        line_tokens[i] = "narration_bold"
+                    elif in_narration:
+                        line_tokens[i] = "narration"
+                    elif in_expo:
+                        line_tokens[i] = "exposition"
+                        
             resolved_ranges = []
-            last_end = 0
-            for start, end, token_type in ranges:
-                if start >= last_end:
-                    resolved_ranges.append((start, end, token_type))
-                    last_end = end
-                    
+            current_token = None
+            start_idx = 0
+            for i, token in enumerate(line_tokens):
+                if token != current_token:
+                    if current_token is not None:
+                        resolved_ranges.append((start_idx, i, current_token))
+                    current_token = token
+                    start_idx = i
+            if current_token is not None:
+                resolved_ranges.append((start_idx, len(line), current_token))
+                
             for start, end, token_type in resolved_ranges:
                 start_byte = len(line[:start].encode("utf-8"))
                 end_byte = len(line[:end].encode("utf-8"))
@@ -213,6 +238,10 @@ class InlineEditor(TextArea):
                 "narration_bold": Style(bold=True),
                 "narration_bold_italics": Style(bold=True, italic=True, dim=True),
                 "exposition": Style(dim=True),
+                "speech_narration": Style(color=color, italic=True, dim=True),
+                "speech_narration_bold": Style(color=color, bold=True),
+                "speech_narration_bold_italics": Style(color=color, bold=True, italic=True, dim=True),
+                "speech_exposition": Style(color=color, dim=True),
             }
             if base:
                 for k, v in base.syntax_styles.items():
@@ -241,32 +270,53 @@ class InlineEditor(TextArea):
         self._highlights.clear()
         
         for line_idx, line in enumerate(self.document.lines):
-            ranges = []
+            expo_ranges = [(m.start(), m.end()) for m in re.finditer(r"\([^)\n]+\)|\[[^\]\n]+\]", line)]
+            bi_ranges = [(m.start(), m.end()) for m in re.finditer(r"\*{3}[^*\n]+\*{3}", line)]
+            bold_ranges = [(m.start(), m.end()) for m in re.finditer(r"\*{2}[^*\n]+\*{2}", line)]
+            narration_ranges = [(m.start(), m.end()) for m in re.finditer(r"\*[^*\n]+\*", line)]
+            speech_ranges = [(m.start(), m.end()) for m in re.finditer(r'["“][^"“”\n]*["”]', line)]
             
-            # 1. Exposition
-            for m in re.finditer(r"\([^)\n]+\)|\[[^\]\n]+\]", line):
-                ranges.append((m.start(), m.end(), "exposition"))
+            line_tokens = [None] * len(line)
+            for i in range(len(line)):
+                in_expo = any(start <= i < end for start, end in expo_ranges)
+                in_bi = any(start <= i < end for start, end in bi_ranges)
+                in_bold = any(start <= i < end for start, end in bold_ranges)
+                in_narration = any(start <= i < end for start, end in narration_ranges)
+                in_speech = any(start <= i < end for start, end in speech_ranges)
                 
-            # 2. Narration
-            for m in re.finditer(r"\*{3}[^*\n]+\*{3}", line):
-                ranges.append((m.start(), m.end(), "narration_bold_italics"))
-            for m in re.finditer(r"\*{2}[^*\n]+\*{2}", line):
-                ranges.append((m.start(), m.end(), "narration_bold"))
-            for m in re.finditer(r"\*[^*\n]+\*", line):
-                ranges.append((m.start(), m.end(), "narration"))
-                
-            # 3. Speech
-            for m in re.finditer(r'["“][^"“”\n]*["”]', line):
-                ranges.append((m.start(), m.end(), "speech"))
-                
-            ranges.sort(key=lambda x: (x[0], -x[1]))
+                if in_speech:
+                    if in_bi:
+                        line_tokens[i] = "speech_narration_bold_italics"
+                    elif in_bold:
+                        line_tokens[i] = "speech_narration_bold"
+                    elif in_narration:
+                        line_tokens[i] = "speech_narration"
+                    elif in_expo:
+                        line_tokens[i] = "speech_exposition"
+                    else:
+                        line_tokens[i] = "speech"
+                else:
+                    if in_bi:
+                        line_tokens[i] = "narration_bold_italics"
+                    elif in_bold:
+                        line_tokens[i] = "narration_bold"
+                    elif in_narration:
+                        line_tokens[i] = "narration"
+                    elif in_expo:
+                        line_tokens[i] = "exposition"
+                        
             resolved_ranges = []
-            last_end = 0
-            for start, end, token_type in ranges:
-                if start >= last_end:
-                    resolved_ranges.append((start, end, token_type))
-                    last_end = end
-                    
+            current_token = None
+            start_idx = 0
+            for i, token in enumerate(line_tokens):
+                if token != current_token:
+                    if current_token is not None:
+                        resolved_ranges.append((start_idx, i, current_token))
+                    current_token = token
+                    start_idx = i
+            if current_token is not None:
+                resolved_ranges.append((start_idx, len(line), current_token))
+                
             for start, end, token_type in resolved_ranges:
                 start_byte = len(line[:start].encode("utf-8"))
                 end_byte = len(line[:end].encode("utf-8"))
