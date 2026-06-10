@@ -685,25 +685,27 @@ class TestMenu(unittest.TestCase):
         self.assertEqual(chat_input._highlights[0], [])
         
         # Line 1: "Text with *italics* and **bold** formatting"
-        # "*italics*" is index 10 to 19 (length 9)
-        # "**bold**" is index 24 to 32 (length 8)
-        # Verify both ranges are caught as 'narration'
+        # "*italics*" is index 10 to 19 (length 9) -> narration
+        # "**bold**" is index 24 to 32 (length 8) -> narration_bold
         h1 = chat_input._highlights[1]
+        
         narration_ranges = [r for r in h1 if r[2] == "narration"]
-        self.assertEqual(len(narration_ranges), 2)
-        # Range start/end byte offsets should match the start/end indexes
+        self.assertEqual(len(narration_ranges), 1)
         self.assertEqual(narration_ranges[0][0], 10)
         self.assertEqual(narration_ranges[0][1], 19)
-        self.assertEqual(narration_ranges[1][0], 24)
-        self.assertEqual(narration_ranges[1][1], 32)
+        
+        bold_ranges = [r for r in h1 if r[2] == "narration_bold"]
+        self.assertEqual(len(bold_ranges), 1)
+        self.assertEqual(bold_ranges[0][0], 24)
+        self.assertEqual(bold_ranges[0][1], 32)
         
         # Line 2: "Text with ***bold italics*** formatting"
-        # "***bold italics***" is index 10 to 28 (length 18)
+        # "***bold italics***" is index 10 to 28 (length 18) -> narration_bold_italics
         h2 = chat_input._highlights[2]
-        narration_ranges_2 = [r for r in h2 if r[2] == "narration"]
-        self.assertEqual(len(narration_ranges_2), 1)
-        self.assertEqual(narration_ranges_2[0][0], 10)
-        self.assertEqual(narration_ranges_2[0][1], 28)
+        bi_ranges = [r for r in h2 if r[2] == "narration_bold_italics"]
+        self.assertEqual(len(bi_ranges), 1)
+        self.assertEqual(bi_ranges[0][0], 10)
+        self.assertEqual(bi_ranges[0][1], 28)
 
 if __name__ == "__main__":
     unittest.main()

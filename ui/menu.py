@@ -99,6 +99,8 @@ class ChatInput(TextArea):
             syntax_styles = {
                 "speech": Style(color=color),
                 "narration": Style(italic=True, dim=True),
+                "narration_bold": Style(bold=True),
+                "narration_bold_italics": Style(bold=True, italic=True, dim=True),
                 "exposition": Style(dim=True),
             }
             if base:
@@ -135,7 +137,11 @@ class ChatInput(TextArea):
                 ranges.append((m.start(), m.end(), "exposition"))
                 
             # 2. Narration
-            for m in re.finditer(r"\*{3}[^*\n]+\*{3}|\*{2}[^*\n]+\*{2}|\*[^*\n]+\*", line):
+            for m in re.finditer(r"\*{3}[^*\n]+\*{3}", line):
+                ranges.append((m.start(), m.end(), "narration_bold_italics"))
+            for m in re.finditer(r"\*{2}[^*\n]+\*{2}", line):
+                ranges.append((m.start(), m.end(), "narration_bold"))
+            for m in re.finditer(r"\*[^*\n]+\*", line):
                 ranges.append((m.start(), m.end(), "narration"))
                 
             # 3. Speech
@@ -204,6 +210,8 @@ class InlineEditor(TextArea):
             syntax_styles = {
                 "speech": Style(color=color),
                 "narration": Style(italic=True, dim=True),
+                "narration_bold": Style(bold=True),
+                "narration_bold_italics": Style(bold=True, italic=True, dim=True),
                 "exposition": Style(dim=True),
             }
             if base:
@@ -240,7 +248,11 @@ class InlineEditor(TextArea):
                 ranges.append((m.start(), m.end(), "exposition"))
                 
             # 2. Narration
-            for m in re.finditer(r"\*{3}[^*\n]+\*{3}|\*{2}[^*\n]+\*{2}|\*[^*\n]+\*", line):
+            for m in re.finditer(r"\*{3}[^*\n]+\*{3}", line):
+                ranges.append((m.start(), m.end(), "narration_bold_italics"))
+            for m in re.finditer(r"\*{2}[^*\n]+\*{2}", line):
+                ranges.append((m.start(), m.end(), "narration_bold"))
+            for m in re.finditer(r"\*[^*\n]+\*", line):
                 ranges.append((m.start(), m.end(), "narration"))
                 
             # 3. Speech
