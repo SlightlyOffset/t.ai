@@ -135,7 +135,7 @@ class ChatInput(TextArea):
                 ranges.append((m.start(), m.end(), "exposition"))
                 
             # 2. Narration
-            for m in re.finditer(r"\*[^*\n]+\*", line):
+            for m in re.finditer(r"\*{3}[^*\n]+\*{3}|\*{2}[^*\n]+\*{2}|\*[^*\n]+\*", line):
                 ranges.append((m.start(), m.end(), "narration"))
                 
             # 3. Speech
@@ -240,7 +240,7 @@ class InlineEditor(TextArea):
                 ranges.append((m.start(), m.end(), "exposition"))
                 
             # 2. Narration
-            for m in re.finditer(r"\*[^*\n]+\*", line):
+            for m in re.finditer(r"\*{3}[^*\n]+\*{3}|\*{2}[^*\n]+\*{2}|\*[^*\n]+\*", line):
                 ranges.append((m.start(), m.end(), "narration"))
                 
             # 3. Speech

@@ -663,5 +663,47 @@ class TestMenu(unittest.TestCase):
         app.refresh_last_ai_message("msg2", index=1, total=3)
         self.assertEqual(app._visible_message_count, 1)
 
+    def test_highlight_narration_asterisks(self):
+        """Verify that ChatInput's highlight map identifies single, double, and triple asterisk narration."""
+        from ui.menu import ChatInput
+        
+        chat_input = ChatInput()
+        # Set documents/lines
+        chat_input.document = MagicMock()
+        chat_input.document.lines = [
+            "Normal text",
+            "Text with *italics* and **bold** formatting",
+            "Text with ***bold italics*** formatting"
+        ]
+        chat_input._line_cache = set()
+        from collections import defaultdict
+        chat_input._highlights = defaultdict(list)
+        
+        chat_input._build_highlight_map()
+        
+        # Line 0: "Normal text" -> no highlights
+        self.assertEqual(chat_input._highlights[0], [])
+        
+        # Line 1: "Text with *italics* and **bold** formatting"
+        # "*italics*" is index 10 to 19 (length 9)
+        # "**bold**" is index 24 to 32 (length 8)
+        # Verify both ranges are caught as 'narration'
+        h1 = chat_input._highlights[1]
+        narration_ranges = [r for r in h1 if r[2] == "narration"]
+        self.assertEqual(len(narration_ranges), 2)
+        # Range start/end byte offsets should match the start/end indexes
+        self.assertEqual(narration_ranges[0][0], 10)
+        self.assertEqual(narration_ranges[0][1], 19)
+        self.assertEqual(narration_ranges[1][0], 24)
+        self.assertEqual(narration_ranges[1][1], 32)
+        
+        # Line 2: "Text with ***bold italics*** formatting"
+        # "***bold italics***" is index 10 to 28 (length 18)
+        h2 = chat_input._highlights[2]
+        narration_ranges_2 = [r for r in h2 if r[2] == "narration"]
+        self.assertEqual(len(narration_ranges_2), 1)
+        self.assertEqual(narration_ranges_2[0][0], 10)
+        self.assertEqual(narration_ranges_2[0][1], 28)
+
 if __name__ == "__main__":
     unittest.main()
