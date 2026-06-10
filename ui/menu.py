@@ -140,13 +140,31 @@ class ChatInput(TextArea):
             narration_ranges = [(m.start(), m.end()) for m in re.finditer(r"\*[^*\n]+\*", line)]
             speech_ranges = [(m.start(), m.end()) for m in re.finditer(r'["“][^"“”\n]*["”]', line)]
             
+            # Use character masks to check styles in O(N) instead of O(N * M)
+            masks = [0] * len(line)
+            for start, end in expo_ranges:
+                for i in range(start, end):
+                    masks[i] |= 1
+            for start, end in bi_ranges:
+                for i in range(start, end):
+                    masks[i] |= 2
+            for start, end in bold_ranges:
+                for i in range(start, end):
+                    masks[i] |= 4
+            for start, end in narration_ranges:
+                for i in range(start, end):
+                    masks[i] |= 8
+            for start, end in speech_ranges:
+                for i in range(start, end):
+                    masks[i] |= 16
+            
             line_tokens = [None] * len(line)
-            for i in range(len(line)):
-                in_expo = any(start <= i < end for start, end in expo_ranges)
-                in_bi = any(start <= i < end for start, end in bi_ranges)
-                in_bold = any(start <= i < end for start, end in bold_ranges)
-                in_narration = any(start <= i < end for start, end in narration_ranges)
-                in_speech = any(start <= i < end for start, end in speech_ranges)
+            for i, mask in enumerate(masks):
+                in_expo = bool(mask & 1)
+                in_bi = bool(mask & 2)
+                in_bold = bool(mask & 4)
+                in_narration = bool(mask & 8)
+                in_speech = bool(mask & 16)
                 
                 if in_speech:
                     if in_bi:
@@ -276,13 +294,31 @@ class InlineEditor(TextArea):
             narration_ranges = [(m.start(), m.end()) for m in re.finditer(r"\*[^*\n]+\*", line)]
             speech_ranges = [(m.start(), m.end()) for m in re.finditer(r'["“][^"“”\n]*["”]', line)]
             
+            # Use character masks to check styles in O(N) instead of O(N * M)
+            masks = [0] * len(line)
+            for start, end in expo_ranges:
+                for i in range(start, end):
+                    masks[i] |= 1
+            for start, end in bi_ranges:
+                for i in range(start, end):
+                    masks[i] |= 2
+            for start, end in bold_ranges:
+                for i in range(start, end):
+                    masks[i] |= 4
+            for start, end in narration_ranges:
+                for i in range(start, end):
+                    masks[i] |= 8
+            for start, end in speech_ranges:
+                for i in range(start, end):
+                    masks[i] |= 16
+            
             line_tokens = [None] * len(line)
-            for i in range(len(line)):
-                in_expo = any(start <= i < end for start, end in expo_ranges)
-                in_bi = any(start <= i < end for start, end in bi_ranges)
-                in_bold = any(start <= i < end for start, end in bold_ranges)
-                in_narration = any(start <= i < end for start, end in narration_ranges)
-                in_speech = any(start <= i < end for start, end in speech_ranges)
+            for i, mask in enumerate(masks):
+                in_expo = bool(mask & 1)
+                in_bi = bool(mask & 2)
+                in_bold = bool(mask & 4)
+                in_narration = bool(mask & 8)
+                in_speech = bool(mask & 16)
                 
                 if in_speech:
                     if in_bi:
