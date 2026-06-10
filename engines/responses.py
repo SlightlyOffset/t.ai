@@ -122,30 +122,24 @@ def parse_sse_stream(response: requests.Response):
     Parses a Server-Sent Events (SSE) stream from an OpenAI-compatible endpoint.
     Yields text chunks as they arrive.
     """
-    buffer = ""
-    for chunk in response.iter_content(chunk_size=None, decode_unicode=True):
-        if not chunk:
+    for line in response.iter_lines(decode_unicode=True):
+        if not line:
             continue
-        buffer += chunk
-        while "\n" in buffer:
-            line, buffer = buffer.split("\n", 1)
-            line = line.strip()
-            if not line:
-                continue
-            if line.startswith("data:"):
-                data_str = line[5:].strip()
-                if data_str == "[DONE]":
-                    break
-                try:
-                    data = json.loads(data_str)
-                    choices = data.get("choices")
-                    if isinstance(choices, list) and choices:
-                        delta = choices[0].get("delta", {})
-                        content = delta.get("content", "")
-                        if content:
-                            yield content
-                except Exception:
-                    pass
+        line = line.strip()
+        if line.startswith("data:"):
+            data_str = line[5:].strip()
+            if data_str == "[DONE]":
+                break
+            try:
+                data = json.loads(data_str)
+                choices = data.get("choices")
+                if isinstance(choices, list) and choices:
+                    delta = choices[0].get("delta", {})
+                    content = delta.get("content", "")
+                    if content:
+                        yield content
+            except Exception:
+                pass
 
 def _ollama_chat_compat(model: str, messages: list, stream: bool = False, format: str = None, options: dict = None, think: bool = False):
     """
@@ -186,7 +180,8 @@ def _ollama_chat_compat(model: str, messages: list, stream: bool = False, format
             payload[sampler] = val
 
     if stream:
-        response = requests.post(full_url, json=payload, stream=True, timeout=60)
+        headers = {"Accept": "text/event-stream"}
+        response = requests.post(full_url, json=payload, headers=headers, stream=True, timeout=60)
         response.raise_for_status()
         
         def sse_chunk_generator():
