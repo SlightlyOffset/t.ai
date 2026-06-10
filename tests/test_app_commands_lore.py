@@ -1,7 +1,6 @@
 import unittest
 import os
 import shutil
-import json
 from engines.app_commands import app_commands
 
 class TestAppCommandsLore(unittest.TestCase):

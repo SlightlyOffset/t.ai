@@ -3,7 +3,6 @@ Local XTTS v2 inference module.
 Optimized for NVIDIA GPUs with 6GB+ VRAM (e.g., RTX 3050).
 """
 
-import os
 import gc
 import traceback
 from colorama import Fore

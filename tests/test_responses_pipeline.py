@@ -361,7 +361,14 @@ class TestResponsesPipeline(unittest.TestCase):
         chunks = list(get_respond_stream("Hi", profile, history_profile_name="test_profile", is_regeneration=False))
         self.assertIn("Remote candidate reply", "".join(chunks))
         self.assertTrue(mock_post.called)
-        payload = mock_post.call_args.kwargs["json"]
+        # Find the POST call destined for the remote URL /chat
+        remote_call = None
+        for call in mock_post.call_args_list:
+            if call.kwargs.get("json") and "messages" in call.kwargs["json"]:
+                remote_call = call
+                break
+        self.assertIsNotNone(remote_call, "Remote LLM POST request was not found")
+        payload = remote_call.kwargs["json"]
         self.assertEqual(payload["repetition_penalty"], 1.4)
 
     @patch("engines.responses.get_sentiment_score", return_value=0)

@@ -1,5 +1,5 @@
 import unittest
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch
 from engines.responses import generate_summary
 
 class TestSummarizer(unittest.TestCase):

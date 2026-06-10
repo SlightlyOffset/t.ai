@@ -1,3 +1,4 @@
+import time
 from engines.config import get_setting
 from engines.formatting import get_tts_split_points
 from engines.responses import get_respond_stream
@@ -48,55 +49,95 @@ def iterate_response_events(
     - {"type":"complete","full_response": str}
     """
     runtime = _resolve_tts_runtime(character_profile)
-    full_response = ""
+    target_text = ""
+    displayed_text = ""
     current_buffer = ""
     tts_in_narration = False
+    smooth_streaming = get_setting("smooth_streaming", True)
+    streaming_delay = get_setting("streaming_delay", 0.055)
 
-    for chunk in get_respond_stream(
+    stream_active = True
+    stream_iterator = get_respond_stream(
         message,
         character_profile,
         history_profile_name=history_profile_name,
         is_regeneration=is_regeneration,
         user_name=user_name,
         post_process_callback=post_process_callback,
-    ):
-        full_response += chunk
-        current_buffer += chunk
-        execute_hooks("on_llm_chunk", {"chunk": chunk, "full_response": full_response})
-        yield {"type": "chunk", "full_response": full_response}
+    )
 
-        # Preserve legacy behavior: the TTS master toggle should apply immediately
-        # even while a response is still streaming.
-        if not get_setting("tts_enabled", False):
-            continue
+    while True:
+        chunk = None
+        if stream_active:
+            try:
+                chunk = next(stream_iterator)
+                target_text += chunk
+                current_buffer += chunk
+                execute_hooks("on_llm_chunk", {"chunk": chunk, "full_response": target_text})
 
-        split_points = get_tts_split_points(current_buffer)
-        if not split_points:
-            continue
+                # Preserve legacy behavior: the TTS master toggle should apply immediately
+                # even while a response is still streaming.
+                if get_setting("tts_enabled", False):
+                    split_points = get_tts_split_points(current_buffer)
+                    if split_points:
+                        last_point = 0
+                        for point in split_points:
+                            segment = current_buffer[last_point:point]
+                            voice = runtime["narrator_voice"] if tts_in_narration else runtime["char_voice"]
+                            engine = runtime["narrator_engine"] if tts_in_narration else runtime["char_engine"]
+                            clone_ref = None if tts_in_narration else runtime["char_clone_ref"]
+                            language = "en" if tts_in_narration else runtime["char_language"]
 
-        last_point = 0
-        for point in split_points:
-            segment = current_buffer[last_point:point]
-            voice = runtime["narrator_voice"] if tts_in_narration else runtime["char_voice"]
-            engine = runtime["narrator_engine"] if tts_in_narration else runtime["char_engine"]
-            clone_ref = None if tts_in_narration else runtime["char_clone_ref"]
-            language = "en" if tts_in_narration else runtime["char_language"]
+                            if "*" in segment:
+                                tts_in_narration = not tts_in_narration
 
-            if "*" in segment:
-                tts_in_narration = not tts_in_narration
+                            cleaned = clean_text_for_tts(segment, speak_narration=True)
+                            if cleaned and _should_enqueue_segment(
+                                voice=voice,
+                                char_voice=runtime["char_voice"],
+                                narrator_voice=runtime["narrator_voice"],
+                                speak_enable=runtime["speak_enable"],
+                                narration_enable=runtime["narration_enable"],
+                            ):
+                                yield {"type": "tts", "payload": (cleaned, voice, engine, clone_ref, language, user_name)}
+                            last_point = point
+                        current_buffer = current_buffer[last_point:]
+            except StopIteration:
+                stream_active = False
 
-            cleaned = clean_text_for_tts(segment, speak_narration=True)
-            if cleaned and _should_enqueue_segment(
-                voice=voice,
-                char_voice=runtime["char_voice"],
-                narrator_voice=runtime["narrator_voice"],
-                speak_enable=runtime["speak_enable"],
-                narration_enable=runtime["narration_enable"],
-            ):
-                yield {"type": "tts", "payload": (cleaned, voice, engine, clone_ref, language, user_name)}
-            last_point = point
+        if smooth_streaming:
+            # Typewriter catch-up loop / step
+            while True:
+                gap = len(target_text) - len(displayed_text)
+                if gap <= 0:
+                    break
 
-        current_buffer = current_buffer[last_point:]
+                # Dynamic step sizing for catching up quickly
+                if gap > 30:
+                    step_size = gap // 3
+                elif gap > 15:
+                    step_size = 4
+                elif gap > 5:
+                    step_size = 2
+                else:
+                    step_size = 1
+
+                displayed_text += target_text[len(displayed_text):len(displayed_text) + step_size]
+                yield {"type": "chunk", "full_response": displayed_text}
+                time.sleep(streaming_delay)
+
+                # If LLM is still generating, yield control back to fetch new chunks
+                # as long as we're not lagging too far behind (gap < 15)
+                if stream_active and (len(target_text) - len(displayed_text)) < 15:
+                    break
+        else:
+            displayed_text = target_text
+            if chunk is not None:
+                yield {"type": "chunk", "full_response": target_text}
+
+        # Exit when generator is empty and all characters have been typewriter-printed
+        if not stream_active and len(displayed_text) == len(target_text):
+            break
 
     if get_setting("tts_enabled", False) and current_buffer.strip():
         cleaned = clean_text_for_tts(current_buffer.strip(), speak_narration=True)
@@ -114,10 +155,18 @@ def iterate_response_events(
         ):
             yield {"type": "tts", "payload": (cleaned, voice, engine, clone_ref, language, user_name)}
 
-    full_response = execute_pipeline("after_llm_generation", full_response, {
+    # Wait for all background post-processing threads (like history saving and sentiment analysis)
+    # to complete before yielding 'complete', to prevent race conditions on history loading.
+    from engines.responses import active_post_process_threads
+    for t in list(active_post_process_threads):
+        if t.is_alive():
+            t.join()
+
+    target_text = execute_pipeline("after_llm_generation", target_text, {
         "character_profile": character_profile,
         "history_profile_name": history_profile_name,
         "is_regeneration": is_regeneration,
     })
-    yield {"type": "complete", "full_response": full_response}
+    yield {"type": "complete", "full_response": target_text}
+
 

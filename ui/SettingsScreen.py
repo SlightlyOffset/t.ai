@@ -1,6 +1,5 @@
-import re
 from textual.app import ComposeResult
-from textual.containers import Container, Horizontal, Vertical, VerticalScroll
+from textual.containers import Container, Horizontal, VerticalScroll
 from textual.screen import ModalScreen
 from textual.widgets import Header, Label, Footer, TabbedContent, TabPane, Switch, Input, Select, Button
 
@@ -85,6 +84,15 @@ class SettingsScreen(ModalScreen):
         color: $primary;
         margin: 1 0;
     }
+
+    .settings_note {
+        width: 100%;
+        margin-bottom: 1;
+        padding-left: 2;
+        color: $text;
+        opacity: 0.6;
+        text-style: italic;
+    }
     """
 
     BINDINGS = [
@@ -102,6 +110,8 @@ class SettingsScreen(ModalScreen):
         interaction_mode = settings.get("interaction_mode", "rp")
         clear_on_start = settings.get("clear_on_start", False)
         auto_recap_on_start = settings.get("auto_recap_on_start", True)
+        smooth_streaming = settings.get("smooth_streaming", True)
+        streaming_delay = str(settings.get("streaming_delay", 0.055))
         image_protocol = settings.get("image_protocol", "auto")
         image_size = settings.get("image_size", "medium")
         suppress_errors = settings.get("suppress_errors", True)
@@ -124,6 +134,7 @@ class SettingsScreen(ModalScreen):
 
         remote_llm_url = settings.get("remote_llm_url") or ""
         remote_tts_url = settings.get("remote_tts_url") or ""
+        local_llm_url = settings.get("local_llm_url") or ""
         privacy_mode = settings.get("privacy_mode", False)
 
         debug_mode = settings.get("debug_mode", False)
@@ -163,6 +174,12 @@ class SettingsScreen(ModalScreen):
                             yield Label("Auto Recap on Start:", classes="settings_label")
                             yield Switch(value=auto_recap_on_start, id="auto_recap_on_start", classes="settings_widget")
                         with Horizontal(classes="settings_row"):
+                            yield Label("Smooth Streaming:", classes="settings_label")
+                            yield Switch(value=smooth_streaming, id="smooth_streaming", classes="settings_widget")
+                        with Horizontal(classes="settings_row"):
+                            yield Label("Streaming Delay (s):", classes="settings_label")
+                            yield Input(value=streaming_delay, id="streaming_delay", classes="settings_widget")
+                        with Horizontal(classes="settings_row"):
                             yield Label("Image Protocol:", classes="settings_label")
                             yield Select(
                                 TaiMenu.IMAGE_PROTOCOLS,
@@ -184,6 +201,10 @@ class SettingsScreen(ModalScreen):
 
                 with TabPane("AI Engine", id="tab_ai"):
                     with VerticalScroll(classes="settings_pane"):
+                        with Horizontal(classes="settings_row"):
+                            yield Label("Local LLM API URL:", classes="settings_label")
+                            yield Input(value=local_llm_url, id="local_llm_url", classes="settings_widget")
+                        yield Label("Note: Single-model backends (like KoboldCPP) ignore the model fields below and use the model loaded in the server.", classes="settings_note")
                         with Horizontal(classes="settings_row"):
                             yield Label("Default LLM Model:", classes="settings_label")
                             yield Input(value=default_llm_model, id="default_llm_model", classes="settings_widget")
@@ -353,6 +374,7 @@ class SettingsScreen(ModalScreen):
         # 1. Fetch values
         remote_llm = self.query_one("#remote_llm_url", Input).value.strip()
         remote_tts = self.query_one("#remote_tts_url", Input).value.strip()
+        local_llm = self.query_one("#local_llm_url", Input).value.strip()
 
         # Validate remote SSL URLs (VULN-004 Enforcement)
         if remote_llm and not remote_llm.startswith("https://"):
@@ -361,8 +383,22 @@ class SettingsScreen(ModalScreen):
         if remote_tts and not remote_tts.startswith("https://"):
             self.show_error("Remote TTS URL must use secure HTTPS protocol.")
             return
+            
+        from engines.config import is_local_address
+        if local_llm and not local_llm.startswith("https://"):
+            if not is_local_address(local_llm):
+                self.show_error("Local LLM API URL must use secure HTTPS protocol or a local loopback/private IP.")
+                return
 
         # Parse and validate integers/floats
+        try:
+            streaming_delay = float(self.query_one("#streaming_delay", Input).value.strip())
+            if streaming_delay < 0:
+                raise ValueError()
+        except ValueError:
+            self.show_error("Streaming Delay must be a non-negative number.")
+            return
+
         try:
             memory_limit = int(self.query_one("#memory_limit", Input).value.strip())
             if memory_limit <= 0:
@@ -408,6 +444,8 @@ class SettingsScreen(ModalScreen):
             "interaction_mode": self.query_one("#interaction_mode", Select).value,
             "clear_on_start": self.query_one("#clear_on_start", Switch).value,
             "auto_recap_on_start": self.query_one("#auto_recap_on_start", Switch).value,
+            "smooth_streaming": self.query_one("#smooth_streaming", Switch).value,
+            "streaming_delay": streaming_delay,
             "image_protocol": self.query_one("#image_protocol", Select).value,
             "image_size": self.query_one("#image_size", Select).value,
             "suppress_errors": self.query_one("#suppress_errors", Switch).value,
@@ -430,6 +468,7 @@ class SettingsScreen(ModalScreen):
 
             "remote_llm_url": remote_llm or None,
             "remote_tts_url": remote_tts or None,
+            "local_llm_url": local_llm or None,
             "privacy_mode": self.query_one("#privacy_mode", Switch).value,
 
             "debug_mode": self.query_one("#debug_mode", Switch).value,
@@ -478,7 +517,7 @@ class SettingsScreen(ModalScreen):
                 try:
                     with open(p_info["config_path"], "w", encoding="utf-8") as f:
                         json.dump(new_config, f, indent=4)
-                except Exception as e:
+                except Exception:
                     self.show_error(f"Failed to save config for plugin {p_name}.")
                     return
 

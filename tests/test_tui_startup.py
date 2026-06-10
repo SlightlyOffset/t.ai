@@ -1,5 +1,5 @@
 import unittest
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch
 import sys
 import os
 
@@ -15,7 +15,6 @@ class TestTUIStartup(unittest.TestCase):
         Test that running menu.py does not call the blocking pick_profile and pick_user_profile functions.
         This test will fail if they are still present in the __main__ block and called.
         """
-        import ui.menu as menu
         
         # We need to trigger the __main__ logic. 
         # Since it's protected by if __name__ == "__main__", we can't just import it.
@@ -60,7 +59,6 @@ class TestTUIStartup(unittest.TestCase):
         """
         Test that load_initial_state attempts to load from settings if paths are None.
         """
-        import ui.menu as menu
         from ui.menu import TaiMenu
         
         # Mock get_setting to return a valid profile filename
@@ -93,7 +91,6 @@ class TestTUIStartup(unittest.TestCase):
         """
         Test that push_screen(ProfileSelect()) is called if load_initial_state fails to find paths.
         """
-        import ui.menu as menu
         from ui.menu import TaiMenu
         
         # Mock get_setting to return None
@@ -231,6 +228,21 @@ class TestTUIStartup(unittest.TestCase):
         
         check_ollama_and_models()
         self.assertFalse(mock_ollama_list.called)
+
+    @patch('engines.config.get_setting')
+    @patch('ollama.list')
+    def test_check_ollama_and_models_custom_local_url(self, mock_ollama_list, mock_get_setting):
+        """Test check_ollama_and_models skips check when custom local_llm_url (not 11434) is configured."""
+        from main import check_ollama_and_models
+        mock_get_setting.side_effect = lambda key, default=None: {
+            "remote_llm_url": None,
+            "local_llm_url": "http://localhost:5001/v1",
+            "default_llm_model": "fluffy/l3-8b-stheno-v3.2"
+        }.get(key, default)
+        
+        check_ollama_and_models()
+        self.assertFalse(mock_ollama_list.called)
+
 
     @patch('engines.config.get_setting')
     @patch('ollama.list')

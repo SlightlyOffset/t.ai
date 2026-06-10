@@ -167,8 +167,8 @@ class CharacterImporter:
         Uses a local LLM to refine and clean character profile metadata fields.
         Returns the updated profile (modifying fields like alt_names, character_info, backstory, rp_mannerisms).
         """
-        import ollama
         from engines.config import get_setting
+        from engines.responses import _ollama_chat_compat
 
         if not profile:
             return profile
@@ -237,7 +237,7 @@ class CharacterImporter:
 
         try:
             # Enforce JSON formatting
-            result = ollama.chat(
+            result = _ollama_chat_compat(
                 model=refine_model,
                 messages=messages,
                 stream=False,

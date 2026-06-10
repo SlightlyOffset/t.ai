@@ -29,6 +29,7 @@ class TestSettingsScreen(unittest.TestCase):
         self.widgets = {
             "#remote_llm_url": MagicMock(value=""),
             "#remote_tts_url": MagicMock(value=""),
+            "#local_llm_url": MagicMock(value=""),
             "#memory_limit": MagicMock(value="15"),
             "#repetition_penalty": MagicMock(value="1.15"),
             "#max_tokens": MagicMock(value="300"),
@@ -37,6 +38,8 @@ class TestSettingsScreen(unittest.TestCase):
             "#interaction_mode": MagicMock(value="rp"),
             "#clear_on_start": MagicMock(value=False),
             "#auto_recap_on_start": MagicMock(value=True),
+            "#smooth_streaming": MagicMock(value=True),
+            "#streaming_delay": MagicMock(value="0.055"),
             "#image_protocol": MagicMock(value="auto"),
             "#image_size": MagicMock(value="medium"),
             "#suppress_errors": MagicMock(value=True),
@@ -114,6 +117,7 @@ class TestSettingsScreen(unittest.TestCase):
         self.assertEqual(dismissed_dict["overhaul_candidate_count"], 2)
         self.assertEqual(dismissed_dict["interaction_mode"], "rp")
         self.assertEqual(dismissed_dict["image_size"], "medium")
+        self.assertEqual(dismissed_dict["streaming_delay"], 0.055)
 
     @patch('engines.config.update_settings')
     def test_save_action_insecure_llm_url(self, mock_update):
@@ -136,6 +140,27 @@ class TestSettingsScreen(unittest.TestCase):
         self.screen.dismiss.assert_not_called()
 
     @patch('engines.config.update_settings')
+    def test_save_action_insecure_local_llm_url_rejected(self, mock_update):
+        """Test validation rejects insecure HTTP remote URL for local_llm_url when not local address."""
+        self.widgets["#local_llm_url"].value = "http://insecure-remote-url.com"
+        self.screen.action_save()
+
+        self.screen.show_error.assert_called_once_with("Local LLM API URL must use secure HTTPS protocol or a local loopback/private IP.")
+        mock_update.assert_not_called()
+        self.screen.dismiss.assert_not_called()
+
+    @patch('engines.config.update_settings')
+    def test_save_action_local_loopback_http_llm_url_succeeds(self, mock_update):
+        """Test validation accepts insecure HTTP local loopback URL for local_llm_url."""
+        mock_update.return_value = True
+        self.widgets["#local_llm_url"].value = "http://localhost:5001/v1"
+        self.screen.action_save()
+
+        self.screen.show_error.assert_not_called()
+        self.assertTrue(mock_update.called)
+        self.screen.dismiss.assert_called_once()
+
+    @patch('engines.config.update_settings')
     def test_save_action_secure_urls_succeed(self, mock_update):
         """Test validation accepts secure HTTPS remote URLs."""
         mock_update.return_value = True
@@ -150,7 +175,24 @@ class TestSettingsScreen(unittest.TestCase):
     @patch('engines.config.update_settings')
     def test_save_action_numeric_validation_failures(self, mock_update):
         """Test that invalid numeric inputs trigger validation errors and do not save."""
-        # 1. Invalid memory limit
+        # 1. Invalid streaming delay (not a float)
+        self.widgets["#streaming_delay"].value = "not-a-float"
+        self.screen.action_save()
+        self.screen.show_error.assert_called_with("Streaming Delay must be a non-negative number.")
+        self.screen.dismiss.assert_not_called()
+        mock_update.assert_not_called()
+        self.screen.show_error.reset_mock()
+
+        # 2. Invalid streaming delay (negative float)
+        self.widgets["#streaming_delay"].value = "-0.1"
+        self.screen.action_save()
+        self.screen.show_error.assert_called_with("Streaming Delay must be a non-negative number.")
+        self.screen.dismiss.assert_not_called()
+        mock_update.assert_not_called()
+        self.screen.show_error.reset_mock()
+
+        # Reset streaming delay to valid, test invalid memory limit
+        self.widgets["#streaming_delay"].value = "0.055"
         self.widgets["#memory_limit"].value = "not-an-int"
         self.screen.action_save()
         self.screen.show_error.assert_called_with("Memory Message Limit must be a positive integer.")

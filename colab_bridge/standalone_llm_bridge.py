@@ -13,17 +13,13 @@ Usage:
 """
 
 import argparse
-import asyncio
 import json
 import logging
 import os
-import queue
 import re
 import subprocess
 import sys
-import threading
 import time
-from pathlib import Path
 from typing import Optional
 
 import numpy as np
@@ -380,7 +376,6 @@ class LLMEngine:
         **kwargs,
     ):
         import requests
-        import json
         
         if not self.ready:
             yield FALLBACK_UNAVAILABLE_MESSAGE
@@ -643,7 +638,7 @@ def create_app(
     llm_engine: Optional[LLMEngine] = None,
 ) -> FastAPI:
     """Create FastAPI app for the bridge."""
-    app = FastAPI(title="LLM Bridge", version="1.3.0")
+    app = FastAPI(title="LLM Bridge", version="2.0.0")
 
     if lore_manager is None:
         lore_manager = LoreManager()

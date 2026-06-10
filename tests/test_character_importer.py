@@ -1,6 +1,6 @@
 import unittest
 import json
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch
 from engines.character_importer import CharacterImporter
 
 

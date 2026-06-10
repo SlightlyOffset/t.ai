@@ -1,6 +1,5 @@
 import unittest
 import os
-import json
 from engines.memory_v2 import HistoryManager
 
 class TestMemoryRolling(unittest.TestCase):

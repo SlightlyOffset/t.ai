@@ -5,7 +5,6 @@ Efficiently injects world/character facts based on keywords in recent history.
 
 import json
 import os
-import re
 import requests
 
 def load_lorebook(filepath: str) -> dict:

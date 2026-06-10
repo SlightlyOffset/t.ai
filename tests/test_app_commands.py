@@ -2,9 +2,8 @@ import unittest
 import os
 import sys
 import re # Import re
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch
 from io import StringIO
-from colorama import Fore, Style # Import Fore and Style
 
 # Add the project root to the Python path
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
@@ -12,7 +11,6 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')
 # Import app_commands and its dependencies (memory_manager, get_setting) at the top level
 from engines.app_commands import app_commands, RestartRequested, RegenerateRequested, RewindRequested
 from engines.memory_v2 import memory_manager
-from engines.config import get_setting
 
 def strip_ansi(text):
     """Helper to strip ANSI escape codes for testing."""

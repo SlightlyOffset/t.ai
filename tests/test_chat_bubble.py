@@ -1,7 +1,6 @@
 import unittest
 from unittest.mock import MagicMock, patch
 from ui.menu import ChatBubble, ImageBubble
-from textual.app import App
 
 
 class TestChatBubble(unittest.TestCase):
