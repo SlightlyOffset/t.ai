@@ -124,6 +124,7 @@ class SettingsScreen(ModalScreen):
 
         remote_llm_url = settings.get("remote_llm_url") or ""
         remote_tts_url = settings.get("remote_tts_url") or ""
+        local_llm_url = settings.get("local_llm_url") or ""
         privacy_mode = settings.get("privacy_mode", False)
 
         debug_mode = settings.get("debug_mode", False)
@@ -187,6 +188,9 @@ class SettingsScreen(ModalScreen):
                         with Horizontal(classes="settings_row"):
                             yield Label("Default LLM Model:", classes="settings_label")
                             yield Input(value=default_llm_model, id="default_llm_model", classes="settings_widget")
+                        with Horizontal(classes="settings_row"):
+                            yield Label("Local LLM API URL:", classes="settings_label")
+                            yield Input(value=local_llm_url, id="local_llm_url", classes="settings_widget")
                         with Horizontal(classes="settings_row"):
                             yield Label("Summarizer Model:", classes="settings_label")
                             yield Input(value=summarizer_model, id="summarizer_model", classes="settings_widget")
@@ -353,6 +357,7 @@ class SettingsScreen(ModalScreen):
         # 1. Fetch values
         remote_llm = self.query_one("#remote_llm_url", Input).value.strip()
         remote_tts = self.query_one("#remote_tts_url", Input).value.strip()
+        local_llm = self.query_one("#local_llm_url", Input).value.strip()
 
         # Validate remote SSL URLs (VULN-004 Enforcement)
         if remote_llm and not remote_llm.startswith("https://"):
@@ -361,6 +366,12 @@ class SettingsScreen(ModalScreen):
         if remote_tts and not remote_tts.startswith("https://"):
             self.show_error("Remote TTS URL must use secure HTTPS protocol.")
             return
+            
+        from engines.config import is_local_address
+        if local_llm and not local_llm.startswith("https://"):
+            if not is_local_address(local_llm):
+                self.show_error("Local LLM API URL must use secure HTTPS protocol or a local loopback/private IP.")
+                return
 
         # Parse and validate integers/floats
         try:
@@ -430,6 +441,7 @@ class SettingsScreen(ModalScreen):
 
             "remote_llm_url": remote_llm or None,
             "remote_tts_url": remote_tts or None,
+            "local_llm_url": local_llm or None,
             "privacy_mode": self.query_one("#privacy_mode", Switch).value,
 
             "debug_mode": self.query_one("#debug_mode", Switch).value,

@@ -29,6 +29,7 @@ class TestSettingsScreen(unittest.TestCase):
         self.widgets = {
             "#remote_llm_url": MagicMock(value=""),
             "#remote_tts_url": MagicMock(value=""),
+            "#local_llm_url": MagicMock(value=""),
             "#memory_limit": MagicMock(value="15"),
             "#repetition_penalty": MagicMock(value="1.15"),
             "#max_tokens": MagicMock(value="300"),
@@ -134,6 +135,27 @@ class TestSettingsScreen(unittest.TestCase):
         self.screen.show_error.assert_called_once_with("Remote TTS URL must use secure HTTPS protocol.")
         mock_update.assert_not_called()
         self.screen.dismiss.assert_not_called()
+
+    @patch('engines.config.update_settings')
+    def test_save_action_insecure_local_llm_url_rejected(self, mock_update):
+        """Test validation rejects insecure HTTP remote URL for local_llm_url when not local address."""
+        self.widgets["#local_llm_url"].value = "http://insecure-remote-url.com"
+        self.screen.action_save()
+
+        self.screen.show_error.assert_called_once_with("Local LLM API URL must use secure HTTPS protocol or a local loopback/private IP.")
+        mock_update.assert_not_called()
+        self.screen.dismiss.assert_not_called()
+
+    @patch('engines.config.update_settings')
+    def test_save_action_local_loopback_http_llm_url_succeeds(self, mock_update):
+        """Test validation accepts insecure HTTP local loopback URL for local_llm_url."""
+        mock_update.return_value = True
+        self.widgets["#local_llm_url"].value = "http://localhost:5001/v1"
+        self.screen.action_save()
+
+        self.screen.show_error.assert_not_called()
+        self.assertTrue(mock_update.called)
+        self.screen.dismiss.assert_called_once()
 
     @patch('engines.config.update_settings')
     def test_save_action_secure_urls_succeed(self, mock_update):
