@@ -169,6 +169,7 @@ class CharacterImporter:
         """
         import ollama
         from engines.config import get_setting
+        from engines.responses import _ollama_chat_compat
 
         if not profile:
             return profile
@@ -237,7 +238,7 @@ class CharacterImporter:
 
         try:
             # Enforce JSON formatting
-            result = ollama.chat(
+            result = _ollama_chat_compat(
                 model=refine_model,
                 messages=messages,
                 stream=False,

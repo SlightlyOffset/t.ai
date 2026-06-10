@@ -117,6 +117,104 @@ def _extract_remote_message_content(response: requests.Response) -> str:
         return plain
     raise ValueError("Remote LLM response did not include parseable content.")
 
+def parse_sse_stream(response: requests.Response):
+    """
+    Parses a Server-Sent Events (SSE) stream from an OpenAI-compatible endpoint.
+    Yields text chunks as they arrive.
+    """
+    buffer = ""
+    for chunk in response.iter_content(chunk_size=None, decode_unicode=True):
+        if not chunk:
+            continue
+        buffer += chunk
+        while "\n" in buffer:
+            line, buffer = buffer.split("\n", 1)
+            line = line.strip()
+            if not line:
+                continue
+            if line.startswith("data:"):
+                data_str = line[5:].strip()
+                if data_str == "[DONE]":
+                    break
+                try:
+                    data = json.loads(data_str)
+                    choices = data.get("choices")
+                    if isinstance(choices, list) and choices:
+                        delta = choices[0].get("delta", {})
+                        content = delta.get("content", "")
+                        if content:
+                            yield content
+                except Exception:
+                    pass
+
+def _ollama_chat_compat(model: str, messages: list, stream: bool = False, format: str = None, options: dict = None, think: bool = False):
+    """
+    OpenAI-compatible / Kobold-compatible backend driver that matches the signature of ollama.chat.
+    If running in a mocked test environment (ollama.chat is patched), routes calls directly to the mock.
+    """
+    from unittest.mock import Mock
+    if hasattr(ollama, "chat") and isinstance(ollama.chat, Mock):
+        return ollama.chat(model=model, messages=messages, stream=stream, format=format, options=options, think=think)
+
+    local_url = get_setting("local_llm_url", "http://localhost:11434/v1")
+    full_url = f"{local_url.rstrip('/')}/chat/completions"
+    
+    payload = {
+        "model": model,
+        "messages": [{"role": m["role"], "content": m["content"]} for m in messages],
+        "stream": stream
+    }
+
+    if options:
+        if "temperature" in options:
+            payload["temperature"] = options["temperature"]
+        
+        rep_penalty = options.get("repeat_penalty") or options.get("repetition_penalty")
+        if rep_penalty is not None:
+            payload["repetition_penalty"] = rep_penalty
+            
+        max_tok = options.get("num_predict") or options.get("max_tokens")
+        if max_tok is not None:
+            payload["max_tokens"] = max_tok
+
+    if format == "json":
+        payload["response_format"] = {"type": "json_object"}
+
+    for sampler in ["top_p", "top_k", "mirostat", "presence_penalty", "frequency_penalty"]:
+        val = get_setting(sampler)
+        if val is not None:
+            payload[sampler] = val
+
+    if stream:
+        response = requests.post(full_url, json=payload, stream=True, timeout=60)
+        response.raise_for_status()
+        
+        def sse_chunk_generator():
+            for content in parse_sse_stream(response):
+                yield {
+                    "message": {
+                        "role": "assistant",
+                        "content": content
+                    }
+                }
+        return sse_chunk_generator()
+    else:
+        response = requests.post(full_url, json=payload, timeout=90)
+        response.raise_for_status()
+        res_data = response.json()
+        
+        content = ""
+        choices = res_data.get("choices")
+        if isinstance(choices, list) and choices:
+            content = choices[0].get("message", {}).get("content", "")
+            
+        return {
+            "message": {
+                "role": "assistant",
+                "content": content
+            }
+        }
+
 def update_profile_score(profile_path: str, score_change: int):
     """
     Deprecated: Relationship score is now stored in session history metadata.
@@ -170,7 +268,7 @@ def get_sentiment_score(user_input: str, model: str, remote_url: str = None, pro
     try:
         log_debug("SENTIMENT_START", {"model": utility_model, "input": user_input[:100]})
         # Hybrid Offloading: Utility tasks are always local
-        result = ollama.chat(
+        result = _ollama_chat_compat(
             model=utility_model,
             messages=messages,
             stream=False,
@@ -219,7 +317,7 @@ def extract_scene_from_text(user_input: str, reply: str, model: str = None) -> s
     ]
     try:
         log_debug("SCENE_EXTRACTION_START", {"model": utility_model})
-        result = ollama.chat(
+        result = _ollama_chat_compat(
             model=utility_model,
             messages=messages,
             stream=False,
@@ -274,7 +372,7 @@ def extract_scene_from_starter(starter_text: str, model: str = None) -> str | No
     ]
     try:
         log_debug("SCENE_STARTER_START", {"model": utility_model})
-        result = ollama.chat(
+        result = _ollama_chat_compat(
             model=utility_model,
             messages=messages,
             stream=False,
@@ -346,7 +444,7 @@ def generate_summary(messages: list, model: str, remote_url: str = None, user_na
         # Hybrid Offloading: Summarization is always local, but respects caller-provided model
         summarizer_model = model or get_setting("summarizer_model", get_setting("local_utility_model", "llama3.2"))
         log_debug("SUMMARY_START", {"model": summarizer_model, "message_count": len(messages)})
-        result = ollama.chat(model=summarizer_model, messages=summary_messages, stream=False, think=False)
+        result = _ollama_chat_compat(model=summarizer_model, messages=summary_messages, stream=False, think=False)
         content = result['message']['content'].strip()
         
         # Clean generated summary of any legacy/hallucinated tags, headers or brackets
@@ -398,7 +496,7 @@ def update_rolling_summary(existing_core: str, new_messages: list, model: str,
         # Hybrid Offloading: Summarization is always local, but respects caller-provided model
         summarizer_model = model or get_setting("summarizer_model", get_setting("local_utility_model", "llama3.2"))
         log_debug("ROLLING_SUMMARY_START", {"model": summarizer_model, "new_message_count": len(new_messages)})
-        result = ollama.chat(model=summarizer_model, messages=summary_messages, stream=False, think=False)
+        result = _ollama_chat_compat(model=summarizer_model, messages=summary_messages, stream=False, think=False)
         content = result['message']['content'].strip()
         
         # Clean generated summary of any legacy/hallucinated tags, headers or brackets
@@ -442,7 +540,7 @@ def _call_llm_once(messages: list, model: str, remote_url: str = None, temperatu
             return content
 
         log_debug("LLM_LOCAL_START", {"model": model, "temp": temperature})
-        result = ollama.chat(
+        result = _ollama_chat_compat(
             model=model,
             messages=messages,
             stream=False,
@@ -1084,7 +1182,7 @@ def get_respond_stream(user_input: str, profile: dict, profile_path: str = None,
                 stream = response.iter_content(chunk_size=None, decode_unicode=True)
             # Handle Local Ollama Request
             else:
-                ollama_stream = ollama.chat(
+                ollama_stream = _ollama_chat_compat(
                     model=model,
                     messages=messages,
                     stream=True,

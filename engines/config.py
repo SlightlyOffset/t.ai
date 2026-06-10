@@ -48,6 +48,35 @@ def load_settings():
 
     return settings if settings is not None else {}
 
+def is_local_address(url_str: str) -> bool:
+    """
+    Checks if a URL points to a local address (localhost, loopback, or private network range).
+    """
+    try:
+        from urllib.parse import urlparse
+        if "://" not in url_str:
+            url_str = "http://" + url_str
+        parsed = urlparse(url_str)
+        hostname = (parsed.hostname or "").lower()
+        if not hostname:
+            return False
+        if hostname in ("localhost", "127.0.0.1", "::1"):
+            return True
+        # Check private networks (IPv4)
+        if hostname.startswith("10."):
+            return True
+        if hostname.startswith("192.168."):
+            return True
+        if hostname.startswith("172."):
+            parts = hostname.split('.')
+            if len(parts) >= 2 and parts[1].isdigit():
+                second_octet = int(parts[1])
+                if 16 <= second_octet <= 31:
+                    return True
+        return False
+    except Exception:
+        return False
+
 def get_setting(key, default=None):
     """
     Retrieves a specific setting by key.
@@ -77,17 +106,18 @@ def get_setting(key, default=None):
         settings = load_settings()
         val = settings.get(key, default)
 
-    # Security Validation for remote URLs (VULN-004)
-    if key in ["remote_llm_url", "remote_tts_url"] and val:
+    # Security Validation for remote/local URLs (VULN-004)
+    if key in ["remote_llm_url", "remote_tts_url", "local_llm_url"] and val:
         if isinstance(val, str) and not val.startswith("https://"):
-            # We reject non-HTTPS URLs for remote services to prevent PII leaks
-            from colorama import Fore
-            warning_msg = (
-                f"[SECURITY WARNING] Insecure remote URL rejected for "
-                f"'{key}': {val}. Only HTTPS is allowed."
-            )
-            print(Fore.RED + warning_msg + Fore.RESET)
-            return None
+            if not is_local_address(val):
+                # We reject non-HTTPS URLs for remote services to prevent PII leaks
+                from colorama import Fore
+                warning_msg = (
+                    f"[SECURITY WARNING] Insecure remote URL rejected for "
+                    f"'{key}': {val}. Only HTTPS is allowed."
+                )
+                print(Fore.RED + warning_msg + Fore.RESET)
+                return None
 
     return val
 
