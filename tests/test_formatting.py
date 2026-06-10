@@ -63,6 +63,15 @@ class TestFormatting(unittest.TestCase):
         self.assertIn('[magenta]"Hello"[/magenta]', result)
         self.assertIn("[i][dim]Nova[/dim][/i]", result)
 
+    def test_format_roleplay_text_bold_and_italics_bold(self):
+        text = 'This is **bold** and this is ***bold italics***'
+        result = format_roleplay_text(
+            text=text,
+            role="assistant"
+        )
+        self.assertIn("[b]bold[/b]", result)
+        self.assertIn("[b][i][dim]bold italics[/dim][/i][/b]", result)
+
     def test_get_tts_split_points_handles_ellipsis(self):
         text = "Hi... Hello!\n*Action* Done."
         points = get_tts_split_points(text)

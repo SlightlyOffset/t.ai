@@ -36,6 +36,7 @@ class TextFormatter:
         # Escape brackets in the raw text so they are not parsed as invalid Rich markup tags
         text = safe_escape(text)
 
+        text = re.sub(r"\*\*\*(.*?)\*\*\*", r"[b][i][dim]\1[/dim][/i][/b]", text, flags=re.DOTALL)
         text = re.sub(r"\*\*(.*?)\*\*", r"[b]\1[/b]", text, flags=re.DOTALL)
         text = re.sub(r"(?<!\*)\*([^*]+)\*(?!\*)", r"[i][dim]\1[/dim][/i]", text, flags=re.DOTALL)
 
