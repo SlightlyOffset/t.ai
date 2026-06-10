@@ -726,7 +726,12 @@ class TaiMenu(App):
                 if not image_bubble.is_mounted:
                     log_debug("IMAGE_UPDATE_UI_ABORT_NOT_MOUNTED", {"url": image_path_or_url})
                     return
-                container = image_bubble.query_one(".image_container")
+                try:
+                    container = image_bubble.query_one(".image_container")
+                except Exception:
+                    log_debug("IMAGE_UPDATE_UI_RETRY_LATER", {"url": image_path_or_url})
+                    self.app.call_after_refresh(update_ui)
+                    return
                 for child in list(container.children):
                     child.remove()
 
