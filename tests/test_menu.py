@@ -511,8 +511,9 @@ class TestMenu(unittest.TestCase):
         mock_thread.join.assert_called_once()
         self.assertTrue(app.exit_called)
 
+    @patch('ui.menu.threading.Thread')
     @patch('ui.menu.memory_manager')
-    def test_print_starter_message_with_multiple(self, mock_memory_manager):
+    def test_print_starter_message_with_multiple(self, mock_memory_manager, mock_thread):
         """Test that print_starter_message shuffles multiple messages and populates alternatives."""
         class DummyMenu(TaiMenu):
             def __init__(self):
@@ -614,6 +615,53 @@ class TestMenu(unittest.TestCase):
         with patch.dict('sys.modules', {'torch': None}):
             gpu_str = TaiMenu._get_local_gpu_metrics(app)
             self.assertEqual(gpu_str, "")
+
+    @patch('ui.menu.threading.Thread')
+    @patch('ui.menu.memory_manager')
+    @patch('ui.menu.get_setting')
+    def test_starter_message_pagination_count(self, mock_get_setting, mock_memory_manager, mock_thread):
+        """Verify that starter message pagination doesn't desynchronize visible count."""
+        mock_get_setting.return_value = "auto"
+        
+        class DummyMenu(TaiMenu):
+            def __init__(self):
+                self.character_profile = {
+                    "starter_messages": ["msg1", "msg2", "msg3"],
+                    "relationship_score": 0,
+                    "llm_model": "llama3"
+                }
+                self.history_profile_name = "test_profile"
+                self.user_profile = {"name": "TestUser"}
+                self.user_path = "user_profiles/test.json"
+                self.char_path = "profiles/test.json"
+                self.user_name = "TestUser"
+                self.ch_name = "TestChar"
+                self.char_name_lbl_color = "red"
+                self.user_name_lbl_color = "blue"
+                self._visible_message_count = 10  # Simulate pre-existing count
+
+            def format_rp(self, text, role="user"):
+                return text
+
+        app = DummyMenu()
+        
+        mock_container = MagicMock()
+        app.query_one = MagicMock(return_value=mock_container)
+        
+        # Test printing starter message resets the visible count
+        app.print_starter_message()
+        self.assertEqual(app._visible_message_count, 1)
+
+        # Mock query result for refresh_last_ai_message
+        mock_ai_bubble = MagicMock()
+        mock_ai_bubble.parent = MagicMock()
+        mock_query_result = MagicMock()
+        mock_query_result.last.return_value = mock_ai_bubble
+        app.query = MagicMock(return_value=mock_query_result)
+        
+        # Test refresh_last_ai_message retains count of 1
+        app.refresh_last_ai_message("msg2", index=1, total=3)
+        self.assertEqual(app._visible_message_count, 1)
 
 if __name__ == "__main__":
     unittest.main()
