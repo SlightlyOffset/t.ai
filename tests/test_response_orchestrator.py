@@ -69,6 +69,7 @@ class TestResponseOrchestrator(unittest.TestCase):
         mock_get_setting.side_effect = lambda key, default=None: {
             "tts_enabled": False,
             "smooth_streaming": True,
+            "streaming_delay": 0.0,
         }.get(key, default)
 
         events = list(iterate_response_events("hi", {}, "profile"))

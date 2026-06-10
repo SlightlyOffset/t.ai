@@ -112,6 +112,7 @@ class SettingsScreen(ModalScreen):
         clear_on_start = settings.get("clear_on_start", False)
         auto_recap_on_start = settings.get("auto_recap_on_start", True)
         smooth_streaming = settings.get("smooth_streaming", True)
+        streaming_delay = str(settings.get("streaming_delay", 0.055))
         image_protocol = settings.get("image_protocol", "auto")
         image_size = settings.get("image_size", "medium")
         suppress_errors = settings.get("suppress_errors", True)
@@ -176,6 +177,9 @@ class SettingsScreen(ModalScreen):
                         with Horizontal(classes="settings_row"):
                             yield Label("Smooth Streaming:", classes="settings_label")
                             yield Switch(value=smooth_streaming, id="smooth_streaming", classes="settings_widget")
+                        with Horizontal(classes="settings_row"):
+                            yield Label("Streaming Delay (s):", classes="settings_label")
+                            yield Input(value=streaming_delay, id="streaming_delay", classes="settings_widget")
                         with Horizontal(classes="settings_row"):
                             yield Label("Image Protocol:", classes="settings_label")
                             yield Select(
@@ -389,6 +393,14 @@ class SettingsScreen(ModalScreen):
 
         # Parse and validate integers/floats
         try:
+            streaming_delay = float(self.query_one("#streaming_delay", Input).value.strip())
+            if streaming_delay < 0:
+                raise ValueError()
+        except ValueError:
+            self.show_error("Streaming Delay must be a non-negative number.")
+            return
+
+        try:
             memory_limit = int(self.query_one("#memory_limit", Input).value.strip())
             if memory_limit <= 0:
                 raise ValueError()
@@ -434,6 +446,7 @@ class SettingsScreen(ModalScreen):
             "clear_on_start": self.query_one("#clear_on_start", Switch).value,
             "auto_recap_on_start": self.query_one("#auto_recap_on_start", Switch).value,
             "smooth_streaming": self.query_one("#smooth_streaming", Switch).value,
+            "streaming_delay": streaming_delay,
             "image_protocol": self.query_one("#image_protocol", Select).value,
             "image_size": self.query_one("#image_size", Select).value,
             "suppress_errors": self.query_one("#suppress_errors", Switch).value,

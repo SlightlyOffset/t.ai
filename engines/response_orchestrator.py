@@ -54,6 +54,7 @@ def iterate_response_events(
     current_buffer = ""
     tts_in_narration = False
     smooth_streaming = get_setting("smooth_streaming", True)
+    streaming_delay = get_setting("streaming_delay", 0.055)
 
     stream_active = True
     stream_iterator = get_respond_stream(
@@ -123,7 +124,7 @@ def iterate_response_events(
 
                 displayed_text += target_text[len(displayed_text):len(displayed_text) + step_size]
                 yield {"type": "chunk", "full_response": displayed_text}
-                time.sleep(0.055)
+                time.sleep(streaming_delay)
 
                 # If LLM is still generating, yield control back to fetch new chunks
                 # as long as we're not lagging too far behind (gap < 15)
