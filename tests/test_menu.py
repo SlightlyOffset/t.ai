@@ -663,5 +663,84 @@ class TestMenu(unittest.TestCase):
         app.refresh_last_ai_message("msg2", index=1, total=3)
         self.assertEqual(app._visible_message_count, 1)
 
+    def test_highlight_narration_asterisks(self):
+        """Verify that ChatInput's highlight map identifies single, double, and triple asterisk narration."""
+        from ui.menu import ChatInput
+        
+        chat_input = ChatInput()
+        # Set documents/lines
+        chat_input.document = MagicMock()
+        chat_input.document.lines = [
+            "Normal text",
+            "Text with *italics* and **bold** formatting",
+            "Text with ***bold italics*** formatting"
+        ]
+        chat_input._line_cache = set()
+        from collections import defaultdict
+        chat_input._highlights = defaultdict(list)
+        
+        chat_input._build_highlight_map()
+        
+        # Line 0: "Normal text" -> no highlights
+        self.assertEqual(chat_input._highlights[0], [])
+        
+        # Line 1: "Text with *italics* and **bold** formatting"
+        # "*italics*" is index 10 to 19 (length 9) -> narration
+        # "**bold**" is index 24 to 32 (length 8) -> narration_bold
+        h1 = chat_input._highlights[1]
+        
+        narration_ranges = [r for r in h1 if r[2] == "narration"]
+        self.assertEqual(len(narration_ranges), 1)
+        self.assertEqual(narration_ranges[0][0], 10)
+        self.assertEqual(narration_ranges[0][1], 19)
+        
+        bold_ranges = [r for r in h1 if r[2] == "narration_bold"]
+        self.assertEqual(len(bold_ranges), 1)
+        self.assertEqual(bold_ranges[0][0], 24)
+        self.assertEqual(bold_ranges[0][1], 32)
+        
+        # Line 2: "Text with ***bold italics*** formatting"
+        # "***bold italics***" is index 10 to 28 (length 18) -> narration_bold_italics
+        h2 = chat_input._highlights[2]
+        bi_ranges = [r for r in h2 if r[2] == "narration_bold_italics"]
+        self.assertEqual(len(bi_ranges), 1)
+        self.assertEqual(bi_ranges[0][0], 10)
+        self.assertEqual(bi_ranges[0][1], 28)
+
+    def test_highlight_nested_speech_formatting(self):
+        """Verify that ChatInput's highlight map correctly handles formatting nested inside speech."""
+        from ui.menu import ChatInput
+        
+        chat_input = ChatInput()
+        chat_input.document = MagicMock()
+        chat_input.document.lines = [
+            'He said "hello **bold** world"'
+        ]
+        chat_input._line_cache = set()
+        from collections import defaultdict
+        chat_input._highlights = defaultdict(list)
+        
+        chat_input._build_highlight_map()
+        
+        # 'He said "hello **bold** world"'
+        # index 0 to 8: 'He said ' -> None (no highlights)
+        # index 8 to 15: '"hello ' -> speech
+        # index 15 to 23: '**bold**' -> speech_narration_bold
+        # index 23 to 30: ' world"' -> speech
+        h0 = chat_input._highlights[0]
+        self.assertEqual(len(h0), 3)
+        
+        self.assertEqual(h0[0][0], 8)
+        self.assertEqual(h0[0][1], 15)
+        self.assertEqual(h0[0][2], "speech")
+        
+        self.assertEqual(h0[1][0], 15)
+        self.assertEqual(h0[1][1], 23)
+        self.assertEqual(h0[1][2], "speech_narration_bold")
+        
+        self.assertEqual(h0[2][0], 23)
+        self.assertEqual(h0[2][1], 30)
+        self.assertEqual(h0[2][2], "speech")
+
 if __name__ == "__main__":
     unittest.main()

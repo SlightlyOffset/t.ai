@@ -3,6 +3,7 @@ import hashlib
 import requests
 import shutil
 import subprocess
+import urllib.request
 from PIL import Image
 
 CACHE_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".cache", "optimized_images"))
@@ -37,28 +38,64 @@ def download_image(url: str) -> str:
             except Exception:
                 pass
         
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"
+    }
+
+    from engines.utilities import log_debug
+    log_debug("DOWNLOAD_IMAGE_START", {"url": url, "local_path": local_path})
+
+    downloaded = False
+    # Try urllib.request first as it handles TLS fingerprinters (like Cloudflare/nginx blocks on urllib3) better
     try:
-        headers = {
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
-        }
-        response = requests.get(url, headers=headers, timeout=10)
-        if response.status_code == 200:
-            content_type = response.headers.get("Content-Type", "")
-            if "text/html" in content_type:
-                return ""
-            with open(local_path, "wb") as f:
-                f.write(response.content)
+        log_debug("DOWNLOAD_IMAGE_URLLIB_TRY", {"url": url})
+        req = urllib.request.Request(url, headers=headers)
+        with urllib.request.urlopen(req, timeout=10) as response:
+            log_debug("DOWNLOAD_IMAGE_URLLIB_RESPONSE", {"url": url, "status": response.status})
+            if response.status == 200:
+                content_type = response.headers.get("Content-Type", "")
+                if "text/html" in content_type:
+                    log_debug("DOWNLOAD_IMAGE_URLLIB_HTML_BLOCK", {"url": url})
+                    return ""
+                with open(local_path, "wb") as f:
+                    f.write(response.read())
+                downloaded = True
+                log_debug("DOWNLOAD_IMAGE_URLLIB_SUCCESS", {"url": url})
+    except Exception as e:
+        log_debug("DOWNLOAD_IMAGE_URLLIB_FAIL", {"url": url, "error": str(e)})
+
+    # Fallback to requests if urllib fails
+    if not downloaded:
+        try:
+            log_debug("DOWNLOAD_IMAGE_REQUESTS_TRY", {"url": url})
+            response = requests.get(url, headers=headers, timeout=10)
+            log_debug("DOWNLOAD_IMAGE_REQUESTS_RESPONSE", {"url": url, "status": response.status_code})
+            if response.status_code == 200:
+                content_type = response.headers.get("Content-Type", "")
+                if "text/html" in content_type:
+                    log_debug("DOWNLOAD_IMAGE_REQUESTS_HTML_BLOCK", {"url": url})
+                    return ""
+                with open(local_path, "wb") as f:
+                    f.write(response.content)
+                downloaded = True
+                log_debug("DOWNLOAD_IMAGE_REQUESTS_SUCCESS", {"url": url})
+        except Exception as e:
+            log_debug("DOWNLOAD_IMAGE_REQUESTS_FAIL", {"url": url, "error": str(e)})
+
+    if downloaded:
+        try:
+            with Image.open(local_path) as img:
+                img.verify()
+            log_debug("DOWNLOAD_IMAGE_VERIFIED", {"url": url, "local_path": local_path})
+            return local_path
+        except Exception as e:
+            log_debug("DOWNLOAD_IMAGE_VERIFY_FAIL", {"url": url, "error": str(e)})
             try:
-                with Image.open(local_path) as img:
-                    img.verify()
-                return local_path
+                os.remove(local_path)
             except Exception:
-                try:
-                    os.remove(local_path)
-                except Exception:
-                    pass
-    except Exception:
-        pass
+                pass
+
+    log_debug("DOWNLOAD_IMAGE_FAILED_ALL", {"url": url})
     return ""
 
 def get_or_create_optimized_image(image_path_or_url: str, max_dim: int = 800) -> str:

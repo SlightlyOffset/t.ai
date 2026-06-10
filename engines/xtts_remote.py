@@ -92,7 +92,7 @@ def ensure_voice_on_bridge(bridge_url, speaker_id, speaker_wavs, force=False):
             
             # Additional headers to look more like a standard browser request
             headers.update({
-                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)",
                 "Accept": "*/*"
             })
             

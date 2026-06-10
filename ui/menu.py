@@ -99,7 +99,13 @@ class ChatInput(TextArea):
             syntax_styles = {
                 "speech": Style(color=color),
                 "narration": Style(italic=True, dim=True),
+                "narration_bold": Style(bold=True),
+                "narration_bold_italics": Style(bold=True, italic=True, dim=True),
                 "exposition": Style(dim=True),
+                "speech_narration": Style(color=color, italic=True, dim=True),
+                "speech_narration_bold": Style(color=color, bold=True),
+                "speech_narration_bold_italics": Style(color=color, bold=True, italic=True, dim=True),
+                "speech_exposition": Style(color=color, dim=True),
             }
             if base:
                 for k, v in base.syntax_styles.items():
@@ -128,28 +134,71 @@ class ChatInput(TextArea):
         self._highlights.clear()
         
         for line_idx, line in enumerate(self.document.lines):
-            ranges = []
+            expo_ranges = [(m.start(), m.end()) for m in re.finditer(r"\([^)\n]+\)|\[[^\]\n]+\]", line)]
+            bi_ranges = [(m.start(), m.end()) for m in re.finditer(r"\*{3}[^*\n]+\*{3}", line)]
+            bold_ranges = [(m.start(), m.end()) for m in re.finditer(r"\*{2}[^*\n]+\*{2}", line)]
+            narration_ranges = [(m.start(), m.end()) for m in re.finditer(r"\*[^*\n]+\*", line)]
+            speech_ranges = [(m.start(), m.end()) for m in re.finditer(r'["“][^"“”\n]*["”]', line)]
             
-            # 1. Exposition
-            for m in re.finditer(r"\([^)\n]+\)|\[[^\]\n]+\]", line):
-                ranges.append((m.start(), m.end(), "exposition"))
+            # Use character masks to check styles in O(N) instead of O(N * M)
+            masks = [0] * len(line)
+            for start, end in expo_ranges:
+                for i in range(start, end):
+                    masks[i] |= 1
+            for start, end in bi_ranges:
+                for i in range(start, end):
+                    masks[i] |= 2
+            for start, end in bold_ranges:
+                for i in range(start, end):
+                    masks[i] |= 4
+            for start, end in narration_ranges:
+                for i in range(start, end):
+                    masks[i] |= 8
+            for start, end in speech_ranges:
+                for i in range(start, end):
+                    masks[i] |= 16
+            
+            line_tokens = [None] * len(line)
+            for i, mask in enumerate(masks):
+                in_expo = bool(mask & 1)
+                in_bi = bool(mask & 2)
+                in_bold = bool(mask & 4)
+                in_narration = bool(mask & 8)
+                in_speech = bool(mask & 16)
                 
-            # 2. Narration
-            for m in re.finditer(r"\*[^*\n]+\*", line):
-                ranges.append((m.start(), m.end(), "narration"))
-                
-            # 3. Speech
-            for m in re.finditer(r'["“][^"“”\n]*["”]', line):
-                ranges.append((m.start(), m.end(), "speech"))
-                
-            ranges.sort(key=lambda x: (x[0], -x[1]))
+                if in_speech:
+                    if in_bi:
+                        line_tokens[i] = "speech_narration_bold_italics"
+                    elif in_bold:
+                        line_tokens[i] = "speech_narration_bold"
+                    elif in_narration:
+                        line_tokens[i] = "speech_narration"
+                    elif in_expo:
+                        line_tokens[i] = "speech_exposition"
+                    else:
+                        line_tokens[i] = "speech"
+                else:
+                    if in_bi:
+                        line_tokens[i] = "narration_bold_italics"
+                    elif in_bold:
+                        line_tokens[i] = "narration_bold"
+                    elif in_narration:
+                        line_tokens[i] = "narration"
+                    elif in_expo:
+                        line_tokens[i] = "exposition"
+                        
             resolved_ranges = []
-            last_end = 0
-            for start, end, token_type in ranges:
-                if start >= last_end:
-                    resolved_ranges.append((start, end, token_type))
-                    last_end = end
-                    
+            current_token = None
+            start_idx = 0
+            for i, token in enumerate(line_tokens):
+                if token != current_token:
+                    if current_token is not None:
+                        resolved_ranges.append((start_idx, i, current_token))
+                    current_token = token
+                    start_idx = i
+            if current_token is not None:
+                resolved_ranges.append((start_idx, len(line), current_token))
+                
             for start, end, token_type in resolved_ranges:
                 start_byte = len(line[:start].encode("utf-8"))
                 end_byte = len(line[:end].encode("utf-8"))
@@ -204,7 +253,13 @@ class InlineEditor(TextArea):
             syntax_styles = {
                 "speech": Style(color=color),
                 "narration": Style(italic=True, dim=True),
+                "narration_bold": Style(bold=True),
+                "narration_bold_italics": Style(bold=True, italic=True, dim=True),
                 "exposition": Style(dim=True),
+                "speech_narration": Style(color=color, italic=True, dim=True),
+                "speech_narration_bold": Style(color=color, bold=True),
+                "speech_narration_bold_italics": Style(color=color, bold=True, italic=True, dim=True),
+                "speech_exposition": Style(color=color, dim=True),
             }
             if base:
                 for k, v in base.syntax_styles.items():
@@ -233,28 +288,71 @@ class InlineEditor(TextArea):
         self._highlights.clear()
         
         for line_idx, line in enumerate(self.document.lines):
-            ranges = []
+            expo_ranges = [(m.start(), m.end()) for m in re.finditer(r"\([^)\n]+\)|\[[^\]\n]+\]", line)]
+            bi_ranges = [(m.start(), m.end()) for m in re.finditer(r"\*{3}[^*\n]+\*{3}", line)]
+            bold_ranges = [(m.start(), m.end()) for m in re.finditer(r"\*{2}[^*\n]+\*{2}", line)]
+            narration_ranges = [(m.start(), m.end()) for m in re.finditer(r"\*[^*\n]+\*", line)]
+            speech_ranges = [(m.start(), m.end()) for m in re.finditer(r'["“][^"“”\n]*["”]', line)]
             
-            # 1. Exposition
-            for m in re.finditer(r"\([^)\n]+\)|\[[^\]\n]+\]", line):
-                ranges.append((m.start(), m.end(), "exposition"))
+            # Use character masks to check styles in O(N) instead of O(N * M)
+            masks = [0] * len(line)
+            for start, end in expo_ranges:
+                for i in range(start, end):
+                    masks[i] |= 1
+            for start, end in bi_ranges:
+                for i in range(start, end):
+                    masks[i] |= 2
+            for start, end in bold_ranges:
+                for i in range(start, end):
+                    masks[i] |= 4
+            for start, end in narration_ranges:
+                for i in range(start, end):
+                    masks[i] |= 8
+            for start, end in speech_ranges:
+                for i in range(start, end):
+                    masks[i] |= 16
+            
+            line_tokens = [None] * len(line)
+            for i, mask in enumerate(masks):
+                in_expo = bool(mask & 1)
+                in_bi = bool(mask & 2)
+                in_bold = bool(mask & 4)
+                in_narration = bool(mask & 8)
+                in_speech = bool(mask & 16)
                 
-            # 2. Narration
-            for m in re.finditer(r"\*[^*\n]+\*", line):
-                ranges.append((m.start(), m.end(), "narration"))
-                
-            # 3. Speech
-            for m in re.finditer(r'["“][^"“”\n]*["”]', line):
-                ranges.append((m.start(), m.end(), "speech"))
-                
-            ranges.sort(key=lambda x: (x[0], -x[1]))
+                if in_speech:
+                    if in_bi:
+                        line_tokens[i] = "speech_narration_bold_italics"
+                    elif in_bold:
+                        line_tokens[i] = "speech_narration_bold"
+                    elif in_narration:
+                        line_tokens[i] = "speech_narration"
+                    elif in_expo:
+                        line_tokens[i] = "speech_exposition"
+                    else:
+                        line_tokens[i] = "speech"
+                else:
+                    if in_bi:
+                        line_tokens[i] = "narration_bold_italics"
+                    elif in_bold:
+                        line_tokens[i] = "narration_bold"
+                    elif in_narration:
+                        line_tokens[i] = "narration"
+                    elif in_expo:
+                        line_tokens[i] = "exposition"
+                        
             resolved_ranges = []
-            last_end = 0
-            for start, end, token_type in ranges:
-                if start >= last_end:
-                    resolved_ranges.append((start, end, token_type))
-                    last_end = end
-                    
+            current_token = None
+            start_idx = 0
+            for i, token in enumerate(line_tokens):
+                if token != current_token:
+                    if current_token is not None:
+                        resolved_ranges.append((start_idx, i, current_token))
+                    current_token = token
+                    start_idx = i
+            if current_token is not None:
+                resolved_ranges.append((start_idx, len(line), current_token))
+                
             for start, end, token_type in resolved_ranges:
                 start_byte = len(line[:start].encode("utf-8"))
                 end_byte = len(line[:end].encode("utf-8"))
@@ -546,10 +644,32 @@ class ImageBubble(Vertical):
         self.role = role
         self.add_class("message")
         self.add_class("image_bubble_wrap")
+        
+        # Calculate original description
+        self.original_desc = self.alt if self.alt else os.path.basename(self.image_url)
+        # Default display desc to truncated version of original (max 20 characters)
+        self.display_desc = self.truncate_desc(self.original_desc, 20)
+
+    def truncate_desc(self, desc: str, max_len: int) -> str:
+        """Truncates a description/filename keeping the extension if possible."""
+        if len(desc) <= max_len:
+            return desc
+        if max_len < 7:
+            return desc[:max_len]
+        
+        name, ext = os.path.splitext(desc)
+        if len(ext) > 5:
+            ext = ext[:5]
+            
+        available = max_len - len(ext) - 3
+        if available > 2:
+            left = available // 2
+            right = available - left
+            return f"{name[:left]}...{name[-right:]}{ext}"
+        return desc[:max_len-3] + "..."
 
     def compose(self) -> ComposeResult:
-        desc = self.alt if self.alt else os.path.basename(self.image_url)
-        yield Static(f"🖼️ ▶ Show Image ({desc})", classes="image_toggle_header")
+        yield Static(f"🖼️ ▶ Show Image ({self.display_desc})", classes="image_toggle_header")
         yield Vertical(
             Static("⏳ Loading image...", classes="bubble_image_loading"),
             classes="image_container",
@@ -570,10 +690,9 @@ class ImageBubble(Vertical):
             container = self.query_one(".image_container")
             container.display = not collapsed
             header = self.query_one(".image_toggle_header", Static)
-            desc = self.alt if self.alt else os.path.basename(self.image_url)
             arrow = "▶" if collapsed else "▼"
             action = "Show" if collapsed else "Hide"
-            header.update(f"🖼️ {arrow} {action} Image ({desc})")
+            header.update(f"🖼️ {arrow} {action} Image ({self.display_desc})")
         except Exception:
             pass
 
@@ -707,22 +826,39 @@ class TaiMenu(App):
     @work(thread=True)
     def optimize_and_mount_bubble_image(self, image_path_or_url: str, image_bubble) -> None:
         from engines.image_optimizer import get_or_create_optimized_image
+        from engines.utilities import log_debug
 
-        image_size = get_setting("image_size", "medium")
-        size_map = {"small": 400, "medium": 800, "large": 1200}
-        max_dim = size_map.get(image_size, 800)
-        optimized_path = get_or_create_optimized_image(image_path_or_url, max_dim=max_dim)
+        log_debug("IMAGE_OPTIMIZE_START", {"url": image_path_or_url})
+        try:
+            image_size = get_setting("image_size", "medium")
+            size_map = {"small": 400, "medium": 800, "large": 1200}
+            max_dim = size_map.get(image_size, 800)
+            optimized_path = get_or_create_optimized_image(image_path_or_url, max_dim=max_dim)
+            log_debug("IMAGE_OPTIMIZE_DONE", {"url": image_path_or_url, "optimized_path": optimized_path})
+        except Exception as e:
+            log_debug("IMAGE_OPTIMIZE_ERROR", {"url": image_path_or_url, "error": str(e)})
+            optimized_path = image_path_or_url
 
         def update_ui():
+            log_debug("IMAGE_UPDATE_UI_START", {"url": image_path_or_url, "optimized_path": optimized_path})
             try:
                 if not image_bubble.is_mounted:
+                    log_debug("IMAGE_UPDATE_UI_ABORT_NOT_MOUNTED", {"url": image_path_or_url})
                     return
-                container = image_bubble.query_one(".image_container")
+                try:
+                    container = image_bubble.query_one(".image_container")
+                except Exception:
+                    log_debug("IMAGE_UPDATE_UI_RETRY_LATER", {"url": image_path_or_url})
+                    self.app.call_after_refresh(update_ui)
+                    return
                 for child in list(container.children):
                     child.remove()
 
                 widget_type = self._resolve_image_widget_type()
-                if optimized_path and os.path.exists(optimized_path) and widget_type is not None:
+                exists = os.path.exists(optimized_path) if optimized_path else False
+                log_debug("IMAGE_UPDATE_UI_WIDGET_TYPE", {"type": str(widget_type), "exists": exists})
+                
+                if optimized_path and exists and widget_type is not None:
                     img_widget = widget_type(optimized_path, classes="bubble_image")
                     
                     # Map configuration size to terminal columns/rows
@@ -750,18 +886,35 @@ class TaiMenu(App):
                     img_widget.styles.max_height = max_h
                     img_widget.styles.max_width = None
                     
+                    # Truncate image name to fit inside the image width (cols)
+                    # The prefix "🖼️ ▶ Show Image ()" takes 18 chars
+                    max_desc_len = max(10, cols - 18)
+                    image_bubble.display_desc = image_bubble.truncate_desc(image_bubble.original_desc, max_desc_len)
+                    
+                    # Update the header text immediately to reflect the truncated name
+                    try:
+                        header = image_bubble.query_one(".image_toggle_header", Static)
+                        arrow = "▶" if image_bubble.collapsed else "▼"
+                        action = "Show" if image_bubble.collapsed else "Hide"
+                        header.update(f"🖼️ {arrow} {action} Image ({image_bubble.display_desc})")
+                    except Exception:
+                        pass
+                    
+                    log_debug("IMAGE_UPDATE_UI_MOUNT_WIDGET", {"url": image_path_or_url, "width": cols, "height": rows})
                     container.mount(img_widget)
                 else:
                     desc = image_path_or_url
+                    log_debug("IMAGE_UPDATE_UI_MOUNT_FAILED", {"url": image_path_or_url})
                     container.mount(Static(f"❌ [Failed to load image: {desc}]", classes="bubble_image_failed"))
             except Exception as e:
+                log_debug("IMAGE_UPDATE_UI_ERROR", {"url": image_path_or_url, "error": str(e)})
                 try:
                     container = image_bubble.query_one(".image_container")
                     for child in list(container.children):
                         child.remove()
                     container.mount(Static(f"❌ [Error loading image: {e}]", classes="bubble_image_failed"))
-                except Exception:
-                    pass
+                except Exception as inner_e:
+                    log_debug("IMAGE_UPDATE_UI_INNER_ERROR", {"url": image_path_or_url, "error": str(inner_e)})
         self.app.call_from_thread(update_ui)
 
     def _set_avatar_image(self, container_id: str, widget_id: str, image_path: str | None) -> None:
