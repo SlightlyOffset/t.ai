@@ -546,10 +546,32 @@ class ImageBubble(Vertical):
         self.role = role
         self.add_class("message")
         self.add_class("image_bubble_wrap")
+        
+        # Calculate original description
+        self.original_desc = self.alt if self.alt else os.path.basename(self.image_url)
+        # Default display desc to truncated version of original (max 20 characters)
+        self.display_desc = self.truncate_desc(self.original_desc, 20)
+
+    def truncate_desc(self, desc: str, max_len: int) -> str:
+        """Truncates a description/filename keeping the extension if possible."""
+        if len(desc) <= max_len:
+            return desc
+        if max_len < 7:
+            return desc[:max_len]
+        
+        name, ext = os.path.splitext(desc)
+        if len(ext) > 5:
+            ext = ext[:5]
+            
+        available = max_len - len(ext) - 3
+        if available > 2:
+            left = available // 2
+            right = available - left
+            return f"{name[:left]}...{name[-right:]}{ext}"
+        return desc[:max_len-3] + "..."
 
     def compose(self) -> ComposeResult:
-        desc = self.alt if self.alt else os.path.basename(self.image_url)
-        yield Static(f"🖼️ ▶ Show Image ({desc})", classes="image_toggle_header")
+        yield Static(f"🖼️ ▶ Show Image ({self.display_desc})", classes="image_toggle_header")
         yield Vertical(
             Static("⏳ Loading image...", classes="bubble_image_loading"),
             classes="image_container",
@@ -570,10 +592,9 @@ class ImageBubble(Vertical):
             container = self.query_one(".image_container")
             container.display = not collapsed
             header = self.query_one(".image_toggle_header", Static)
-            desc = self.alt if self.alt else os.path.basename(self.image_url)
             arrow = "▶" if collapsed else "▼"
             action = "Show" if collapsed else "Hide"
-            header.update(f"🖼️ {arrow} {action} Image ({desc})")
+            header.update(f"🖼️ {arrow} {action} Image ({self.display_desc})")
         except Exception:
             pass
 
@@ -766,6 +787,20 @@ class TaiMenu(App):
                     img_widget.styles.height = "auto"
                     img_widget.styles.max_height = max_h
                     img_widget.styles.max_width = None
+                    
+                    # Truncate image name to fit inside the image width (cols)
+                    # The prefix "🖼️ ▶ Show Image ()" takes 18 chars
+                    max_desc_len = max(10, cols - 18)
+                    image_bubble.display_desc = image_bubble.truncate_desc(image_bubble.original_desc, max_desc_len)
+                    
+                    # Update the header text immediately to reflect the truncated name
+                    try:
+                        header = image_bubble.query_one(".image_toggle_header", Static)
+                        arrow = "▶" if image_bubble.collapsed else "▼"
+                        action = "Show" if image_bubble.collapsed else "Hide"
+                        header.update(f"🖼️ {arrow} {action} Image ({image_bubble.display_desc})")
+                    except Exception:
+                        pass
                     
                     log_debug("IMAGE_UPDATE_UI_MOUNT_WIDGET", {"url": image_path_or_url, "width": cols, "height": rows})
                     container.mount(img_widget)
