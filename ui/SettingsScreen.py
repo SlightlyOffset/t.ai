@@ -85,6 +85,15 @@ class SettingsScreen(ModalScreen):
         color: $primary;
         margin: 1 0;
     }
+
+    .settings_note {
+        width: 100%;
+        margin-bottom: 1;
+        padding-left: 2;
+        color: $text;
+        opacity: 0.6;
+        font-style: italic;
+    }
     """
 
     BINDINGS = [
@@ -186,11 +195,12 @@ class SettingsScreen(ModalScreen):
                 with TabPane("AI Engine", id="tab_ai"):
                     with VerticalScroll(classes="settings_pane"):
                         with Horizontal(classes="settings_row"):
-                            yield Label("Default LLM Model:", classes="settings_label")
-                            yield Input(value=default_llm_model, id="default_llm_model", classes="settings_widget")
-                        with Horizontal(classes="settings_row"):
                             yield Label("Local LLM API URL:", classes="settings_label")
                             yield Input(value=local_llm_url, id="local_llm_url", classes="settings_widget")
+                        yield Label("Note: Single-model backends (like KoboldCPP) ignore the model fields below and use the model loaded in the server.", classes="settings_note")
+                        with Horizontal(classes="settings_row"):
+                            yield Label("Default LLM Model:", classes="settings_label")
+                            yield Input(value=default_llm_model, id="default_llm_model", classes="settings_widget")
                         with Horizontal(classes="settings_row"):
                             yield Label("Summarizer Model:", classes="settings_label")
                             yield Input(value=summarizer_model, id="summarizer_model", classes="settings_widget")
