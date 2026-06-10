@@ -707,22 +707,34 @@ class TaiMenu(App):
     @work(thread=True)
     def optimize_and_mount_bubble_image(self, image_path_or_url: str, image_bubble) -> None:
         from engines.image_optimizer import get_or_create_optimized_image
+        from engines.utilities import log_debug
 
-        image_size = get_setting("image_size", "medium")
-        size_map = {"small": 400, "medium": 800, "large": 1200}
-        max_dim = size_map.get(image_size, 800)
-        optimized_path = get_or_create_optimized_image(image_path_or_url, max_dim=max_dim)
+        log_debug("IMAGE_OPTIMIZE_START", {"url": image_path_or_url})
+        try:
+            image_size = get_setting("image_size", "medium")
+            size_map = {"small": 400, "medium": 800, "large": 1200}
+            max_dim = size_map.get(image_size, 800)
+            optimized_path = get_or_create_optimized_image(image_path_or_url, max_dim=max_dim)
+            log_debug("IMAGE_OPTIMIZE_DONE", {"url": image_path_or_url, "optimized_path": optimized_path})
+        except Exception as e:
+            log_debug("IMAGE_OPTIMIZE_ERROR", {"url": image_path_or_url, "error": str(e)})
+            optimized_path = image_path_or_url
 
         def update_ui():
+            log_debug("IMAGE_UPDATE_UI_START", {"url": image_path_or_url, "optimized_path": optimized_path})
             try:
                 if not image_bubble.is_mounted:
+                    log_debug("IMAGE_UPDATE_UI_ABORT_NOT_MOUNTED", {"url": image_path_or_url})
                     return
                 container = image_bubble.query_one(".image_container")
                 for child in list(container.children):
                     child.remove()
 
                 widget_type = self._resolve_image_widget_type()
-                if optimized_path and os.path.exists(optimized_path) and widget_type is not None:
+                exists = os.path.exists(optimized_path) if optimized_path else False
+                log_debug("IMAGE_UPDATE_UI_WIDGET_TYPE", {"type": str(widget_type), "exists": exists})
+                
+                if optimized_path and exists and widget_type is not None:
                     img_widget = widget_type(optimized_path, classes="bubble_image")
                     
                     # Map configuration size to terminal columns/rows
@@ -750,18 +762,21 @@ class TaiMenu(App):
                     img_widget.styles.max_height = max_h
                     img_widget.styles.max_width = None
                     
+                    log_debug("IMAGE_UPDATE_UI_MOUNT_WIDGET", {"url": image_path_or_url, "width": cols, "height": rows})
                     container.mount(img_widget)
                 else:
                     desc = image_path_or_url
+                    log_debug("IMAGE_UPDATE_UI_MOUNT_FAILED", {"url": image_path_or_url})
                     container.mount(Static(f"❌ [Failed to load image: {desc}]", classes="bubble_image_failed"))
             except Exception as e:
+                log_debug("IMAGE_UPDATE_UI_ERROR", {"url": image_path_or_url, "error": str(e)})
                 try:
                     container = image_bubble.query_one(".image_container")
                     for child in list(container.children):
                         child.remove()
                     container.mount(Static(f"❌ [Error loading image: {e}]", classes="bubble_image_failed"))
-                except Exception:
-                    pass
+                except Exception as inner_e:
+                    log_debug("IMAGE_UPDATE_UI_INNER_ERROR", {"url": image_path_or_url, "error": str(inner_e)})
         self.app.call_from_thread(update_ui)
 
     def _set_avatar_image(self, container_id: str, widget_id: str, image_path: str | None) -> None:
