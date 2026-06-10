@@ -123,7 +123,7 @@ def iterate_response_events(
 
                 displayed_text += target_text[len(displayed_text):len(displayed_text) + step_size]
                 yield {"type": "chunk", "full_response": displayed_text}
-                time.sleep(0.03)
+                time.sleep(0.055)
 
                 # If LLM is still generating, yield control back to fetch new chunks
                 # as long as we're not lagging too far behind (gap < 15)
