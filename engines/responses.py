@@ -140,7 +140,7 @@ def parse_sse_stream(response: requests.Response):
             except Exception:
                 pass
 
-def _ollama_chat_compat(model: str, messages: list, stream: bool = False, format: str = None, options: dict = None, think: bool = False):
+def _ollama_chat_compat(model: str, messages: list, stream: bool = False, format: str = None, options: dict = None, think: bool = False, timeout: float = 180.0):
     """
     OpenAI-compatible / Kobold-compatible backend driver that matches the signature of ollama.chat.
     If running in a mocked test environment (ollama.chat is patched), routes calls directly to the mock.
@@ -193,7 +193,7 @@ def _ollama_chat_compat(model: str, messages: list, stream: bool = False, format
                 }
         return sse_chunk_generator()
     else:
-        response = requests.post(full_url, json=payload, timeout=90)
+        response = requests.post(full_url, json=payload, timeout=timeout)
         response.raise_for_status()
         res_data = response.json()
         
@@ -528,7 +528,7 @@ def _call_llm_once(messages: list, model: str, remote_url: str = None, temperatu
                 "repetition_penalty": repetition_penalty,
                 "model": model or "default",
             }
-            response = requests.post(full_url, json=payload, stream=False, timeout=90)
+            response = requests.post(full_url, json=payload, stream=False, timeout=180)
             content = _extract_remote_message_content(response).strip()
             log_debug("LLM_SUCCESS", {"len": len(content)})
             return content
