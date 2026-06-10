@@ -92,7 +92,7 @@ class SettingsScreen(ModalScreen):
         padding-left: 2;
         color: $text;
         opacity: 0.6;
-        font-style: italic;
+        text-style: italic;
     }
     """
 
