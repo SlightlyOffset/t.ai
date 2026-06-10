@@ -61,19 +61,21 @@ class TestImageOptimizer(unittest.TestCase):
         res_cached = io_module.get_or_create_optimized_image(self.large_image_path, max_dim=500)
         self.assertEqual(res_cached, res)
 
+    @patch("urllib.request.urlopen")
     @patch("requests.get")
-    def test_download_and_optimize_remote_image(self, mock_get):
-        # Mock requests.get to return a valid response containing small image bytes
+    def test_download_and_optimize_remote_image(self, mock_get, mock_urlopen):
+        # Mock urllib.request.urlopen to return a valid response containing small image bytes
         mock_response = MagicMock()
-        mock_response.status_code = 200
+        mock_response.status = 200
+        mock_response.headers = {"Content-Type": "image/png"}
         
         # Write small image to bytes
         import io
         img_bytes = io.BytesIO()
         Image.new("RGB", (120, 120), color="green").save(img_bytes, format="PNG")
-        mock_response.content = img_bytes.getvalue()
+        mock_response.read.return_value = img_bytes.getvalue()
         
-        mock_get.return_value = mock_response
+        mock_urlopen.return_value.__enter__.return_value = mock_response
 
         # Test download
         url = "https://example.com/avatar_test.png"
@@ -87,21 +89,60 @@ class TestImageOptimizer(unittest.TestCase):
             self.assertEqual(w, 120)
             self.assertEqual(h, 120)
 
+    @patch("urllib.request.urlopen")
     @patch("requests.get")
-    def test_failed_download_falls_back_to_url(self, mock_get):
+    def test_download_fallback_to_requests(self, mock_get, mock_urlopen):
+        # Mock urllib to fail
+        mock_urlopen.side_effect = Exception("Urllib down")
+        
+        # Mock requests.get to return a valid response containing small image bytes
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.headers = {"Content-Type": "image/png"}
+        
+        # Write small image to bytes
+        import io
+        img_bytes = io.BytesIO()
+        Image.new("RGB", (120, 120), color="green").save(img_bytes, format="PNG")
+        mock_response.content = img_bytes.getvalue()
+        
+        mock_get.return_value = mock_response
+
+        # Test download
+        url = "https://example.com/avatar_test.png"
+        res = io_module.get_or_create_optimized_image(url, max_dim=500)
+        
+        self.assertTrue(res.startswith(io_module.DOWNLOAD_DIR))
+        self.assertTrue(os.path.exists(res))
+        with Image.open(res) as img:
+            w, h = img.size
+            self.assertEqual(w, 120)
+            self.assertEqual(h, 120)
+
+    @patch("urllib.request.urlopen")
+    @patch("requests.get")
+    def test_failed_download_falls_back_to_url(self, mock_get, mock_urlopen):
+        mock_urlopen.side_effect = Exception("Urllib down")
         mock_get.side_effect = Exception("Network down")
         url = "https://example.com/failed_test.png"
         res = io_module.get_or_create_optimized_image(url, max_dim=500)
         self.assertEqual(res, url)
 
+    @patch("urllib.request.urlopen")
     @patch("requests.get")
-    def test_corrupted_download_returns_original_url(self, mock_get):
-        # Mock HTML landing page content (not an image)
-        mock_response = MagicMock()
-        mock_response.status_code = 200
-        mock_response.headers = {"Content-Type": "text/html"}
-        mock_response.content = b"<html>Landing Page</html>"
-        mock_get.return_value = mock_response
+    def test_corrupted_download_returns_original_url(self, mock_get, mock_urlopen):
+        # Mock HTML landing page content (not an image) for both
+        mock_response_urllib = MagicMock()
+        mock_response_urllib.status = 200
+        mock_response_urllib.headers = {"Content-Type": "text/html"}
+        mock_response_urllib.read.return_value = b"<html>Landing Page</html>"
+        mock_urlopen.return_value.__enter__.return_value = mock_response_urllib
+
+        mock_response_requests = MagicMock()
+        mock_response_requests.status_code = 200
+        mock_response_requests.headers = {"Content-Type": "text/html"}
+        mock_response_requests.content = b"<html>Landing Page</html>"
+        mock_get.return_value = mock_response_requests
 
         url = "https://example.com/html_landing_page.png"
         res = io_module.get_or_create_optimized_image(url, max_dim=500)
