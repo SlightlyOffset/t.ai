@@ -906,7 +906,7 @@ class TaiMenu(App):
                     try:
                         history = memory_manager.load_history(self.history_profile_name)
                         if history and history[-1].get("role") == "assistant":
-                            alts = history[-1].get("alternatives", [""] * total)
+                            alts = history[-1].get("alternatives") or [""] * total
                     except Exception:
                         pass
                 msg_data = {"alternatives": alts, "selected_index": index}

@@ -511,8 +511,9 @@ class TestMenu(unittest.TestCase):
         mock_thread.join.assert_called_once()
         self.assertTrue(app.exit_called)
 
+    @patch('ui.menu.threading.Thread')
     @patch('ui.menu.memory_manager')
-    def test_print_starter_message_with_multiple(self, mock_memory_manager):
+    def test_print_starter_message_with_multiple(self, mock_memory_manager, mock_thread):
         """Test that print_starter_message shuffles multiple messages and populates alternatives."""
         class DummyMenu(TaiMenu):
             def __init__(self):
@@ -615,9 +616,10 @@ class TestMenu(unittest.TestCase):
             gpu_str = TaiMenu._get_local_gpu_metrics(app)
             self.assertEqual(gpu_str, "")
 
+    @patch('ui.menu.threading.Thread')
     @patch('ui.menu.memory_manager')
     @patch('ui.menu.get_setting')
-    def test_starter_message_pagination_count(self, mock_get_setting, mock_memory_manager):
+    def test_starter_message_pagination_count(self, mock_get_setting, mock_memory_manager, mock_thread):
         """Verify that starter message pagination doesn't desynchronize visible count."""
         mock_get_setting.return_value = "auto"
         
