@@ -5,7 +5,6 @@ Stores generated audio files based on a hash of their content, voice, and engine
 
 import os
 import hashlib
-from engines.config import get_setting
 
 CACHE_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".cache", "audio"))
 

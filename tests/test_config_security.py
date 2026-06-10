@@ -7,7 +7,7 @@ from io import StringIO
 # Add the project root to the Python path
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
-from engines.config import get_setting, update_setting
+from engines.config import get_setting
 from engines.utilities import redact_pii
 
 class TestConfigSecurity(unittest.TestCase):

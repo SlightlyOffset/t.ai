@@ -1,5 +1,5 @@
 import unittest
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch
 import sys
 import os
 
@@ -15,7 +15,6 @@ class TestTUIStartup(unittest.TestCase):
         Test that running menu.py does not call the blocking pick_profile and pick_user_profile functions.
         This test will fail if they are still present in the __main__ block and called.
         """
-        import ui.menu as menu
         
         # We need to trigger the __main__ logic. 
         # Since it's protected by if __name__ == "__main__", we can't just import it.
@@ -60,7 +59,6 @@ class TestTUIStartup(unittest.TestCase):
         """
         Test that load_initial_state attempts to load from settings if paths are None.
         """
-        import ui.menu as menu
         from ui.menu import TaiMenu
         
         # Mock get_setting to return a valid profile filename
@@ -93,7 +91,6 @@ class TestTUIStartup(unittest.TestCase):
         """
         Test that push_screen(ProfileSelect()) is called if load_initial_state fails to find paths.
         """
-        import ui.menu as menu
         from ui.menu import TaiMenu
         
         # Mock get_setting to return None

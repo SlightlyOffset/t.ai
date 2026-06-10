@@ -1,6 +1,5 @@
-import re
 from textual.app import ComposeResult
-from textual.containers import Container, Horizontal, Vertical, VerticalScroll
+from textual.containers import Container, Horizontal, VerticalScroll
 from textual.screen import ModalScreen
 from textual.widgets import Header, Label, Footer, TabbedContent, TabPane, Switch, Input, Select, Button
 
@@ -518,7 +517,7 @@ class SettingsScreen(ModalScreen):
                 try:
                     with open(p_info["config_path"], "w", encoding="utf-8") as f:
                         json.dump(new_config, f, indent=4)
-                except Exception as e:
+                except Exception:
                     self.show_error(f"Failed to save config for plugin {p_name}.")
                     return
 

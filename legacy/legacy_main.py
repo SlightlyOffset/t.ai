@@ -24,8 +24,6 @@ import sys
 from colorama import init, Fore, Style
 
 # Add parent directory to sys.path so we can run from anywhere and import engines
-import sys
-import os
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 # Local imports

@@ -1,8 +1,6 @@
 
 import os
-import sys
 from engines.tts_module import generate_audio, play_audio
-from engines.config import update_setting
 
 def test_remote_xtts_playback():
     # Ensure remote URL is set (use the one from the user's log if possible, but let's just use what's in settings)

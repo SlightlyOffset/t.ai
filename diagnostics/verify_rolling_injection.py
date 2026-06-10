@@ -1,5 +1,5 @@
 import unittest
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 from engines.responses import get_respond_stream
 
 class TestRollingInjection(unittest.TestCase):

@@ -13,17 +13,13 @@ Usage:
 """
 
 import argparse
-import asyncio
 import json
 import logging
 import os
-import queue
 import re
 import subprocess
 import sys
-import threading
 import time
-from pathlib import Path
 from typing import Optional
 
 import numpy as np
@@ -380,7 +376,6 @@ class LLMEngine:
         **kwargs,
     ):
         import requests
-        import json
         
         if not self.ready:
             yield FALLBACK_UNAVAILABLE_MESSAGE

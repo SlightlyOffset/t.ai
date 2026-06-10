@@ -167,7 +167,6 @@ class CharacterImporter:
         Uses a local LLM to refine and clean character profile metadata fields.
         Returns the updated profile (modifying fields like alt_names, character_info, backstory, rp_mannerisms).
         """
-        import ollama
         from engines.config import get_setting
         from engines.responses import _ollama_chat_compat
 

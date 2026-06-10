@@ -1,5 +1,5 @@
 import unittest
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch
 from engines.responses import extract_scene_from_text, extract_scene_from_starter
 
 class TestResponsesScene(unittest.TestCase):

@@ -11,7 +11,6 @@ import traceback
 import os
 import ollama
 import requests
-from datetime import datetime
 from concurrent.futures import ThreadPoolExecutor
 from engines.memory_v2 import memory_manager
 from engines.config import get_setting
@@ -28,7 +27,7 @@ from engines.narrative_pipeline import (
     update_narrative_state,
 )
 from engines.prompts import build_system_prompt
-from engines.lorebook import load_lorebook, scan_for_lore, sync_lore_to_remote
+from engines.lorebook import load_lorebook, scan_for_lore
 from engines.utilities import redact_pii, log_debug
 from engines.hooks import execute_pipeline
 

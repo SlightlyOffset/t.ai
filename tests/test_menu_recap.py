@@ -1,9 +1,6 @@
 import unittest
 from unittest.mock import MagicMock, patch
-import os
-import sys
 
-import ui.menu as menu
 from ui.menu import TaiMenu
 
 class TestMenuRecap(unittest.TestCase):
