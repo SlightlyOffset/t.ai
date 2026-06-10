@@ -155,6 +155,13 @@ def iterate_response_events(
         ):
             yield {"type": "tts", "payload": (cleaned, voice, engine, clone_ref, language, user_name)}
 
+    # Wait for all background post-processing threads (like history saving and sentiment analysis)
+    # to complete before yielding 'complete', to prevent race conditions on history loading.
+    from engines.responses import active_post_process_threads
+    for t in list(active_post_process_threads):
+        if t.is_alive():
+            t.join()
+
     target_text = execute_pipeline("after_llm_generation", target_text, {
         "character_profile": character_profile,
         "history_profile_name": history_profile_name,
