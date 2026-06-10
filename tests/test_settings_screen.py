@@ -38,6 +38,7 @@ class TestSettingsScreen(unittest.TestCase):
             "#interaction_mode": MagicMock(value="rp"),
             "#clear_on_start": MagicMock(value=False),
             "#auto_recap_on_start": MagicMock(value=True),
+            "#smooth_streaming": MagicMock(value=True),
             "#image_protocol": MagicMock(value="auto"),
             "#image_size": MagicMock(value="medium"),
             "#suppress_errors": MagicMock(value=True),
