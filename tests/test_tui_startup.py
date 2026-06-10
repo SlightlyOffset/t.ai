@@ -231,6 +231,21 @@ class TestTUIStartup(unittest.TestCase):
 
     @patch('engines.config.get_setting')
     @patch('ollama.list')
+    def test_check_ollama_and_models_custom_local_url(self, mock_ollama_list, mock_get_setting):
+        """Test check_ollama_and_models skips check when custom local_llm_url (not 11434) is configured."""
+        from main import check_ollama_and_models
+        mock_get_setting.side_effect = lambda key, default=None: {
+            "remote_llm_url": None,
+            "local_llm_url": "http://localhost:5001/v1",
+            "default_llm_model": "fluffy/l3-8b-stheno-v3.2"
+        }.get(key, default)
+        
+        check_ollama_and_models()
+        self.assertFalse(mock_ollama_list.called)
+
+
+    @patch('engines.config.get_setting')
+    @patch('ollama.list')
     @patch('sys.stdin.isatty', return_value=True)
     @patch('builtins.input')
     def test_check_ollama_and_models_not_running_interactive_force_launch(self, mock_input, mock_isatty, mock_ollama_list, mock_get_setting):

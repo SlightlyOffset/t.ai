@@ -86,6 +86,10 @@ def check_ollama_and_models():
     if remote_llm:
         return
 
+    local_url = get_setting("local_llm_url")
+    if local_url and "11434" not in local_url:
+        return
+
     default_model = get_setting("default_llm_model") or "fluffy/l3-8b-stheno-v3.2"
     target_model = default_model
 
