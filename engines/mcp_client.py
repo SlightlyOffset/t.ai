@@ -49,6 +49,11 @@ class MCPClientManager:
         self._thread.start()
         
         self._initialized = True
+        
+        # Automatically load configs and connect to enabled servers
+        self.load_server_configs()
+        if get_setting("mcp_enabled", False):
+            threading.Thread(target=self.connect_all, daemon=True, name="MCPConnectAllThread").start()
 
     def _run_loop(self):
         asyncio.set_event_loop(self._loop)

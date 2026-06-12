@@ -14,13 +14,14 @@ import json
 mcp = FastMCP("st_importer")
 
 @mcp.tool()
-def import_st_card(filepath: str, overwrite: bool = False) -> str:
+def import_st_card(filepath: str, overwrite: bool = False, refine: bool = True) -> str:
     """
     Imports a SillyTavern V2 character card (PNG or JSON) into a t.ai character profile.
     
     Args:
         filepath: The absolute path to the .png or .json card file.
         overwrite: If True, overwrites an existing profile with the same name.
+        refine: If True, uses local AI to refine the extracted fields.
     """
     if not os.path.exists(filepath):
         return f"Error: File not found at {filepath}"
@@ -48,7 +49,7 @@ def import_st_card(filepath: str, overwrite: bool = False) -> str:
         if os.path.exists(target_path) and not overwrite:
             return f"Failed to import character card from {filepath}. It already exists (try overwrite=True)."
             
-        success_path = import_character(filepath, refine=False)
+        success_path = import_character(filepath, refine=refine)
         if success_path:
             return f"Successfully imported character card from {filepath} to {success_path}"
         else:
