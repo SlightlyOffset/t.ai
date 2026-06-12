@@ -142,9 +142,11 @@ def parse_sse_stream(response: requests.Response):
             except Exception:
                 pass
 
+_MODEL_TOOL_SUPPORT_CACHE = {}
+
 def _ollama_chat_compat(model: str, messages: list, stream: bool = False, format: str = None, options: dict = None, think: bool = False, timeout: float = 180.0, tools: list = None):
     """
-    OpenAI-compatible / Kobold-compatible backend driver that matches the signature of ollama.chat.
+    OpenAI-compatible / Kobold-compatible driver that matches the signature of ollama.chat.
     If running in a mocked test environment (ollama.chat is patched), routes calls directly to the mock.
     """
     from unittest.mock import Mock
@@ -160,9 +162,19 @@ def _ollama_chat_compat(model: str, messages: list, stream: bool = False, format
         "stream": stream
     }
 
-    if tools:
+    model_supports_tools = _MODEL_TOOL_SUPPORT_CACHE.get(model, True)
+    if tools and model_supports_tools:
         payload["tools"] = tools
-
+    elif tools and not model_supports_tools:
+        steering_msg = (
+            "System Note: The tool-calling interface is unsupported by your current model configuration. "
+            "If the user's request requires a tool action (such as importing a card), politely inform them that "
+            "you attempted to call a tool to handle their request but could not do so because the current model "
+            "configuration does not support tool-calling. Let them know they can execute the action directly "
+            "using the appropriate command (e.g., '//import_card <path_to_card>'). Otherwise, if the user's "
+            "message is a normal conversation, respond normally without mentioning tools."
+        )
+        payload["messages"] = payload["messages"] + [{"role": "system", "content": steering_msg}]
 
     if options:
         if "temperature" in options:
@@ -193,8 +205,18 @@ def _ollama_chat_compat(model: str, messages: list, stream: bool = False, format
             if response.status_code == 400 and payload.get("tools"):
                 if get_setting("debug_mode", False):
                     print("[WARNING] Model or Ollama endpoint rejected tools parameter. Retrying without tools...")
+                _MODEL_TOOL_SUPPORT_CACHE[model] = False
                 payload = payload.copy()
                 payload.pop("tools", None)
+                steering_msg = (
+                    "System Note: The tool-calling interface is unsupported by your current model configuration. "
+                    "If the user's request requires a tool action (such as importing a card), politely inform them that "
+                    "you attempted to call a tool to handle their request but could not do so because the current model "
+                    "configuration does not support tool-calling. Let them know they can execute the action directly "
+                    "using the appropriate command (e.g., '//import_card <path_to_card>'). Otherwise, if the user's "
+                    "message is a normal conversation, respond normally without mentioning tools."
+                )
+                payload["messages"] = payload["messages"] + [{"role": "system", "content": steering_msg}]
                 response = requests.post(full_url, json=payload, headers=headers, stream=True, timeout=60)
                 response.raise_for_status()
             else:
@@ -218,8 +240,18 @@ def _ollama_chat_compat(model: str, messages: list, stream: bool = False, format
             if response.status_code == 400 and payload.get("tools"):
                 if get_setting("debug_mode", False):
                     print("[WARNING] Model or Ollama endpoint rejected tools parameter. Retrying without tools...")
+                _MODEL_TOOL_SUPPORT_CACHE[model] = False
                 payload = payload.copy()
                 payload.pop("tools", None)
+                steering_msg = (
+                    "System Note: The tool-calling interface is unsupported by your current model configuration. "
+                    "If the user's request requires a tool action (such as importing a card), politely inform them that "
+                    "you attempted to call a tool to handle their request but could not do so because the current model "
+                    "configuration does not support tool-calling. Let them know they can execute the action directly "
+                    "using the appropriate command (e.g., '//import_card <path_to_card>'). Otherwise, if the user's "
+                    "message is a normal conversation, respond normally without mentioning tools."
+                )
+                payload["messages"] = payload["messages"] + [{"role": "system", "content": steering_msg}]
                 response = requests.post(full_url, json=payload, timeout=timeout)
                 response.raise_for_status()
             else:

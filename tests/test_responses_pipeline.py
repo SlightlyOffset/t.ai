@@ -15,6 +15,11 @@ class TestResponsesPipeline(unittest.TestCase):
                 mock_self._target(*mock_self._args, **mock_self._kwargs)
                 
         self.mock_thread_start.side_effect = run_sync
+        
+        # Clear the model tool support cache to ensure test independence
+        import engines.responses
+        if hasattr(engines.responses, "_MODEL_TOOL_SUPPORT_CACHE"):
+            engines.responses._MODEL_TOOL_SUPPORT_CACHE.clear()
 
     def tearDown(self):
         self.thread_patcher.stop()
@@ -605,6 +610,9 @@ class TestResponsesPipeline(unittest.TestCase):
         self.assertIn("tools", mock_post.call_args_list[0].kwargs["json"])
         # Second call does not have tools
         self.assertNotIn("tools", mock_post.call_args_list[1].kwargs["json"])
+        messages = mock_post.call_args_list[1].kwargs["json"]["messages"]
+        self.assertEqual(messages[-1]["role"], "system")
+        self.assertIn("tool-calling interface is unsupported", messages[-1]["content"])
 
     @patch("engines.responses.requests.post")
     @patch("engines.responses.get_setting")
@@ -646,6 +654,70 @@ class TestResponsesPipeline(unittest.TestCase):
         self.assertEqual(mock_post.call_count, 2)
         self.assertIn("tools", mock_post.call_args_list[0].kwargs["json"])
         self.assertNotIn("tools", mock_post.call_args_list[1].kwargs["json"])
+        messages = mock_post.call_args_list[1].kwargs["json"]["messages"]
+        self.assertEqual(messages[-1]["role"], "system")
+        self.assertIn("tool-calling interface is unsupported", messages[-1]["content"])
+
+    @patch("engines.responses.requests.post")
+    @patch("engines.responses.get_setting")
+    def test_ollama_chat_compat_tool_calling_caching(self, mock_get_setting, mock_post):
+        # Setup configs
+        def get_setting_mock(key, default=None):
+            if key == "local_llm_url":
+                return "http://127.0.0.1:11434/v1"
+            return default
+        mock_get_setting.side_effect = get_setting_mock
+        
+        import requests
+        # First call fails with 400
+        mock_response_fail = MagicMock()
+        mock_response_fail.status_code = 400
+        mock_response_fail.raise_for_status.side_effect = requests.exceptions.HTTPError("Bad Request", response=mock_response_fail)
+        
+        # Second call succeeds
+        mock_response_success = MagicMock()
+        mock_response_success.status_code = 200
+        mock_response_success.json.return_value = {
+            "choices": [{"message": {"role": "assistant", "content": "Success content 1"}}]
+        }
+        
+        # Third call succeeds (subsequent call to the cached unsupported model)
+        mock_response_success_2 = MagicMock()
+        mock_response_success_2.status_code = 200
+        mock_response_success_2.json.return_value = {
+            "choices": [{"message": {"role": "assistant", "content": "Success content 2"}}]
+        }
+        
+        mock_post.side_effect = [mock_response_fail, mock_response_success, mock_response_success_2]
+        
+        from engines.responses import _ollama_chat_compat, _MODEL_TOOL_SUPPORT_CACHE
+        
+        # Call 1 (should fail -> fallback -> success)
+        result1 = _ollama_chat_compat(
+            model="cached-unsupported-model",
+            messages=[{"role": "user", "content": "test"}],
+            stream=False,
+            tools=[{"type": "function", "function": {"name": "test_tool"}}]
+        )
+        self.assertEqual(result1["message"]["content"], "Success content 1")
+        self.assertEqual(mock_post.call_count, 2)
+        self.assertFalse(_MODEL_TOOL_SUPPORT_CACHE.get("cached-unsupported-model", True))
+        
+        # Call 2 (should be cached as unsupported, so it shouldn't send tools at all, hence only 1 call to requests.post)
+        result2 = _ollama_chat_compat(
+            model="cached-unsupported-model",
+            messages=[{"role": "user", "content": "test"}],
+            stream=False,
+            tools=[{"type": "function", "function": {"name": "test_tool"}}]
+        )
+        self.assertEqual(result2["message"]["content"], "Success content 2")
+        self.assertEqual(mock_post.call_count, 3) # 2 from before + 1 new call
+        
+        # Verify that tools was not in the payload of the last call
+        last_call_json = mock_post.call_args_list[-1].kwargs["json"]
+        self.assertNotIn("tools", last_call_json)
+        self.assertEqual(last_call_json["messages"][-1]["role"], "system")
+        self.assertIn("tool-calling interface is unsupported", last_call_json["messages"][-1]["content"])
 
 
 if __name__ == "__main__":
