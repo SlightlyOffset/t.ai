@@ -11,7 +11,7 @@ from engines.character_importer import import_character, CharacterImporter
 from engines.utilities import sanitize_profile_name
 import json
 
-mcp = FastMCP("st_importer", description="SillyTavern Card Importer")
+mcp = FastMCP("st_importer")
 
 @mcp.tool()
 def import_st_card(filepath: str, overwrite: bool = False) -> str:
