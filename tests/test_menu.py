@@ -513,8 +513,10 @@ class TestMenu(unittest.TestCase):
 
     @patch('ui.menu.threading.Thread')
     @patch('ui.menu.memory_manager')
-    def test_print_starter_message_with_multiple(self, mock_memory_manager, mock_thread):
+    @patch('ui.menu.get_setting')
+    def test_print_starter_message_with_multiple(self, mock_get_setting, mock_memory_manager, mock_thread):
         """Test that print_starter_message shuffles multiple messages and populates alternatives."""
+        mock_get_setting.return_value = "rp"
         class DummyMenu(TaiMenu):
             def __init__(self):
                 self.character_profile = {"starter_messages": ["msg1", "msg2", "msg3"], "relationship_score": 5}
@@ -662,6 +664,31 @@ class TestMenu(unittest.TestCase):
         # Test refresh_last_ai_message retains count of 1
         app.refresh_last_ai_message("msg2", index=1, total=3)
         self.assertEqual(app._visible_message_count, 1)
+
+    @patch('ui.menu.get_setting')
+    def test_print_starter_message_casual_mode(self, mock_get_setting):
+        """Verify that print_starter_message returns early and does not print/save when mode is casual."""
+        mock_get_setting.return_value = "casual"
+        
+        class DummyMenu(TaiMenu):
+            def __init__(self):
+                self.character_profile = {
+                    "starter_messages": ["msg1"],
+                    "relationship_score": 0
+                }
+                self.history_profile_name = "test_profile"
+                self.user_profile = {"name": "TestUser"}
+                self._visible_message_count = 10
+
+        app = DummyMenu()
+        app.add_message = MagicMock()
+        
+        app.print_starter_message()
+        
+        # Verify that add_message was NOT called
+        self.assertFalse(app.add_message.called)
+        # Verify it reset visible message count, but did not populate or save
+        self.assertEqual(app._visible_message_count, 0)
 
     def test_highlight_narration_asterisks(self):
         """Verify that ChatInput's highlight map identifies single, double, and triple asterisk narration."""

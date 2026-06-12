@@ -1839,6 +1839,8 @@ class TaiMenu(App):
     def print_starter_message(self) -> None:
         """Prints starter messages to the chat list and extracts the initial scene in the background."""
         self._visible_message_count = 0
+        if get_setting("interaction_mode", "rp") == "casual":
+            return
         if not self.character_profile:
             return
         starter_messages = list(self.character_profile.get("starter_messages", []))
