@@ -332,42 +332,62 @@ class CharacterImporter:
             if not refined_data:
                 response_content = result.get("message", {}).get("content", "").strip()
 
-                # Refusal detection: check for common safety guidelines / refusal templates
-                refusal_triggers = [
-                    "i cannot fulfill", "against safety guidelines", "i am unable to",
-                    "cannot generate content", "against policy", "cannot assist with this"
-                ]
-                if any(trigger in response_content.lower() for trigger in refusal_triggers):
-                    print(f"{Fore.YELLOW}[WARNING] Local model refused to process character card due to safety constraints. Falling back to rule-based import.")
-                    return profile
+                # Check if the response content is a JSON-formatted pseudo-tool call
+                # e.g., {"name": "save_refined_profile", "parameters": {...}}
+                if response_content.startswith("{") and '"parameters"' in response_content:
+                    try:
+                        pseudo_call = json.loads(response_content)
+                        if isinstance(pseudo_call, dict) and "parameters" in pseudo_call:
+                            refined_data = pseudo_call["parameters"]
+                    except Exception:
+                        pass
 
-                # Parse JSON
-                try:
-                    refined_data = json.loads(response_content)
-                except json.JSONDecodeError:
-                    # Attempt regex-based cleanup of markdown code block
-                    match = re.search(r'```(?:json)?\s*(\{.*?\})\s*```', response_content, re.DOTALL | re.IGNORECASE)
-                    if match:
-                        try:
-                            refined_data = json.loads(match.group(1))
-                        except json.JSONDecodeError:
-                            pass
-                    
-                    # Fallback to finding first/last brackets
-                    if not refined_data:
-                        start = response_content.find('{')
-                        end = response_content.rfind('}')
-                        if start != -1 and end != -1 and end > start:
+                if not refined_data:
+                    # Refusal detection: check for common safety guidelines / refusal templates
+                    refusal_triggers = [
+                        "i cannot fulfill", "against safety guidelines", "i am unable to",
+                        "cannot generate content", "against policy", "cannot assist with this"
+                    ]
+                    if any(trigger in response_content.lower() for trigger in refusal_triggers):
+                        print(f"{Fore.YELLOW}[WARNING] Local model refused to process character card due to safety constraints. Falling back to rule-based import.")
+                        return profile
+
+                    # Parse JSON
+                    try:
+                        refined_data = json.loads(response_content)
+                    except json.JSONDecodeError:
+                        # Attempt regex-based cleanup of markdown code block
+                        match = re.search(r'```(?:json)?\s*(\{.*?\})\s*```', response_content, re.DOTALL | re.IGNORECASE)
+                        if match:
                             try:
-                                refined_data = json.loads(response_content[start:end+1])
+                                refined_data = json.loads(match.group(1))
                             except json.JSONDecodeError:
                                 pass
+                        
+                        # Fallback to finding first/last brackets
+                        if not refined_data:
+                            start = response_content.find('{')
+                            end = response_content.rfind('}')
+                            if start != -1 and end != -1 and end > start:
+                                try:
+                                    refined_data = json.loads(response_content[start:end+1])
+                                except json.JSONDecodeError:
+                                    pass
 
             if not refined_data:
                 if get_setting("debug_mode", False):
                     print(f"{Fore.MAGENTA}[DEBUG] Raw model response: {result}{Fore.RESET}")
                 print(f"{Fore.YELLOW}[WARNING] Failed to parse AI refinement (both tool calling and JSON parsing failed). Falling back to rule-based values.")
                 return profile
+
+            # Clean up any fields that were double-serialized as JSON strings (common on smaller models)
+            for list_field in ["likes", "dislikes", "rp_mannerisms"]:
+                val = refined_data.get(list_field)
+                if isinstance(val, str) and val.strip().startswith("["):
+                    try:
+                        refined_data[list_field] = json.loads(val)
+                    except Exception:
+                        pass
 
             # Merge refined fields into the profile
             if "alt_names" in refined_data and isinstance(refined_data["alt_names"], str):
