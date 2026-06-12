@@ -503,7 +503,7 @@ class CharacterImporter:
         target_path = os.path.abspath(os.path.join(profiles_dir, filename))
 
         # Security check: Ensure the target path is still within the profiles directory
-        if not target_path.startswith(profiles_dir):
+        if not os.path.normcase(target_path).startswith(os.path.normcase(profiles_dir)):
             print(f"{Fore.RED}[ERROR] Path traversal attempt detected.")
             return False
 
