@@ -272,6 +272,45 @@ class TestCharacterImporterConvert(unittest.TestCase):
         self.assertEqual(res["accuracy_score"], 8.0)
         self.assertEqual(res["average_score"], 8.5)
 
+    def test_save_profile_generates_lorebook(self):
+        import os
+        import shutil
+
+        # Setup test profile with lorebook entries
+        profile = {
+            "name": "TestLoreChar",
+            "system_prompt": "You are TestLoreChar.",
+            "backstory": "Test backstory.",
+            "lorebook_entries": [
+                {
+                    "keys": ["test_key"],
+                    "content": "This is test lore content."
+                }
+            ]
+        }
+
+        # Save profile
+        target_path = CharacterImporter.save_profile(profile)
+        self.assertTrue(target_path and os.path.exists(target_path))
+
+        # Check that lorebook path is set and file exists
+        self.assertIn("lorebook_path", profile)
+        lore_file = profile["lorebook_path"]
+        self.assertTrue(os.path.exists(lore_file))
+
+        # Verify lorebook contents
+        with open(lore_file, "r") as f:
+            lore_data = json.load(f)
+        self.assertEqual(len(lore_data["entries"]), 1)
+        self.assertEqual(lore_data["entries"][0]["keys"], ["test_key"])
+        self.assertEqual(lore_data["entries"][0]["content"], "This is test lore content.")
+
+        # Clean up
+        if os.path.exists(target_path):
+            os.remove(target_path)
+        if os.path.exists(lore_file):
+            os.remove(lore_file)
+
 
 if __name__ == "__main__":
     unittest.main()

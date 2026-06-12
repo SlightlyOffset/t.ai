@@ -399,24 +399,33 @@ class CharacterImporter:
             "Analyze the provided raw character details and extract structured profile fields.\n"
             "CRITICAL: You must preserve as much distinct persona, unique voice, slang, dialect, and speech style/habits as possible. "
             "Do NOT sanitize, simplify, or homogenize the character's unique traits into generic descriptions.\n"
-            "CRITICAL: Do NOT copy-paste the raw description or backstory text verbatim into any fields. The fields must be clean, refined, and synthesized summaries. "
-            "The 'system_prompt' field must be a structured roleplay instruction prompt in the second person ('You are...'), NOT a raw text dump.\n"
-            "If the character speaks in a certain way (e.g., uses specific slang, stutters, speaks in all lowercase, has capitalization quirks, or has a specific dialect), "
-            "you MUST reflect this explicitly in the extracted fields (especially 'rp_mannerisms', 'personality_type', and 'system_prompt').\n\n"
-            "Respond ONLY with a valid JSON object matching the following schema. "
-            "Do not include any conversational intro/outro text, explanations, or code blocks.\n\n"
+            "CRITICAL: Do NOT copy-paste the raw description or backstory text verbatim into any fields. The fields must be clean, refined, and synthesized summaries.\n"
+            "CRITICAL: We enforce a strict division between behavior and facts to optimize context size:\n"
+            "1. The 'system_prompt' field must contain ONLY behavioral, stylistic, formatting, and tone instructions in the second person ('You are...'). E.g., detail formatting quirks, stutters, specific casing, actions, and mannerisms. It MUST NOT contain any biographical backstory, history, or timeline details.\n"
+            "2. The 'backstory' field must contain ONLY factual biography, timeline of events, and historical details of the character.\n"
+            "3. Extract 2-5 specific secondary facts, world lore elements, or secondary character/NPC details (e.g. specific names of places, past incidents, pets/companions) that are not in the core profile into 'lorebook_entries'. Each entry should specify trigger keys and content.\n\n"
+            "Respond ONLY with a valid JSON object matching the following schema.\n"
+            "Do not include any conversational intro/outro text, explanations, or code blocks.\n"
+            "CRITICAL: Do NOT add any keys to the JSON that are not explicitly specified in the schema below (do NOT add speaking_style, dialogue_examples, etc.).\n"
+            "CRITICAL: Do NOT use unescaped double quotes (\") inside your JSON string values. For measurements, use single quotes (e.g., write 4'9' or 4'9 inches instead of 4'9\"). Double quotes inside strings will break the JSON parser.\n\n"
             "{\n"
-            '  "alt_names": "Comma-separated string of nicknames, aliases or alternative names, or empty string",\n'
-            '  "gender": "Character gender (e.g. Male, Female, Non-binary, Unknown)",\n'
-            '  "age": "Character age (e.g. 24, Unknown)",\n'
-            '  "appearance": "Short description of appearance, height, hair, clothing, eyes",\n'
-            '  "likes": ["list of strings containing likes/hobbies, or empty list"],\n'
-            '  "dislikes": ["list of strings containing dislikes/aversions, or empty list"],\n'
-            '  "rp_mannerisms": ["List of 3-5 specific conversational traits, formatting rules, or stylistic mannerisms extracted from raw text and dialogue examples. E.g., \'always uses lowercase\', \'frequently stutters when nervous\', \'speaks in a polite, formal tone\', \'uses asterisks for actions like *smiles*\'"],\n'
-            '  "personality_type": "Summary of personality, preserving unique voice and distinct character persona. If \'Raw Personality\' is empty, you MUST extract this from \'Raw Description/Backstory\'.",\n'
-            '  "backstory": "Narrative biography summary of history and origin, preserving any critical background details and persona",\n'
-            '  "other": "Refined description of the roleplay scenario or other setting details",\n'
-            '  "system_prompt": "A highly immersive, detailed roleplay instruction prompt in the second person (\'You are...\'). Detail specific speech patterns, vocabulary, punctuation/formatting quirks (e.g., asterisks for actions, stutters, specific casing). DO NOT dump the raw description text here; instead, create a clean instruction prompt instructing the AI on how to play the character."\n'
+            '  "system_prompt": "<highly_immersive_behavioral_roleplay_instructions_in_second_person_you_are>",\n'
+            '  "personality_type": "<personality_summary_preserving_unique_voice>",\n'
+            '  "backstory": "<concise_factual_history_and_biography_timeline>",\n'
+            '  "lorebook_entries": [\n'
+            '    {\n'
+            '      "keys": ["<trigger_word1>", "<trigger_word2>"],\n'
+            '      "content": "<specific_secondary_lore_fact_or_npc_details_matching_these_keys_strictly_no_title_or_description_keys>"\n'
+            '    }\n'
+            '  ],\n'
+            '  "rp_mannerisms": ["<mannerism_1>", "<mannerism_2>"],\n'
+            '  "appearance": "<appearance_description>",\n'
+            '  "gender": "<gender_or_Unknown>",\n'
+            '  "age": "<age_or_Unknown>",\n'
+            '  "alt_names": "<comma_separated_aliases_or_empty>",\n'
+            '  "likes": ["<like_1>", "<like_2>"],\n'
+            '  "dislikes": ["<dislike_1>", "<dislike_2>"],\n'
+            '  "other": "<refined_rp_scenario_or_other_details>"\n'
             "}"
         )
 
@@ -432,7 +441,9 @@ class CharacterImporter:
             "3. Do not invent backstory details. Keep it grounded.\n"
             "4. If 'Raw Personality' is empty, you MUST scan the 'Raw Description/Backstory' field to extract the character's personality details for 'personality_type'.\n"
             "5. Do NOT copy-paste raw description blocks verbatim. You must clean, refine, and synthesize them.\n"
-            "6. Return ONLY valid JSON."
+            "6. Keep 'system_prompt' strictly to roleplay style/behavior (no bio), and 'backstory' strictly to biography facts/timeline.\n"
+            "7. Extract 2-5 relevant backstory/world info details into 'lorebook_entries'.\n"
+            "8. Return ONLY valid JSON."
         )
 
         correction_system_prompt = (
@@ -440,21 +451,33 @@ class CharacterImporter:
             "You previously generated a refined character profile, but a critic evaluated it and provided feedback on how it can be improved to better preserve the character's distinct persona and speech style.\n"
             "Modify the previous refined profile to incorporate the critic's feedback. "
             "Make sure the character's unique voice, slang, punctuation/formatting quirks (like lowercase, asterisks), and details are preserved as much as possible.\n"
-            "CRITICAL: Do NOT copy-paste the raw description or backstory text verbatim. Synthesize it clearly while preserving all critical character mannerisms, and format the system prompt in the second person ('You are...').\n\n"
-            "Respond ONLY with a valid JSON object matching the following schema. "
-            "Do not include any conversational intro/outro text, explanations, or code blocks.\n\n"
+            "CRITICAL: Do NOT copy-paste the raw description or backstory text verbatim. Synthesize it clearly while preserving all critical character mannerisms.\n"
+            "CRITICAL: We enforce a strict division between behavior and facts to optimize context size:\n"
+            "1. The 'system_prompt' field must contain ONLY behavioral, stylistic, formatting, and tone instructions in the second person ('You are...'). It MUST NOT contain any biographical backstory, history, or timeline details.\n"
+            "2. The 'backstory' field must contain ONLY factual biography, timeline of events, and historical details of the character.\n"
+            "3. Extract 2-5 specific secondary facts, world lore elements, or secondary character/NPC details (e.g. specific names of places, past incidents, pets/companions) that are not in the core profile into 'lorebook_entries'. Each entry should specify trigger keys and content.\n\n"
+            "Respond ONLY with a valid JSON object matching the following schema.\n"
+            "Do not include any conversational intro/outro text, explanations, or code blocks.\n"
+            "CRITICAL: Do NOT add any keys to the JSON that are not explicitly specified in the schema below (do NOT add speaking_style, dialogue_examples, etc.).\n"
+            "CRITICAL: Do NOT use unescaped double quotes (\") inside your JSON string values. For measurements, use single quotes (e.g., write 4'9' or 4'9 inches instead of 4'9\"). Double quotes inside strings will break the JSON parser.\n\n"
             "{\n"
-            '  "alt_names": "Comma-separated string of nicknames, aliases or alternative names, or empty string",\n'
-            '  "gender": "Character gender (e.g. Male, Female, Non-binary, Unknown)",\n'
-            '  "age": "Character age (e.g. 24, Unknown)",\n'
-            '  "appearance": "Short description of appearance, height, hair, clothing, eyes",\n'
-            '  "likes": ["list of strings containing likes/hobbies, or empty list"],\n'
-            '  "dislikes": ["list of strings containing dislikes/aversions, or empty list"],\n'
-            '  "rp_mannerisms": ["List of 3-5 specific conversational traits, formatting rules, or stylistic mannerisms extracted from raw text and dialogue examples. E.g., \'always uses lowercase\', \'frequently stutters when nervous\', \'speaks in a polite, formal tone\', \'uses asterisks for actions like *smiles*\'"],\n'
-            '  "personality_type": "Summary of personality, preserving unique voice and distinct character persona. If \'Raw Personality\' is empty, you MUST extract this from \'Raw Description/Backstory\'.",\n'
-            '  "backstory": "Narrative biography summary of history and origin, preserving any critical background details and persona",\n'
-            '  "other": "Refined description of the roleplay scenario or other setting details",\n'
-            '  "system_prompt": "A highly immersive, detailed roleplay instruction prompt in the second person (\'You are...\'). Detail specific speech patterns, vocabulary, punctuation/formatting quirks (e.g., asterisks for actions, stutters, specific casing). DO NOT dump the raw description text here; instead, create a clean instruction prompt instructing the AI on how to play the character."\n'
+            '  "system_prompt": "<highly_immersive_behavioral_roleplay_instructions_in_second_person_you_are>",\n'
+            '  "personality_type": "<personality_summary_preserving_unique_voice>",\n'
+            '  "backstory": "<concise_factual_history_and_biography_timeline>",\n'
+            '  "lorebook_entries": [\n'
+            '    {\n'
+            '      "keys": ["<trigger_word1>", "<trigger_word2>"],\n'
+            '      "content": "<specific_secondary_lore_fact_or_npc_details_matching_these_keys_strictly_no_title_or_description_keys>"\n'
+            '    }\n'
+            '  ],\n'
+            '  "rp_mannerisms": ["<mannerism_1>", "<mannerism_2>"],\n'
+            '  "appearance": "<appearance_description>",\n'
+            '  "gender": "<gender_or_Unknown>",\n'
+            '  "age": "<age_or_Unknown>",\n'
+            '  "alt_names": "<comma_separated_aliases_or_empty>",\n'
+            '  "likes": ["<like_1>", "<like_2>"],\n'
+            '  "dislikes": ["<dislike_1>", "<dislike_2>"],\n'
+            '  "other": "<refined_rp_scenario_or_other_details>"\n'
             "}"
         )
 
@@ -483,7 +506,7 @@ class CharacterImporter:
                     stream=False,
                     format="json",
                     think=False,
-                    options={"temperature": 0.1 if attempt == 1 else 0.3}
+                    options={"temperature": 0.1 if attempt == 1 else 0.3, "num_predict": 2048}
                 )
 
                 response_content = result.get("message", {}).get("content", "").strip()
@@ -549,6 +572,8 @@ class CharacterImporter:
                     t_info["dislikes"] = [x.strip() for x in refined_data["dislikes"] if isinstance(x, str) and x.strip()]
                 if "other" in refined_data and isinstance(refined_data["other"], str):
                     t_info["other"] = refined_data["other"].strip()
+                if "lorebook_entries" in refined_data and isinstance(refined_data["lorebook_entries"], list):
+                    temp_profile["lorebook_entries"] = refined_data["lorebook_entries"]
 
                 temp_profile["raw_personality"] = raw_personality
                 temp_profile["raw_description"] = raw_description
@@ -647,22 +672,54 @@ class CharacterImporter:
 
         from engines.utilities import sanitize_profile_name
 
-        if not filename:
-            # Sanitize the name to prevent path traversal
+        # Determine the base filename prefix/identifier
+        if filename:
+            base_ident = os.path.splitext(os.path.basename(filename))[0]
+        else:
             safe_name = sanitize_profile_name(profile["name"])
-            
-            # Generate a short hash based on the profile content to prevent overwriting same name characters
             import hashlib
             hash_input = f"{profile.get('name', '')}|{profile.get('system_prompt', '')}|{profile.get('backstory', '')}"
             profile_hash = hashlib.md5(hash_input.encode('utf-8')).hexdigest()[:8]
-            
-            filename = f"{safe_name}_{profile_hash}.json"
+            base_ident = f"{safe_name}_{profile_hash}"
+            filename = f"{base_ident}.json"
 
         # Ensure we only have the basename of the filename
         filename = os.path.basename(filename)
 
         if not filename.endswith(".json"):
             filename += ".json"
+
+        # If there are lorebook entries in the profile, extract them and save to a separate lorebook file
+        lorebook_entries = profile.pop("lorebook_entries", None)
+        if lorebook_entries and isinstance(lorebook_entries, list):
+            lorebook_data = {
+                "entries": []
+            }
+            for idx, entry in enumerate(lorebook_entries):
+                if isinstance(entry, dict) and "keys" in entry and "content" in entry:
+                    seen_keys = []
+                    for k in entry.get("keys", []):
+                        k_clean = str(k).strip()
+                        if k_clean and k_clean not in seen_keys:
+                            seen_keys.append(k_clean)
+                    lorebook_data["entries"].append({
+                        "id": str(idx + 1),
+                        "keys": seen_keys,
+                        "content": str(entry["content"]).strip(),
+                        "enabled": True,
+                        "insertion_order": 50
+                    })
+            
+            if lorebook_data["entries"]:
+                os.makedirs("lorebooks", exist_ok=True)
+                lorebook_file_path = os.path.join("lorebooks", f"{base_ident}.json")
+                try:
+                    with open(lorebook_file_path, "w", encoding="utf-8") as lf:
+                        json.dump(lorebook_data, lf, indent=4, ensure_ascii=False)
+                    profile["lorebook_path"] = f"lorebooks/{base_ident}.json"
+                    print(f"{Fore.GREEN}[SUCCESS] Saved custom character lorebook to lorebooks/{base_ident}.json")
+                except Exception as e:
+                    print(f"{Fore.YELLOW}[WARNING] Failed to save custom character lorebook: {e}")
 
         # Construct target path relative to profiles directory
         profiles_dir = os.path.abspath("profiles")

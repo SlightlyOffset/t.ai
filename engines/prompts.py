@@ -72,29 +72,12 @@ def build_system_prompt(profile: dict, rel_score: int | float, mode: str = "rp",
     base_prompt = profile.get("system_prompt", "")
     char_name = profile.get('name', 'Unknown')
 
-    # If the system prompt is a refined prompt (i.e. not the default template starting with 'Character:'),
-    # we omit backstory and personality type from the CHARACTER PROFILE block to save tokens,
-    # as they are already synthesized within the refined system prompt.
-    is_refined = base_prompt and not base_prompt.strip().startswith(f"Character: {char_name}")
-
     # 1. Companion Character Details
+    backstory = profile.get("backstory", "Unknown.")
     mannerisms = ", ".join(profile.get("rp_mannerisms", []))
     info = profile.get("character_info", {})
 
-    if is_refined:
-        char_details = f"""
-[CHARACTER PROFILE]
-Name: {char_name}
-Alternate Names: {profile.get('alt_names', 'None')}
-Age: {info.get('age', 'Unknown')}
-Appearance: {info.get('appearance', 'Unknown')}
-Likes: {', '.join(info.get('likes', []))}
-Dislikes: {', '.join(info.get('dislikes', []))}
-Mannerisms: {mannerisms}
-"""
-    else:
-        backstory = profile.get("backstory", "Unknown.")
-        char_details = f"""
+    char_details = f"""
 [CHARACTER PROFILE]
 Name: {char_name}
 Alternate Names: {profile.get('alt_names', 'None')}
