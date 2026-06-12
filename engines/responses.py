@@ -186,8 +186,19 @@ def _ollama_chat_compat(model: str, messages: list, stream: bool = False, format
 
     if stream:
         headers = {"Accept": "text/event-stream"}
-        response = requests.post(full_url, json=payload, headers=headers, stream=True, timeout=60)
-        response.raise_for_status()
+        try:
+            response = requests.post(full_url, json=payload, headers=headers, stream=True, timeout=60)
+            response.raise_for_status()
+        except requests.exceptions.HTTPError as e:
+            if response.status_code == 400 and payload.get("tools"):
+                if get_setting("debug_mode", False):
+                    print("[WARNING] Model or Ollama endpoint rejected tools parameter. Retrying without tools...")
+                payload = payload.copy()
+                payload.pop("tools", None)
+                response = requests.post(full_url, json=payload, headers=headers, stream=True, timeout=60)
+                response.raise_for_status()
+            else:
+                raise
         
         def sse_chunk_generator():
             for chunk_data in parse_sse_stream(response):
@@ -200,8 +211,19 @@ def _ollama_chat_compat(model: str, messages: list, stream: bool = False, format
                 }
         return sse_chunk_generator()
     else:
-        response = requests.post(full_url, json=payload, timeout=timeout)
-        response.raise_for_status()
+        try:
+            response = requests.post(full_url, json=payload, timeout=timeout)
+            response.raise_for_status()
+        except requests.exceptions.HTTPError as e:
+            if response.status_code == 400 and payload.get("tools"):
+                if get_setting("debug_mode", False):
+                    print("[WARNING] Model or Ollama endpoint rejected tools parameter. Retrying without tools...")
+                payload = payload.copy()
+                payload.pop("tools", None)
+                response = requests.post(full_url, json=payload, timeout=timeout)
+                response.raise_for_status()
+            else:
+                raise
         res_data = response.json()
         
         content = ""

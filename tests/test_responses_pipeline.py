@@ -564,6 +564,89 @@ class TestResponsesPipeline(unittest.TestCase):
         result_chunks = list(get_respond_stream("Hi", profile, history_profile_name="test_profile"))
         self.assertEqual(result_chunks, ["Hello ", "world!"])
 
+    @patch("engines.responses.requests.post")
+    @patch("engines.responses.get_setting")
+    def test_ollama_chat_compat_tool_calling_fallback(self, mock_get_setting, mock_post):
+        # Setup configs
+        def get_setting_mock(key, default=None):
+            if key == "local_llm_url":
+                return "http://127.0.0.1:11434/v1"
+            if key == "debug_mode":
+                return True
+            return default
+        mock_get_setting.side_effect = get_setting_mock
+        
+        # Test non-streaming error recovery (HTTP 400 with tools -> retries without tools)
+        import requests
+        mock_response_fail = MagicMock()
+        mock_response_fail.status_code = 400
+        mock_response_fail.raise_for_status.side_effect = requests.exceptions.HTTPError("Bad Request", response=mock_response_fail)
+        
+        mock_response_success = MagicMock()
+        mock_response_success.status_code = 200
+        mock_response_success.json.return_value = {
+            "choices": [{"message": {"role": "assistant", "content": "Success content without tools"}}]
+        }
+        
+        mock_post.side_effect = [mock_response_fail, mock_response_success]
+        
+        from engines.responses import _ollama_chat_compat
+        
+        result = _ollama_chat_compat(
+            model="test-model",
+            messages=[{"role": "user", "content": "test"}],
+            stream=False,
+            tools=[{"type": "function", "function": {"name": "test_tool"}}]
+        )
+        
+        self.assertEqual(result["message"]["content"], "Success content without tools")
+        self.assertEqual(mock_post.call_count, 2)
+        # First call has tools
+        self.assertIn("tools", mock_post.call_args_list[0].kwargs["json"])
+        # Second call does not have tools
+        self.assertNotIn("tools", mock_post.call_args_list[1].kwargs["json"])
+
+    @patch("engines.responses.requests.post")
+    @patch("engines.responses.get_setting")
+    def test_ollama_chat_compat_stream_tool_calling_fallback(self, mock_get_setting, mock_post):
+        def get_setting_mock(key, default=None):
+            if key == "local_llm_url":
+                return "http://127.0.0.1:11434/v1"
+            if key == "debug_mode":
+                return True
+            return default
+        mock_get_setting.side_effect = get_setting_mock
+        
+        # Test streaming error recovery
+        import requests
+        mock_response_fail = MagicMock()
+        mock_response_fail.status_code = 400
+        mock_response_fail.raise_for_status.side_effect = requests.exceptions.HTTPError("Bad Request", response=mock_response_fail)
+        
+        mock_response_success = MagicMock()
+        mock_response_success.status_code = 200
+        # Mock generator/iterator for SSE stream
+        mock_response_success.iter_lines.return_value = [
+            'data: {"choices": [{"delta": {"content": "Stream chunk"}}]}'
+        ]
+        
+        mock_post.side_effect = [mock_response_fail, mock_response_success]
+        
+        from engines.responses import _ollama_chat_compat
+        
+        generator = _ollama_chat_compat(
+            model="test-model",
+            messages=[{"role": "user", "content": "test"}],
+            stream=True,
+            tools=[{"type": "function", "function": {"name": "test_tool"}}]
+        )
+        
+        chunks = list(generator)
+        self.assertEqual(chunks[0]["message"]["content"], "Stream chunk")
+        self.assertEqual(mock_post.call_count, 2)
+        self.assertIn("tools", mock_post.call_args_list[0].kwargs["json"])
+        self.assertNotIn("tools", mock_post.call_args_list[1].kwargs["json"])
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -2250,6 +2250,20 @@ class TaiMenu(App):
 
         # Handle commands (original message)
         if message.startswith("//"):
+            if message.startswith("//import_card"):
+                def run_import_in_thread():
+                    try:
+                        command_action = handle_command_input(message, self.history_profile_name)
+                        if command_action and command_action["type"] == "command_success" and command_action["messages"]:
+                            combined_msg = "\n".join(command_action["messages"])
+                            self.call_from_thread(self.add_message, combined_msg, role="command")
+                    except Exception as e:
+                        self.call_from_thread(self.add_message, f"[ERROR] Command failed: {e}", role="command")
+                
+                self.add_message(f"[SYSTEM] Starting card import/refinement in background: {message[len('//import_card '):]}...", role="command")
+                threading.Thread(target=run_import_in_thread, daemon=True).start()
+                return
+
             try:
                 command_action = handle_command_input(message, self.history_profile_name)
             except RestartRequested:
