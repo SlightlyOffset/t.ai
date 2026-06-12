@@ -65,6 +65,13 @@ class TestPrompts(unittest.TestCase):
         self.assertNotIn("Dislikes: Pointless chicanery", prompt)
         self.assertNotIn("Mannerisms: Uses a honeyed tone", prompt)
         
+        # Verify user profile details are also excluded
+        self.assertNotIn("Personality: Curious", prompt)
+        self.assertNotIn("Appearance: Tall", prompt)
+        self.assertNotIn("Pet: None", prompt)
+        self.assertNotIn("Likes: Science", prompt)
+        self.assertNotIn("Mannerisms to watch for: Attentive listener", prompt)
+        
         # Verify names and base prompt are still present
         self.assertIn("You are Astgenne.", prompt)
         self.assertIn("Name: Astgenne", prompt)
