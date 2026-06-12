@@ -742,5 +742,46 @@ class TestMenu(unittest.TestCase):
         self.assertEqual(h0[2][1], 30)
         self.assertEqual(h0[2][2], "speech")
 
+    @patch('ui.menu.get_setting')
+    @patch('ui.menu.update_setting')
+    @patch('engines.config.get_active_session')
+    @patch('engines.config.set_active_session')
+    @patch('engines.memory_v2.memory_manager.has_history')
+    @patch('engines.memory_v2.memory_manager.save_history')
+    def test_handle_interaction_mode_change(self, mock_save_history, mock_has_history, mock_set_active_session, mock_get_active_session, mock_update_setting, mock_get_setting):
+        """Test that changing modes switches between casual and RP sessions properly."""
+        app = MagicMock(spec=TaiMenu)
+        app.history_profile_name = "Elena"
+        app.reload_chat_list_for_session = MagicMock()
+        
+        # Test switching from default RP to casual mode
+        mock_get_active_session.return_value = "default"
+        mock_has_history.return_value = False
+        
+        TaiMenu.handle_interaction_mode_change(app, "casual")
+        
+        # Should save the last RP session
+        mock_update_setting.assert_any_call("last_rp_session_Elena", "default")
+        # Should ensure casual history file exists (saves empty list)
+        mock_save_history.assert_called_with("Elena", [], session_name="casual")
+        # Should set active session to "casual"
+        mock_set_active_session.assert_called_with("Elena", "casual")
+        # Should reload chat list
+        app.reload_chat_list_for_session.assert_called_with("casual")
+        
+        # Reset mocks
+        mock_update_setting.reset_mock()
+        mock_set_active_session.reset_mock()
+        app.reload_chat_list_for_session.reset_mock()
+        
+        # Test switching back from casual to RP mode
+        mock_get_active_session.return_value = "casual"
+        mock_get_setting.return_value = "default"
+        
+        TaiMenu.handle_interaction_mode_change(app, "rp")
+        # Should load last RP session ("default")
+        mock_set_active_session.assert_called_with("Elena", "default")
+        app.reload_chat_list_for_session.assert_called_with("default")
+
 if __name__ == "__main__":
     unittest.main()

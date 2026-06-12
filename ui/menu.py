@@ -1304,7 +1304,8 @@ class TaiMenu(App):
 
         has_history = memory_manager.has_history(self.history_profile_name) and memory_manager.get_history_length(self.history_profile_name) > 0
         if not has_history:
-            self.print_starter_message()
+            if get_setting("interaction_mode", "rp") != "casual":
+                self.print_starter_message()
         else:
             self.reload_chat_from_history()
 
@@ -1739,6 +1740,7 @@ class TaiMenu(App):
             if val is not None:
                 if update_setting("interaction_mode", val):
                     self.add_message(f"Interaction mode set to [bold]{val.upper()}[/bold]", role="system")
+                    self.handle_interaction_mode_change(val)
                 else:
                     self.add_message(f"Failed to set interaction mode to [bold]{val.upper()}[/bold]", role="system")
             else:
@@ -1754,6 +1756,39 @@ class TaiMenu(App):
                         event.select.value = Select.NULL
                     except Exception:
                         pass
+
+    def handle_interaction_mode_change(self, new_mode: str) -> None:
+        """Handles switching conversation sessions when the interaction mode changes."""
+        if not self.history_profile_name:
+            return
+
+        from engines.config import get_active_session, set_active_session
+        from engines.utilities import sanitize_profile_name
+        
+        current_session = get_active_session(self.history_profile_name)
+        safe_char = sanitize_profile_name(self.history_profile_name)
+        
+        if new_mode == "casual":
+            if current_session != "casual":
+                # Save current session as the last RP session
+                update_setting(f"last_rp_session_{safe_char}", current_session)
+                
+                # Ensure casual session exists (initially empty)
+                if not memory_manager.has_history(self.history_profile_name, "casual"):
+                    memory_manager.save_history(self.history_profile_name, [], session_name="casual")
+                
+                # Switch to casual session
+                set_active_session(self.history_profile_name, "casual")
+                self.reload_chat_list_for_session("casual")
+        else: # rp mode
+            if current_session == "casual":
+                last_rp = get_setting(f"last_rp_session_{safe_char}", "default")
+                if last_rp == "casual":
+                    last_rp = "default"
+                
+                # Switch back to last RP session
+                set_active_session(self.history_profile_name, last_rp)
+                self.reload_chat_list_for_session(last_rp)
 
     def populate_image_protocols(self) -> None:
         """Populate image protocol selection and sync current setting."""
@@ -2051,7 +2086,8 @@ class TaiMenu(App):
         # Only do this if the history doesn't exist yet, to avoid repeating starter messages on every launch
         has_history = memory_manager.has_history(self.history_profile_name) and memory_manager.get_history_length(self.history_profile_name) > 0
         if not has_history:
-            self.print_starter_message()
+            if get_setting("interaction_mode", "rp") != "casual":
+                self.print_starter_message()
 
         # Run a history recap on startup only when enabled and prior history exists.
         if get_setting("auto_recap_on_start", False) and has_history:
