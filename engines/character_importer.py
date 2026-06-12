@@ -183,6 +183,10 @@ class CharacterImporter:
             "1. persona_preservation_score: Does the profile capture the unique voice, accent, vocabulary, slang, and emotional/psychological depth of the original character? (Or did it sanitize/homogenize it?)\n"
             "2. speech_style_alignment_score: Does the profile capture all dialogue formatting, punctuation, capitalization quirks (e.g. all lowercase, stuttering, asterisks for actions) from the dialogue examples?\n"
             "3. accuracy_score: Does it accurately represent facts without inventing/hallucinating unmentioned backstory details?\n\n"
+            "CONCISENESS & SYNTHESIS GUIDELINE: Refinement is meant to clean up, summarize, and format the raw details. "
+            "Do NOT penalize the proposed profile for being shorter or more concise than the raw data, as long as it preserves the core identity, mannerisms, and key facts. "
+            "In fact, you MUST penalize profiles that copy-paste the raw data verbatim into the fields (especially the 'system_prompt' field, which should be a concise instruction prompt in the second person, not a raw dump of description/backstory). "
+            "A good refinement is synthesized, clear, and well-structured. A profile that is just a copy-paste of the raw text should receive a very low preservation/alignment score (e.g. 5.0 or lower).\n\n"
             "Respond ONLY with a valid JSON object matching the following schema. "
             "Do not include any conversational intro/outro text, explanations, or code blocks.\n\n"
             "{\n"
@@ -216,6 +220,10 @@ class CharacterImporter:
             "1. persona_preservation_score: Does the profile capture the unique voice, accent, vocabulary, slang, and emotional/psychological depth of the original character? (Or did it sanitize/homogenize it?)\n"
             "2. speech_style_alignment_score: Does the profile capture all dialogue formatting, punctuation, capitalization quirks (e.g. all lowercase, stuttering, asterisks for actions) from the dialogue examples?\n"
             "3. accuracy_score: Does it accurately represent facts without inventing/hallucinating unmentioned backstory details?\n\n"
+            "CONCISENESS & SYNTHESIS GUIDELINE:\n"
+            "- Do NOT penalize the proposed profile for being shorter or more concise than the raw data, as long as it preserves the core identity, mannerisms, and key facts.\n"
+            "- You MUST penalize profiles that copy-paste the raw data verbatim into the fields (especially the 'system_prompt' field, which should be a concise instruction prompt in the second person, not a raw dump).\n"
+            "- A good refinement is synthesized, clear, and well-structured.\n\n"
             "You MUST respond ONLY with a valid JSON object matching the following schema. "
             "Do not include any conversational intro/outro text, explanations, or code blocks.\n\n"
             "{\n"
@@ -390,7 +398,9 @@ class CharacterImporter:
             "You are an expert character profile extraction and cleaning assistant.\n"
             "Analyze the provided raw character details and extract structured profile fields.\n"
             "CRITICAL: You must preserve as much distinct persona, unique voice, slang, dialect, and speech style/habits as possible. "
-            "Do NOT sanitize, simplify, or homogenize the character's unique traits into generic descriptions. "
+            "Do NOT sanitize, simplify, or homogenize the character's unique traits into generic descriptions.\n"
+            "CRITICAL: Do NOT copy-paste the raw description or backstory text verbatim into any fields. The fields must be clean, refined, and synthesized summaries. "
+            "The 'system_prompt' field must be a structured roleplay instruction prompt in the second person ('You are...'), NOT a raw text dump.\n"
             "If the character speaks in a certain way (e.g., uses specific slang, stutters, speaks in all lowercase, has capitalization quirks, or has a specific dialect), "
             "you MUST reflect this explicitly in the extracted fields (especially 'rp_mannerisms', 'personality_type', and 'system_prompt').\n\n"
             "Respond ONLY with a valid JSON object matching the following schema. "
@@ -403,10 +413,10 @@ class CharacterImporter:
             '  "likes": ["list of strings containing likes/hobbies, or empty list"],\n'
             '  "dislikes": ["list of strings containing dislikes/aversions, or empty list"],\n'
             '  "rp_mannerisms": ["List of 3-5 specific conversational traits, formatting rules, or stylistic mannerisms extracted from raw text and dialogue examples. E.g., \'always uses lowercase\', \'frequently stutters when nervous\', \'speaks in a polite, formal tone\', \'uses asterisks for actions like *smiles*\'"],\n'
-            '  "personality_type": "Summary of personality, preserving unique voice and distinct character persona",\n'
+            '  "personality_type": "Summary of personality, preserving unique voice and distinct character persona. If \'Raw Personality\' is empty, you MUST extract this from \'Raw Description/Backstory\'.",\n'
             '  "backstory": "Narrative biography summary of history and origin, preserving any critical background details and persona",\n'
             '  "other": "Refined description of the roleplay scenario or other setting details",\n'
-            '  "system_prompt": "A highly immersive, detailed system prompt for the roleplay. Instruct the AI on how to roleplay as this character. It must detail specific speech patterns, vocabulary, punctuation/formatting quirks (e.g., asterisks for actions, stutters, specific casing). Keep it in the second person (\'You are...\')."\n'
+            '  "system_prompt": "A highly immersive, detailed roleplay instruction prompt in the second person (\'You are...\'). Detail specific speech patterns, vocabulary, punctuation/formatting quirks (e.g., asterisks for actions, stutters, specific casing). DO NOT dump the raw description text here; instead, create a clean instruction prompt instructing the AI on how to play the character."\n'
             "}"
         )
 
@@ -420,14 +430,17 @@ class CharacterImporter:
             "1. Extract only facts directly mentioned or clearly implied.\n"
             "2. If age or gender are not mentioned or cannot be inferred, use 'Unknown'.\n"
             "3. Do not invent backstory details. Keep it grounded.\n"
-            "4. Return ONLY valid JSON."
+            "4. If 'Raw Personality' is empty, you MUST scan the 'Raw Description/Backstory' field to extract the character's personality details for 'personality_type'.\n"
+            "5. Do NOT copy-paste raw description blocks verbatim. You must clean, refine, and synthesize them.\n"
+            "6. Return ONLY valid JSON."
         )
 
         correction_system_prompt = (
             "You are an expert character profile extraction and cleaning assistant.\n"
             "You previously generated a refined character profile, but a critic evaluated it and provided feedback on how it can be improved to better preserve the character's distinct persona and speech style.\n"
             "Modify the previous refined profile to incorporate the critic's feedback. "
-            "Make sure the character's unique voice, slang, punctuation/formatting quirks (like lowercase, asterisks), and details are preserved as much as possible.\n\n"
+            "Make sure the character's unique voice, slang, punctuation/formatting quirks (like lowercase, asterisks), and details are preserved as much as possible.\n"
+            "CRITICAL: Do NOT copy-paste the raw description or backstory text verbatim. Synthesize it clearly while preserving all critical character mannerisms, and format the system prompt in the second person ('You are...').\n\n"
             "Respond ONLY with a valid JSON object matching the following schema. "
             "Do not include any conversational intro/outro text, explanations, or code blocks.\n\n"
             "{\n"
@@ -438,10 +451,10 @@ class CharacterImporter:
             '  "likes": ["list of strings containing likes/hobbies, or empty list"],\n'
             '  "dislikes": ["list of strings containing dislikes/aversions, or empty list"],\n'
             '  "rp_mannerisms": ["List of 3-5 specific conversational traits, formatting rules, or stylistic mannerisms extracted from raw text and dialogue examples. E.g., \'always uses lowercase\', \'frequently stutters when nervous\', \'speaks in a polite, formal tone\', \'uses asterisks for actions like *smiles*\'"],\n'
-            '  "personality_type": "Summary of personality, preserving unique voice and distinct character persona",\n'
+            '  "personality_type": "Summary of personality, preserving unique voice and distinct character persona. If \'Raw Personality\' is empty, you MUST extract this from \'Raw Description/Backstory\'.",\n'
             '  "backstory": "Narrative biography summary of history and origin, preserving any critical background details and persona",\n'
             '  "other": "Refined description of the roleplay scenario or other setting details",\n'
-            '  "system_prompt": "A highly immersive, detailed system prompt for the roleplay. Instruct the AI on how to roleplay as this character. It must detail specific speech patterns, vocabulary, punctuation/formatting quirks (e.g., asterisks for actions, stutters, specific casing). Keep it in the second person (\'You are...\')."\n'
+            '  "system_prompt": "A highly immersive, detailed roleplay instruction prompt in the second person (\'You are...\'). Detail specific speech patterns, vocabulary, punctuation/formatting quirks (e.g., asterisks for actions, stutters, specific casing). DO NOT dump the raw description text here; instead, create a clean instruction prompt instructing the AI on how to play the character."\n'
             "}"
         )
 
