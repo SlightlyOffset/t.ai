@@ -211,7 +211,20 @@ class CharacterImporter:
             f"Raw Dialogue Examples:\n{raw_mes_example}\n\n"
             f"--- PROPOSED REFINED PROFILE ---\n"
             f"{json.dumps(proposed_profile, indent=2)}\n\n"
-            "Evaluate the proposed refined profile against the raw source data. Return ONLY valid JSON."
+            "Instructions:\n"
+            "Compare the proposed refined profile against the raw source data and rate the quality of the refined profile based on the following criteria (score 1 to 10):\n"
+            "1. persona_preservation_score: Does the profile capture the unique voice, accent, vocabulary, slang, and emotional/psychological depth of the original character? (Or did it sanitize/homogenize it?)\n"
+            "2. speech_style_alignment_score: Does the profile capture all dialogue formatting, punctuation, capitalization quirks (e.g. all lowercase, stuttering, asterisks for actions) from the dialogue examples?\n"
+            "3. accuracy_score: Does it accurately represent facts without inventing/hallucinating unmentioned backstory details?\n\n"
+            "You MUST respond ONLY with a valid JSON object matching the following schema. "
+            "Do not include any conversational intro/outro text, explanations, or code blocks.\n\n"
+            "{\n"
+            '  "persona_preservation_score": 8.5,\n'
+            '  "speech_style_alignment_score": 9.0,\n'
+            '  "accuracy_score": 9.5,\n'
+            '  "average_score": 9.0,\n'
+            '  "feedback": "Explain what is missing or what was sanitized, and provide specific instructions on how to improve the profile."\n'
+            "}"
         )
 
         messages = [
@@ -310,6 +323,9 @@ class CharacterImporter:
                     refined_data["average_score"] = (p_score + s_score + a_score) / 3.0
             else:
                 refined_data["average_score"] = (p_score + s_score + a_score) / 3.0
+
+            if p_score == 5.0 and s_score == 5.0 and a_score == 5.0:
+                print(f"{Fore.YELLOW}[WARNING] Critic pass returned default/low score (5.0). Raw response was:\n{response_content}")
 
             return refined_data
 

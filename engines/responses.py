@@ -158,17 +158,28 @@ def _ollama_chat_compat(model: str, messages: list, stream: bool = False, format
         "stream": stream
     }
 
+    if "11434" in local_url:
+        payload["options"] = {
+            "num_ctx": 8192
+        }
+
     if options:
         if "temperature" in options:
             payload["temperature"] = options["temperature"]
+            if "options" in payload:
+                payload["options"]["temperature"] = options["temperature"]
         
         rep_penalty = options.get("repeat_penalty") or options.get("repetition_penalty")
         if rep_penalty is not None:
             payload["repetition_penalty"] = rep_penalty
+            if "options" in payload:
+                payload["options"]["repeat_penalty"] = rep_penalty
             
         max_tok = options.get("num_predict") or options.get("max_tokens")
         if max_tok is not None:
             payload["max_tokens"] = max_tok
+            if "options" in payload:
+                payload["options"]["num_predict"] = max_tok
 
     if format == "json":
         payload["response_format"] = {"type": "json_object"}
@@ -177,6 +188,8 @@ def _ollama_chat_compat(model: str, messages: list, stream: bool = False, format
         val = get_setting(sampler)
         if val is not None:
             payload[sampler] = val
+            if "options" in payload:
+                payload["options"][sampler] = val
 
     if stream:
         headers = {"Accept": "text/event-stream"}
