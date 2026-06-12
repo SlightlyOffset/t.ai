@@ -252,6 +252,7 @@ class CharacterImporter:
                             pass
 
             if not refined_data:
+                print(f"{Fore.YELLOW}[WARNING] Critic model returned invalid JSON structure. Raw response:\n{response_content}")
                 return {
                     "persona_preservation_score": 5.0,
                     "speech_style_alignment_score": 5.0,
@@ -260,18 +261,55 @@ class CharacterImporter:
                     "feedback": "Failed to parse critic response JSON."
                 }
 
-            for key in ["persona_preservation_score", "speech_style_alignment_score", "accuracy_score", "average_score"]:
-                if key in refined_data:
+            # Helper to parse scores from strings/fractions/formats (like "8/10", "8.5/10", "score: 9")
+            def parse_score(val):
+                if val is None:
+                    return 5.0
+                if isinstance(val, (int, float)):
+                    return float(val)
+                s = str(val).strip()
+                if '/' in s:
+                    parts = s.split('/')
                     try:
-                        refined_data[key] = float(refined_data[key])
-                    except (ValueError, TypeError):
-                        refined_data[key] = 5.0
+                        numerator = float(parts[0].strip())
+                        denominator = float(parts[1].strip())
+                        if denominator != 0:
+                            return (numerator / denominator) * 10.0
+                    except (ValueError, TypeError, IndexError):
+                        pass
+                match = re.search(r'[-+]?\d*\.\d+|\d+', s)
+                if match:
+                    try:
+                        return float(match.group(0))
+                    except ValueError:
+                        pass
+                return 5.0
 
-            if "average_score" not in refined_data:
-                scores = [refined_data.get("persona_preservation_score", 5.0),
-                          refined_data.get("speech_style_alignment_score", 5.0),
-                          refined_data.get("accuracy_score", 5.0)]
-                refined_data["average_score"] = sum(scores) / len(scores)
+            # Helper to extract score using keyword matching (case-insensitive fallback)
+            def get_any_score(data_dict, pattern_list):
+                for key, val in data_dict.items():
+                    k_lower = key.lower()
+                    if any(pat in k_lower for pat in pattern_list):
+                        return parse_score(val)
+                return 5.0
+
+            p_score = get_any_score(refined_data, ["persona_preservation", "persona"])
+            s_score = get_any_score(refined_data, ["speech_style_alignment", "speech_style", "speech"])
+            a_score = get_any_score(refined_data, ["accuracy"])
+
+            # Overwrite/Set refined scores
+            refined_data["persona_preservation_score"] = p_score
+            refined_data["speech_style_alignment_score"] = s_score
+            refined_data["accuracy_score"] = a_score
+
+            if "average_score" in refined_data:
+                avg_val = parse_score(refined_data["average_score"])
+                if avg_val != 5.0:
+                    refined_data["average_score"] = avg_val
+                else:
+                    refined_data["average_score"] = (p_score + s_score + a_score) / 3.0
+            else:
+                refined_data["average_score"] = (p_score + s_score + a_score) / 3.0
 
             return refined_data
 

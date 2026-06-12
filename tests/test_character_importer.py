@@ -245,5 +245,33 @@ class TestCharacterImporterConvert(unittest.TestCase):
         self.assertEqual(mock_chat.call_count, 4)
 
 
+    @patch("ollama.chat")
+    @patch("engines.config.get_setting", return_value="llama3.2")
+    def test_run_critic_pass_robust_parsing(self, mock_setting, mock_chat):
+        # Mock responses using fractions ("9/10"), key name variations ("persona"), etc.
+        mock_chat.return_value = {
+            "message": {
+                "content": json.dumps({
+                    "persona": "9/10",
+                    "speech": "8.5 out of 10",
+                    "accuracy": 8,
+                    "feedback": "Robust parsing works."
+                })
+            }
+        }
+        profile = {"name": "Alice"}
+        res = CharacterImporter.run_critic_pass(
+            profile,
+            raw_personality="bubbly",
+            raw_description="adventurer",
+            raw_scenario="tavern",
+            raw_mes_example="Alice: *smiles*"
+        )
+        self.assertEqual(res["persona_preservation_score"], 9.0)
+        self.assertEqual(res["speech_style_alignment_score"], 8.5)
+        self.assertEqual(res["accuracy_score"], 8.0)
+        self.assertEqual(res["average_score"], 8.5)
+
+
 if __name__ == "__main__":
     unittest.main()
