@@ -56,5 +56,9 @@ def import_st_card(filepath: str, overwrite: bool = False) -> str:
     except Exception as e:
         return f"Error importing card: {str(e)}"
 
+def initialize(context):
+    """Initializes the MCP SillyTavern Card Importer plugin."""
+    pass
+
 if __name__ == "__main__":
     mcp.run()
