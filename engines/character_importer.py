@@ -583,7 +583,13 @@ class CharacterImporter:
         if not filename:
             # Sanitize the name to prevent path traversal
             safe_name = sanitize_profile_name(profile["name"])
-            filename = safe_name + ".json"
+            
+            # Generate a short hash based on the profile content to prevent overwriting same name characters
+            import hashlib
+            hash_input = f"{profile.get('name', '')}|{profile.get('system_prompt', '')}|{profile.get('backstory', '')}"
+            profile_hash = hashlib.md5(hash_input.encode('utf-8')).hexdigest()[:8]
+            
+            filename = f"{safe_name}_{profile_hash}.json"
 
         # Ensure we only have the basename of the filename
         filename = os.path.basename(filename)
@@ -620,10 +626,16 @@ def import_character(source_path, refine=False, model=None, interactive=False):
         data = CharacterImporter.extract_from_png(source_path)
         if data and "name" in data:
             char_name = data["name"]
+            
+            # Compute a hash of the raw card data to prevent image name collision
+            import hashlib
+            hash_input = f"{data.get('name', '')}|{data.get('personality', '')}|{data.get('description', '')}|{data.get('mes_example', '')}"
+            card_hash = hashlib.md5(hash_input.encode('utf-8')).hexdigest()[:8]
+            
             # Create a safe filename for the image
             safe_name = re.sub(r'[^\w\s-]', '', char_name).strip().replace(' ', '_')
             ext = os.path.splitext(source_path)[1]
-            dest_image = os.path.join("img", f"{safe_name}{ext}")
+            dest_image = os.path.join("img", f"{safe_name}_{card_hash}{ext}")
 
             os.makedirs("img", exist_ok=True)
             try:

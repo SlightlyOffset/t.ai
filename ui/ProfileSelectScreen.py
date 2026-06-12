@@ -1,5 +1,6 @@
 import os
 import json
+import re
 
 from textual.app import ComposeResult
 from textual.containers import Container, Vertical, ScrollableContainer
@@ -146,7 +147,10 @@ class ProfileSelect(Screen):
             profiles = [f for f in os.listdir(self.PROFILES_DIR) if f.endswith(".json")]
             profiles.sort()
             for profile in profiles:
-                display_name = profile.replace(".json", "").replace("_", " ").title()
+                base_name = profile.replace(".json", "")
+                # Trim trailing 8-character hex hash if present (e.g. _a1b2c3d4)
+                base_name = re.sub(r'_[a-f0-9]{8}$', '', base_name)
+                display_name = base_name.replace("_", " ").title()
                 option_list.add_option(Option(display_name, id=profile))
         
         # Check option count safely to avoid TypeError with MagicMocks in unit tests
