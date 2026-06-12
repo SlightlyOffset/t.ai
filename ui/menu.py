@@ -55,7 +55,10 @@ class ToolApproval(Vertical):
             self.state["result"] = json.dumps({"error": "User denied the tool call."})
         
         self.event.set()
-        self.remove()
+        if self.parent and isinstance(self.parent, Horizontal) and "message_row" in self.parent.classes:
+            self.parent.remove()
+        else:
+            self.remove()
 
 # First-party imports
 from engines.app_commands import RestartRequested, normalize_command_prefix
@@ -2489,9 +2492,19 @@ class TaiMenu(App):
                     args=args,
                     event=tool_event,
                     state=tool_state,
-                    classes="message_row ai_row message ai_bubble"
+                    classes="message ai_bubble"
                 )
-                container.mount(approval_widget, before=ai_msg)
+                row = Horizontal(approval_widget, classes="message_row ai_row")
+                target = None
+                if ai_msg.parent and ai_msg.parent in container.children:
+                    target = ai_msg.parent
+                elif ai_msg in container.children:
+                    target = ai_msg
+                
+                if target:
+                    container.mount(row, before=target)
+                else:
+                    container.mount(row)
                 container.scroll_end(animate=False)
                 
             self.app.call_from_thread(render_approval_ui)
