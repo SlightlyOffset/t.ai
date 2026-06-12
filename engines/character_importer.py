@@ -364,6 +364,8 @@ class CharacterImporter:
                                 pass
 
             if not refined_data:
+                if get_setting("debug_mode", False):
+                    print(f"{Fore.MAGENTA}[DEBUG] Raw model response: {result}{Fore.RESET}")
                 print(f"{Fore.YELLOW}[WARNING] Failed to parse AI refinement (both tool calling and JSON parsing failed). Falling back to rule-based values.")
                 return profile
 
