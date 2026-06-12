@@ -7,7 +7,9 @@ project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if project_root not in sys.path:
     sys.path.insert(0, project_root)
 
-from card_importer import import_sillytavern_card
+from engines.character_importer import import_character, CharacterImporter
+from engines.utilities import sanitize_profile_name
+import json
 
 mcp = FastMCP("st_importer", description="SillyTavern Card Importer")
 
@@ -24,11 +26,33 @@ def import_st_card(filepath: str, overwrite: bool = False) -> str:
         return f"Error: File not found at {filepath}"
         
     try:
-        success = import_sillytavern_card(filepath, overwrite=overwrite)
-        if success:
-            return f"Successfully imported character card from {filepath}"
+        # Extract name to see if profile already exists
+        data = None
+        if filepath.lower().endswith((".png", ".webp")):
+            data = CharacterImporter.extract_from_png(filepath)
+        elif filepath.lower().endswith(".json"):
+            try:
+                with open(filepath, "r", encoding="utf-8") as f:
+                    raw_json = json.load(f)
+                    data = raw_json.get("data") if "data" in raw_json else raw_json
+            except Exception as e:
+                return f"Error reading JSON: {str(e)}"
+                
+        if not data or "name" not in data:
+            return f"Error: Could not extract character data or name from {filepath}"
+            
+        char_name = data["name"]
+        safe_name = sanitize_profile_name(char_name)
+        target_path = os.path.abspath(os.path.join("profiles", f"{safe_name}.json"))
+        
+        if os.path.exists(target_path) and not overwrite:
+            return f"Failed to import character card from {filepath}. It already exists (try overwrite=True)."
+            
+        success_path = import_character(filepath, refine=False)
+        if success_path:
+            return f"Successfully imported character card from {filepath} to {success_path}"
         else:
-            return f"Failed to import character card from {filepath}. It may already exist (try overwrite=True)."
+            return f"Failed to import character card from {filepath}."
     except Exception as e:
         return f"Error importing card: {str(e)}"
 
