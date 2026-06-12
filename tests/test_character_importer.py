@@ -31,7 +31,66 @@ class TestCharacterImporterRefine(unittest.TestCase):
 
     @patch("ollama.chat")
     @patch("engines.config.get_setting", return_value="llama3.2")
-    def test_refine_character_profile_success(self, mock_setting, mock_chat):
+    def test_refine_character_profile_tool_success(self, mock_setting, mock_chat):
+        # Set up a mock successful tool call response from ollama
+        refined_json = {
+            "alt_names": "Lily, Lilith",
+            "gender": "Female",
+            "age": "19",
+            "appearance": "Silver hair, blue eyes",
+            "likes": ["Coding", "Coffee"],
+            "dislikes": ["Bugs"],
+            "rp_mannerisms": ["speaks with code snippets"],
+            "personality_type": "Curious and analytical",
+            "backstory": "An AI assistant created to help write code.",
+            "other": "Optimized programming scenario",
+            "system_prompt": "You are Lily, a smart AI coder."
+        }
+        mock_chat.return_value = {
+            "message": {
+                "content": "",
+                "tool_calls": [
+                    {
+                        "function": {
+                            "name": "save_refined_profile",
+                            "arguments": refined_json
+                        }
+                    }
+                ]
+            }
+        }
+
+        refined = CharacterImporter.refine_character_profile(
+            self.base_profile.copy(),
+            raw_st_data=self.raw_st_data,
+            model="llama3.2"
+        )
+
+        # Verify values were updated
+        self.assertEqual(refined["alt_names"], "Lily, Lilith")
+        self.assertEqual(refined["personality_type"], "Curious and analytical")
+        self.assertEqual(refined["backstory"], "An AI assistant created to help write code.")
+        self.assertEqual(refined["system_prompt"], "You are Lily, a smart AI coder.")
+        self.assertEqual(refined["rp_mannerisms"], ["speaks with code snippets"])
+        
+        info = refined["character_info"]
+        self.assertEqual(info["gender"], "Female")
+        self.assertEqual(info["age"], "19")
+        self.assertEqual(info["appearance"], "Silver hair, blue eyes")
+        self.assertEqual(info["likes"], ["Coding", "Coffee"])
+        self.assertEqual(info["dislikes"], ["Bugs"])
+        self.assertEqual(info["other"], "Optimized programming scenario")
+
+        # Check call arguments
+        mock_chat.assert_called_once()
+        args, kwargs = mock_chat.call_args
+        self.assertEqual(kwargs["model"], "llama3.2")
+        self.assertIn("tools", kwargs)
+        self.assertEqual(kwargs["tools"][0]["function"]["name"], "save_refined_profile")
+
+    @patch("ollama.chat")
+    @patch("engines.config.get_setting", return_value="llama3.2")
+    def test_refine_character_profile_fallback_success(self, mock_setting, mock_chat):
         # Set up a mock successful JSON response from ollama
         refined_json = {
             "alt_names": "Lily, Lilith",
@@ -77,7 +136,6 @@ class TestCharacterImporterRefine(unittest.TestCase):
         mock_chat.assert_called_once()
         args, kwargs = mock_chat.call_args
         self.assertEqual(kwargs["model"], "llama3.2")
-        self.assertEqual(kwargs["format"], "json")
 
     @patch("ollama.chat")
     @patch("engines.config.get_setting", return_value="llama3.2")

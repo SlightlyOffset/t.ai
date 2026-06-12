@@ -149,7 +149,7 @@ def _ollama_chat_compat(model: str, messages: list, stream: bool = False, format
     """
     from unittest.mock import Mock
     if hasattr(ollama, "chat") and isinstance(ollama.chat, Mock):
-        return ollama.chat(model=model, messages=messages, stream=stream, format=format, options=options, think=think)
+        return ollama.chat(model=model, messages=messages, stream=stream, format=format, options=options, think=think, tools=tools)
 
     local_url = get_setting("local_llm_url", "http://localhost:11434/v1")
     full_url = f"{local_url.rstrip('/')}/chat/completions"

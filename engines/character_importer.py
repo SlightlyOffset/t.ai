@@ -235,53 +235,136 @@ class CharacterImporter:
             {"role": "user", "content": user_content}
         ]
 
+        # Define the structured tool calling schema
+        tools = [
+            {
+                "type": "function",
+                "function": {
+                    "name": "save_refined_profile",
+                    "description": "Submits the fully structured, cleaned, and refined character profile details.",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "alt_names": {
+                                "type": "string",
+                                "description": "Comma-separated string of nicknames, aliases or alternative names, or empty string"
+                            },
+                            "gender": {
+                                "type": "string",
+                                "description": "Character gender (e.g. Male, Female, Non-binary, Unknown)"
+                            },
+                            "age": {
+                                "type": "string",
+                                "description": "Character age (e.g. 24, Unknown)"
+                            },
+                            "appearance": {
+                                "type": "string",
+                                "description": "Short description of appearance, height, hair, clothing, eyes"
+                            },
+                            "likes": {
+                                "type": "array",
+                                "items": {"type": "string"},
+                                "description": "List of strings containing likes/hobbies, or empty list"
+                            },
+                            "dislikes": {
+                                "type": "array",
+                                "items": {"type": "string"},
+                                "description": "List of strings containing dislikes/aversions, or empty list"
+                            },
+                            "rp_mannerisms": {
+                                "type": "array",
+                                "items": {"type": "string"},
+                                "description": "List of 3-5 specific conversational traits, e.g. 'frequently stutters when nervous', 'speaks in a polite, formal tone'"
+                            },
+                            "personality_type": {
+                                "type": "string",
+                                "description": "Concise 1-3 sentence summary of personality"
+                            },
+                            "backstory": {
+                                "type": "string",
+                                "description": "Clean, narrative biography summary of history and origin"
+                            },
+                            "other": {
+                                "type": "string",
+                                "description": "Refined description of the roleplay scenario or other setting details"
+                            },
+                            "system_prompt": {
+                                "type": "string",
+                                "description": "A highly immersive, detailed system prompt for the roleplay. It should write instructions on how the AI should roleplay as this character. Keep it in the second person ('You are...')."
+                            }
+                        },
+                        "required": [
+                            "alt_names", "gender", "age", "appearance", "likes", "dislikes", 
+                            "rp_mannerisms", "personality_type", "backstory", "other", "system_prompt"
+                        ]
+                    }
+                }
+            }
+        ]
+
         try:
-            # Enforce JSON formatting
+            # Call compat function with tools
             result = _ollama_chat_compat(
                 model=refine_model,
                 messages=messages,
                 stream=False,
-                format="json",
                 think=False,
-                options={"temperature": 0.1}
+                options={"temperature": 0.1},
+                tools=tools
             )
 
-            response_content = result.get("message", {}).get("content", "").strip()
-
-            # Refusal detection: check for common safety guidelines / refusal templates
-            refusal_triggers = [
-                "i cannot fulfill", "against safety guidelines", "i am unable to",
-                "cannot generate content", "against policy", "cannot assist with this"
-            ]
-            if any(trigger in response_content.lower() for trigger in refusal_triggers):
-                print(f"{Fore.YELLOW}[WARNING] Local model refused to process character card due to safety constraints. Falling back to rule-based import.")
-                return profile
-
-            # Parse JSON
             refined_data = None
-            try:
-                refined_data = json.loads(response_content)
-            except json.JSONDecodeError:
-                # Attempt regex-based cleanup of markdown code block
-                match = re.search(r'```(?:json)?\s*(\{.*?\})\s*```', response_content, re.DOTALL | re.IGNORECASE)
-                if match:
-                    try:
-                        refined_data = json.loads(match.group(1))
-                    except json.JSONDecodeError:
-                        pass
-                
-                # Fallback to finding first/last brackets
-                if not refined_data:
-                    start = response_content.find('{')
-                    end = response_content.rfind('}')
-                    if start != -1 and end != -1 and end > start:
+            tool_calls = result.get("message", {}).get("tool_calls")
+            
+            if tool_calls and len(tool_calls) > 0:
+                tool_call = tool_calls[0]
+                function_data = tool_call.get("function", {})
+                func_args_str = function_data.get("arguments", "{}")
+                try:
+                    if isinstance(func_args_str, dict):
+                        refined_data = func_args_str
+                    else:
+                        refined_data = json.loads(func_args_str)
+                except Exception as e:
+                    print(f"{Fore.YELLOW}[WARNING] Failed to parse tool call arguments: {e}")
+
+            # Fallback to text output parsing if tool calling did not produce structured arguments
+            if not refined_data:
+                response_content = result.get("message", {}).get("content", "").strip()
+
+                # Refusal detection: check for common safety guidelines / refusal templates
+                refusal_triggers = [
+                    "i cannot fulfill", "against safety guidelines", "i am unable to",
+                    "cannot generate content", "against policy", "cannot assist with this"
+                ]
+                if any(trigger in response_content.lower() for trigger in refusal_triggers):
+                    print(f"{Fore.YELLOW}[WARNING] Local model refused to process character card due to safety constraints. Falling back to rule-based import.")
+                    return profile
+
+                # Parse JSON
+                try:
+                    refined_data = json.loads(response_content)
+                except json.JSONDecodeError:
+                    # Attempt regex-based cleanup of markdown code block
+                    match = re.search(r'```(?:json)?\s*(\{.*?\})\s*```', response_content, re.DOTALL | re.IGNORECASE)
+                    if match:
                         try:
-                            refined_data = json.loads(response_content[start:end+1])
+                            refined_data = json.loads(match.group(1))
                         except json.JSONDecodeError:
                             pass
+                    
+                    # Fallback to finding first/last brackets
+                    if not refined_data:
+                        start = response_content.find('{')
+                        end = response_content.rfind('}')
+                        if start != -1 and end != -1 and end > start:
+                            try:
+                                refined_data = json.loads(response_content[start:end+1])
+                            except json.JSONDecodeError:
+                                pass
 
             if not refined_data:
-                print(f"{Fore.YELLOW}[WARNING] Failed to parse AI refinement JSON response. Falling back to rule-based values.")
+                print(f"{Fore.YELLOW}[WARNING] Failed to parse AI refinement (both tool calling and JSON parsing failed). Falling back to rule-based values.")
                 return profile
 
             # Merge refined fields into the profile
