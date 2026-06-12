@@ -54,6 +54,7 @@ class TestSettingsScreen(unittest.TestCase):
             "#narration_tts_voice": MagicMock(value="en-US-AndrewNeural"),
             "#show_tts_engine": MagicMock(value=True),
             "#privacy_mode": MagicMock(value=False),
+            "#mcp_enabled": MagicMock(value=False),
             "#debug_mode": MagicMock(value=False),
             "#execute_command": MagicMock(value=False),
             "#overhaul_pipeline_enabled": MagicMock(value=True),

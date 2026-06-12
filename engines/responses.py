@@ -13,6 +13,7 @@ import ollama
 import requests
 from concurrent.futures import ThreadPoolExecutor
 from engines.memory_v2 import memory_manager
+from engines.mcp_client import mcp_manager
 from engines.config import get_setting
 from engines.narrative_pipeline import (
     append_turn_telemetry,
@@ -135,12 +136,13 @@ def parse_sse_stream(response: requests.Response):
                 if isinstance(choices, list) and choices:
                     delta = choices[0].get("delta", {})
                     content = delta.get("content", "")
-                    if content:
-                        yield content
+                    tool_calls = delta.get("tool_calls", None)
+                    if content or tool_calls:
+                        yield {"content": content, "tool_calls": tool_calls}
             except Exception:
                 pass
 
-def _ollama_chat_compat(model: str, messages: list, stream: bool = False, format: str = None, options: dict = None, think: bool = False, timeout: float = 180.0):
+def _ollama_chat_compat(model: str, messages: list, stream: bool = False, format: str = None, options: dict = None, think: bool = False, timeout: float = 180.0, tools: list = None):
     """
     OpenAI-compatible / Kobold-compatible backend driver that matches the signature of ollama.chat.
     If running in a mocked test environment (ollama.chat is patched), routes calls directly to the mock.
@@ -154,9 +156,13 @@ def _ollama_chat_compat(model: str, messages: list, stream: bool = False, format
     
     payload = {
         "model": model,
-        "messages": [{"role": m["role"], "content": m["content"]} for m in messages],
+        "messages": [{"role": m["role"], "content": m["content"], **({"tool_calls": m["tool_calls"]} if "tool_calls" in m else {}), **({"tool_call_id": m["tool_call_id"]} if "tool_call_id" in m else {})} for m in messages],
         "stream": stream
     }
+
+    if tools:
+        payload["tools"] = tools
+
 
     if options:
         if "temperature" in options:
@@ -184,11 +190,12 @@ def _ollama_chat_compat(model: str, messages: list, stream: bool = False, format
         response.raise_for_status()
         
         def sse_chunk_generator():
-            for content in parse_sse_stream(response):
+            for chunk_data in parse_sse_stream(response):
                 yield {
                     "message": {
                         "role": "assistant",
-                        "content": content
+                        "content": chunk_data.get("content", ""),
+                        "tool_calls": chunk_data.get("tool_calls")
                     }
                 }
         return sse_chunk_generator()
@@ -198,15 +205,22 @@ def _ollama_chat_compat(model: str, messages: list, stream: bool = False, format
         res_data = response.json()
         
         content = ""
+        tool_calls = None
         choices = res_data.get("choices")
         if isinstance(choices, list) and choices:
-            content = choices[0].get("message", {}).get("content", "")
+            msg = choices[0].get("message", {})
+            content = msg.get("content", "")
+            tool_calls = msg.get("tool_calls")
+            
+        res_message = {
+            "role": "assistant",
+            "content": content
+        }
+        if tool_calls:
+            res_message["tool_calls"] = tool_calls
             
         return {
-            "message": {
-                "role": "assistant",
-                "content": content
-            }
+            "message": res_message
         }
 
 def update_profile_score(profile_path: str, score_change: int):
@@ -790,7 +804,7 @@ def _perform_post_processing(
             print(f"Background post-processing failed: {e}")
             traceback.print_exc()
 
-def get_respond_stream(user_input: str, profile: dict, profile_path: str = None, system_extra_info: str = None, history_profile_name: str = None, is_regeneration: bool = False, user_name: str = "User", post_process_callback=None):
+def get_respond_stream(user_input: str, profile: dict, profile_path: str = None, system_extra_info: str = None, history_profile_name: str = None, is_regeneration: bool = False, user_name: str = "User", post_process_callback=None, tool_call_handler=None):
     """
     Generates a streaming response from the LLM (Local Ollama or Remote API).
     Parses sentiment tags [REL: +X] to update relationship status in real-time.
@@ -1176,51 +1190,139 @@ def get_respond_stream(user_input: str, profile: dict, profile_path: str = None,
                 stream = response.iter_content(chunk_size=None, decode_unicode=True)
             # Handle Local Ollama Request
             else:
-                ollama_stream = _ollama_chat_compat(
-                    model=model,
-                    messages=messages,
-                    stream=True,
-                    think=False,
-                    options={"temperature": generation_temperature, "repeat_penalty": generation_repetition_penalty, "num_predict": max_tokens},
-                )
+                mcp_enabled = get_setting("mcp_enabled", False)
+                available_tools = mcp_manager.get_available_tools() if mcp_enabled else None
+                
+                max_tool_rounds = 5
+                current_round = 0
+                
+                while current_round < max_tool_rounds:
+                    current_round += 1
+                    
+                    ollama_stream = _ollama_chat_compat(
+                        model=model,
+                        messages=messages,
+                        stream=True,
+                        think=False,
+                        options={"temperature": generation_temperature, "repeat_penalty": generation_repetition_penalty, "num_predict": max_tokens},
+                        tools=available_tools
+                    )
 
-                def ollama_gen():
-                    for chunk in ollama_stream:
-                        if not chunk:
-                            continue
-                        # Handle dictionary format
-                        if isinstance(chunk, dict):
-                            message = chunk.get("message", {})
-                            if isinstance(message, dict):
-                                content = message.get("content", "")
-                                if content:
-                                    yield content
-                        # Handle newer Ollama Pydantic object format
-                        elif hasattr(chunk, "message"):
-                            message = chunk.message
-                            if hasattr(message, "content"):
-                                content = getattr(message, "content", "")
-                                if content:
-                                    yield content
-                            elif isinstance(message, dict):
-                                content = message.get("content", "")
-                                if content:
-                                    yield content
-                        # Handle list format fallback
-                        elif isinstance(chunk, list):
-                            for nested in chunk:
-                                if isinstance(nested, dict):
-                                    message = nested.get("message", {})
-                                    if isinstance(message, dict):
-                                        content = message.get("content", "")
-                                        if content:
-                                            yield content
-                stream = ollama_gen()
+                    tool_calls_buffer = []
+                    
+                    def ollama_gen():
+                        for chunk in ollama_stream:
+                            if not chunk:
+                                continue
+                            
+                            content = ""
+                            tool_calls = None
+                            
+                            # Handle dictionary format
+                            if isinstance(chunk, dict):
+                                message = chunk.get("message", {})
+                                if isinstance(message, dict):
+                                    content = message.get("content", "")
+                                    tool_calls = message.get("tool_calls")
+                                    
+                            # Handle newer Ollama Pydantic object format
+                            elif hasattr(chunk, "message"):
+                                message = chunk.message
+                                if hasattr(message, "content"):
+                                    content = getattr(message, "content", "")
+                                    tool_calls = getattr(message, "tool_calls", None)
+                                elif isinstance(message, dict):
+                                    content = message.get("content", "")
+                                    tool_calls = message.get("tool_calls")
+                                    
+                            # Handle list format fallback
+                            elif isinstance(chunk, list):
+                                for nested in chunk:
+                                    if isinstance(nested, dict):
+                                        message = nested.get("message", {})
+                                        if isinstance(message, dict):
+                                            content = message.get("content", "")
+                                            tool_calls = message.get("tool_calls")
+                                            if tool_calls:
+                                                tool_calls_buffer.extend(tool_calls)
+                                            if content:
+                                                yield content
+                                continue # Skip the rest since list format already yielded
+                            
+                            if tool_calls:
+                                tool_calls_buffer.extend(tool_calls)
+                                
+                            if content:
+                                yield content
 
-            # Iterate through the generator stream — yield content directly, no tag filtering needed
-            for content in stream:
-                full_reply += content
-                yield content
+                    stream = ollama_gen()
+
+                    for content in stream:
+                        full_reply += content
+                        yield content
+                        
+                    if not tool_calls_buffer:
+                        break # Finished normally
+                        
+                    # Process tool calls
+                    if full_reply.strip():
+                        messages.append({"role": "assistant", "content": full_reply})
+                    else:
+                        # Append the tool call message
+                        messages.append({
+                            "role": "assistant", 
+                            "content": "",
+                            "tool_calls": tool_calls_buffer
+                        })
+                        
+                    for tc in tool_calls_buffer:
+                        tc_id = tc.get("id")
+                        function_data = tc.get("function", {})
+                        func_name = function_data.get("name", "")
+                        func_args_str = function_data.get("arguments", "{}")
+                        
+                        try:
+                            func_args = json.loads(func_args_str)
+                        except:
+                            func_args = {}
+                            
+                        result_content = ""
+                        if mcp_enabled and "__" in func_name:
+                            server_name = func_name.split("__")[0]
+                            config = mcp_manager.configs.get(server_name)
+                            auto_approve = config.auto_approve if config else False
+                            
+                            approved = False
+                            if tool_call_handler:
+                                approved, result_content = tool_call_handler(server_name, func_name, func_args, auto_approve)
+                            else:
+                                approved = auto_approve
+                                if not approved:
+                                    result_content = json.dumps({"error": "Tool call denied (no handler and auto_approve is false)."})
+                                    
+                            if approved:
+                                result_content = mcp_manager.call_tool(func_name, func_args)
+                        else:
+                            result_content = json.dumps({"error": "Unknown tool or MCP disabled."})
+                            
+                        messages.append({
+                            "role": "tool",
+                            "tool_call_id": tc_id,
+                            "content": result_content
+                        })
+                        
+                        yield {
+                            "type": "tool_result",
+                            "server": server_name,
+                            "tool": func_name,
+                            "args": func_args,
+                            "result": result_content,
+                            "approved": approved
+                        }
+                        
+                    # Re-run LLM loop after executing tools
+                    full_reply += "\n" # Add newline between tool call text and new output
+
 
         log_debug("LLM_STREAM_SUCCESS", {"len": len(full_reply)})
 

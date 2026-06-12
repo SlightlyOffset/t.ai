@@ -1,0 +1,10 @@
+{
+    "name": "st_importer",
+    "description": "SillyTavern Card Importer",
+    "command": "python",
+    "args": ["plugins/mcp_st_importer.py"],
+    "env": {},
+    "enabled": true,
+    "auto_approve": false,
+    "timeout": 30
+}

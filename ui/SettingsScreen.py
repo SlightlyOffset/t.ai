@@ -136,6 +136,7 @@ class SettingsScreen(ModalScreen):
         remote_tts_url = settings.get("remote_tts_url") or ""
         local_llm_url = settings.get("local_llm_url") or ""
         privacy_mode = settings.get("privacy_mode", False)
+        mcp_enabled = settings.get("mcp_enabled", False)
 
         debug_mode = settings.get("debug_mode", False)
         execute_command = settings.get("execute_command", False)
@@ -283,6 +284,9 @@ class SettingsScreen(ModalScreen):
                         with Horizontal(classes="settings_row"):
                             yield Label("Debug Mode:", classes="settings_label")
                             yield Switch(value=debug_mode, id="debug_mode", classes="settings_widget")
+                        with Horizontal(classes="settings_row"):
+                            yield Label("Enable MCP (Tool Calling):", classes="settings_label")
+                            yield Switch(value=mcp_enabled, id="mcp_enabled", classes="settings_widget")
                         with Horizontal(classes="settings_row"):
                             yield Label("Allow Command Execution:", classes="settings_label")
                             yield Switch(value=execute_command, id="execute_command", classes="settings_widget")
@@ -470,6 +474,7 @@ class SettingsScreen(ModalScreen):
             "remote_tts_url": remote_tts or None,
             "local_llm_url": local_llm or None,
             "privacy_mode": self.query_one("#privacy_mode", Switch).value,
+            "mcp_enabled": self.query_one("#mcp_enabled", Switch).value,
 
             "debug_mode": self.query_one("#debug_mode", Switch).value,
             "execute_command": self.query_one("#execute_command", Switch).value,

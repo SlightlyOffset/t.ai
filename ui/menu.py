@@ -23,6 +23,39 @@ from textual.containers import Vertical, Horizontal, ScrollableContainer
 from textual import work, events
 from textual.reactive import reactive
 from textual.message import Message
+from textual.widgets import Checkbox
+
+class ToolApproval(Vertical):
+    """Widget to request user approval for an MCP tool call."""
+    def __init__(self, server_name: str, tool_name: str, args: dict, event: threading.Event, state: dict, **kwargs):
+        super().__init__(**kwargs)
+        self.server_name = server_name
+        self.tool_name = tool_name
+        self.args = args
+        self.event = event
+        self.state = state
+
+    def compose(self):
+        yield Label(f"🛠️ [bold]Tool Request:[/bold] {self.server_name} / {self.tool_name}")
+        yield Label(f"[dim]Args: {json.dumps(self.args, indent=2)}[/dim]")
+        with Horizontal():
+            yield Button("✅ Approve", id="approve", variant="success")
+            yield Button("❌ Deny", id="deny", variant="error")
+        yield Checkbox("Always auto-approve this server", id="always_approve")
+
+    def on_button_pressed(self, event):
+        if event.button.id == "approve":
+            self.state["approved"] = True
+            always = self.query_one("#always_approve", Checkbox).value
+            if always:
+                from engines.mcp_client import mcp_manager
+                mcp_manager.update_auto_approve(self.server_name, True)
+        else:
+            self.state["approved"] = False
+            self.state["result"] = json.dumps({"error": "User denied the tool call."})
+        
+        self.event.set()
+        self.remove()
 
 # First-party imports
 from engines.app_commands import RestartRequested, normalize_command_prefix
@@ -2428,6 +2461,29 @@ class TaiMenu(App):
             self.character_profile["relationship_score"] = new_score
             self.app.call_from_thread(self.update_sidebar)
 
+        def ui_tool_handler(server_name, tool_name, args, auto_approve):
+            if auto_approve:
+                return True, ""
+                
+            tool_event = threading.Event()
+            tool_state = {"approved": False, "result": ""}
+            
+            def render_approval_ui():
+                approval_widget = ToolApproval(
+                    server_name=server_name,
+                    tool_name=tool_name,
+                    args=args,
+                    event=tool_event,
+                    state=tool_state,
+                    classes="message_row ai_row message ai_bubble"
+                )
+                container.mount(approval_widget, before=ai_msg)
+                container.scroll_end(animate=False)
+                
+            self.app.call_from_thread(render_approval_ui)
+            tool_event.wait()
+            return tool_state["approved"], tool_state["result"]
+
         for event in iterate_response_events(
             message=message,
             character_profile=self.character_profile,
@@ -2435,6 +2491,7 @@ class TaiMenu(App):
             is_regeneration=is_regeneration,
             user_name=user_name,
             post_process_callback=on_post_processed,
+            tool_call_handler=ui_tool_handler,
         ):
 
             if event["type"] == "chunk":
@@ -2443,6 +2500,20 @@ class TaiMenu(App):
                 self.app.call_from_thread(container.scroll_end, animate=False)
             elif event["type"] == "tts":
                 self.tts_text_queue.put(event["payload"])
+            elif event["type"] == "tool_result":
+                # Show compact UI of the result
+                status = "✅ Success" if event["approved"] else "❌ Denied"
+                server = event["server"]
+                tool = event["tool"]
+                result_len = len(str(event["result"]))
+                compact_msg = f"[dim]🛠️ {status}: {server}/{tool} (Result: {result_len} chars)[/dim]"
+                
+                def mount_compact_tool_result():
+                    res_label = Label(compact_msg, classes="message_row ai_row message ai_bubble")
+                    container.mount(res_label, before=ai_msg)
+                    container.scroll_end(animate=False)
+                self.app.call_from_thread(mount_compact_tool_result)
+                
             elif event["type"] == "complete":
                 full_response = event["full_response"]
 
