@@ -24,7 +24,7 @@ def main():
         refine_choice = input(f"Would you like to run AI refinement using local model '{model}'? (y/n) [n]: ").strip().lower()
         refine = refine_choice in ["y", "yes"]
 
-        import_character(path, refine=refine)
+        import_character(path, refine=refine, interactive=True)
 
     def _batch_import(args):
         """Imports all character cards from a directory."""
@@ -53,7 +53,7 @@ def main():
         for f in files:
             full_path = os.path.join(dir_path, f)
             print(Fore.WHITE + f" -> Importing {f}...")
-            if import_character(full_path, refine=refine):
+            if import_character(full_path, refine=refine, interactive=True):
                 success_count += 1
         
         print(Fore.GREEN + f"\n[SUCCESS] Batch import complete. {success_count}/{len(files)} characters imported.")
@@ -89,7 +89,7 @@ def main():
         model = get_setting("local_utility_model", "llama3.2")
         print(Fore.CYAN + f"[SYSTEM] Running AI profile refinement on '{profile.get('name', 'Unknown')}' using model '{model}'...")
 
-        refined_profile = CharacterImporter.refine_character_profile(profile, model=model)
+        refined_profile = CharacterImporter.refine_character_profile(profile, model=model, interactive=True)
 
         # Save refined profile
         try:

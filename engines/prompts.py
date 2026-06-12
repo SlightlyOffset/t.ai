@@ -88,6 +88,9 @@ Likes: {', '.join(info.get('likes', []))}
 Dislikes: {', '.join(info.get('dislikes', []))}
 Mannerisms: {mannerisms}
 """
+    mes_example = profile.get("mes_example", "")
+    if mes_example:
+        char_details += f"\n[DIALOGUE EXAMPLES]\n{mes_example}\n"
 
     # 2. User Profile Details (Who the AI thinks it's talking to)
     user_profile = load_user_profile()

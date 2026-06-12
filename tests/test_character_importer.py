@@ -46,11 +46,17 @@ class TestCharacterImporterRefine(unittest.TestCase):
             "other": "Optimized programming scenario",
             "system_prompt": "You are Lily, a smart AI coder."
         }
-        mock_chat.return_value = {
-            "message": {
-                "content": json.dumps(refined_json)
-            }
+        critic_json = {
+            "persona_preservation_score": 9.0,
+            "speech_style_alignment_score": 9.0,
+            "accuracy_score": 9.0,
+            "average_score": 9.0,
+            "feedback": "Perfect profile."
         }
+        mock_chat.side_effect = [
+            {"message": {"content": json.dumps(refined_json)}},
+            {"message": {"content": json.dumps(critic_json)}}
+        ]
 
         refined = CharacterImporter.refine_character_profile(
             self.base_profile.copy(),
@@ -73,9 +79,9 @@ class TestCharacterImporterRefine(unittest.TestCase):
         self.assertEqual(info["dislikes"], ["Bugs"])
         self.assertEqual(info["other"], "Optimized programming scenario")
 
-        # Check call arguments
-        mock_chat.assert_called_once()
-        args, kwargs = mock_chat.call_args
+        # Check call arguments - should be called twice (generation and critique)
+        self.assertEqual(mock_chat.call_count, 2)
+        args, kwargs = mock_chat.call_args_list[0]
         self.assertEqual(kwargs["model"], "llama3.2")
         self.assertEqual(kwargs["format"], "json")
 
@@ -152,6 +158,91 @@ class TestCharacterImporterConvert(unittest.TestCase):
         self.assertEqual(profile["character_info"]["dislikes"], ["bugs", "meetings"])
         self.assertEqual(profile["llm_model"], "")
         self.assertEqual(profile["voice_clone_ref"], "")
+
+    def test_convert_to_project_format_raw_fields_and_examples(self):
+        st_data = {
+            "name": "Alice",
+            "personality": "Very bubbly and happy",
+            "description": "An adventurer from a distant land.",
+            "scenario": "Meeting at a tavern",
+            "mes_example": "Alice: *smiles warmly* Hello there!"
+        }
+        profile = CharacterImporter.convert_to_project_format(st_data)
+        self.assertEqual(profile["raw_personality"], "Very bubbly and happy")
+        self.assertEqual(profile["raw_description"], "An adventurer from a distant land.")
+        self.assertEqual(profile["mes_example"], "Alice: *smiles warmly* Hello there!")
+
+    @patch("ollama.chat")
+    @patch("engines.config.get_setting", return_value="llama3.2")
+    def test_run_critic_pass(self, mock_setting, mock_chat):
+        mock_chat.return_value = {
+            "message": {
+                "content": json.dumps({
+                    "persona_preservation_score": 9.5,
+                    "speech_style_alignment_score": 9.0,
+                    "accuracy_score": 8.5,
+                    "average_score": 9.0,
+                    "feedback": "Outstanding preservation of speech quirks."
+                })
+            }
+        }
+        profile = {"name": "Alice"}
+        res = CharacterImporter.run_critic_pass(
+            profile,
+            raw_personality="bubbly",
+            raw_description="adventurer",
+            raw_scenario="tavern",
+            raw_mes_example="Alice: *smiles*"
+        )
+        self.assertEqual(res["average_score"], 9.0)
+        self.assertEqual(res["feedback"], "Outstanding preservation of speech quirks.")
+
+    @patch("ollama.chat")
+    @patch("engines.config.get_setting", return_value="llama3.2")
+    def test_refine_character_profile_retry_loop(self, mock_setting, mock_chat):
+        # First attempt (refinement): returns a profile
+        # Second attempt (critic): returns a low score (e.g. 5.0)
+        # Third attempt (correction): returns a corrected profile
+        # Fourth attempt (critic): returns a high score (9.0)
+        refined_json_1 = {"personality_type": "Somewhat bubbly"}
+        critic_json_1 = {
+            "persona_preservation_score": 5.0,
+            "speech_style_alignment_score": 5.0,
+            "accuracy_score": 5.0,
+            "average_score": 5.0,
+            "feedback": "Needs to be much more bubbly!"
+        }
+        refined_json_2 = {"personality_type": "Extremely bubbly and energetic!"}
+        critic_json_2 = {
+            "persona_preservation_score": 9.0,
+            "speech_style_alignment_score": 9.0,
+            "accuracy_score": 9.0,
+            "average_score": 9.0,
+            "feedback": "Perfect now."
+        }
+
+        mock_chat.side_effect = [
+            {"message": {"content": json.dumps(refined_json_1)}},
+            {"message": {"content": json.dumps(critic_json_1)}},
+            {"message": {"content": json.dumps(refined_json_2)}},
+            {"message": {"content": json.dumps(critic_json_2)}}
+        ]
+
+        base_profile = {
+            "name": "Alice",
+            "personality_type": "bubbly",
+            "backstory": "adventurer",
+            "character_info": {"other": "tavern"},
+            "mes_example": "Alice: *giggles*"
+        }
+
+        refined = CharacterImporter.refine_character_profile(
+            base_profile,
+            interactive=False
+        )
+
+        self.assertEqual(refined["personality_type"], "Extremely bubbly and energetic!")
+        self.assertEqual(mock_chat.call_count, 4)
 
 
 if __name__ == "__main__":

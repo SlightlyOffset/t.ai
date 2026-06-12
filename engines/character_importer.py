@@ -119,6 +119,9 @@ class CharacterImporter:
             "alt_names": st_data.get("alt_names") or "",
             "personality_type": replace_placeholders(g("personality")),
             "backstory": replace_placeholders(g("description")),
+            "raw_personality": replace_placeholders(g("personality")),
+            "raw_description": replace_placeholders(g("description")),
+            "mes_example": replace_placeholders(g("mes_example")),
             "rp_mannerisms": [],
             "character_info": {
                 "gender": (st_data.get("character_info", {}).get("gender") if isinstance(st_data.get("character_info"), dict) else st_data.get("gender")) or "Unknown",
@@ -162,7 +165,127 @@ class CharacterImporter:
         return profile
 
     @staticmethod
-    def refine_character_profile(profile, raw_st_data=None, model=None):
+    def run_critic_pass(profile, raw_personality, raw_description, raw_scenario, raw_mes_example, model=None):
+        """
+        Uses a local LLM to critique a refined character profile against raw sources.
+        Returns a dictionary with scores and feedback.
+        """
+        from engines.config import get_setting
+        from engines.responses import _ollama_chat_compat
+
+        critic_model = model or get_setting("local_utility_model", "llama3.2")
+        char_name = profile.get("name", "Unknown")
+
+        critic_system_prompt = (
+            "You are an expert critic and evaluator for AI character roleplay profiles.\n"
+            "Your job is to compare a refined character profile against its raw source details and raw dialogue examples.\n"
+            "You must rate the quality of the refined profile based on the following criteria (score 1 to 10):\n"
+            "1. persona_preservation_score: Does the profile capture the unique voice, accent, vocabulary, slang, and emotional/psychological depth of the original character? (Or did it sanitize/homogenize it?)\n"
+            "2. speech_style_alignment_score: Does the profile capture all dialogue formatting, punctuation, capitalization quirks (e.g. all lowercase, stuttering, asterisks for actions) from the dialogue examples?\n"
+            "3. accuracy_score: Does it accurately represent facts without inventing/hallucinating unmentioned backstory details?\n\n"
+            "Respond ONLY with a valid JSON object matching the following schema. "
+            "Do not include any conversational intro/outro text, explanations, or code blocks.\n\n"
+            "{\n"
+            '  "persona_preservation_score": 8.5,\n'
+            '  "speech_style_alignment_score": 9.0,\n'
+            '  "accuracy_score": 9.5,\n'
+            '  "average_score": 9.0,\n'
+            '  "feedback": "Explain what is missing or what was sanitized, and provide specific instructions on how to improve the profile."\n'
+            "}"
+        )
+
+        proposed_profile = {
+            "personality_type": profile.get("personality_type", ""),
+            "backstory": profile.get("backstory", ""),
+            "rp_mannerisms": profile.get("rp_mannerisms", []),
+            "system_prompt": profile.get("system_prompt", ""),
+            "character_info": profile.get("character_info", {})
+        }
+
+        critic_user_content = (
+            f"Character Name: {char_name}\n"
+            f"--- RAW SOURCE DATA ---\n"
+            f"Raw Personality:\n{raw_personality}\n\n"
+            f"Raw Description/Backstory:\n{raw_description}\n\n"
+            f"Raw Scenario/Other Details:\n{raw_scenario}\n\n"
+            f"Raw Dialogue Examples:\n{raw_mes_example}\n\n"
+            f"--- PROPOSED REFINED PROFILE ---\n"
+            f"{json.dumps(proposed_profile, indent=2)}\n\n"
+            "Evaluate the proposed refined profile against the raw source data. Return ONLY valid JSON."
+        )
+
+        messages = [
+            {"role": "system", "content": critic_system_prompt},
+            {"role": "user", "content": critic_user_content}
+        ]
+
+        try:
+            result = _ollama_chat_compat(
+                model=critic_model,
+                messages=messages,
+                stream=False,
+                format="json",
+                think=False,
+                options={"temperature": 0.1}
+            )
+
+            response_content = result.get("message", {}).get("content", "").strip()
+
+            refined_data = None
+            try:
+                refined_data = json.loads(response_content)
+            except json.JSONDecodeError:
+                match = re.search(r'```(?:json)?\s*(\{.*?\})\s*```', response_content, re.DOTALL | re.IGNORECASE)
+                if match:
+                    try:
+                        refined_data = json.loads(match.group(1))
+                    except json.JSONDecodeError:
+                        pass
+                
+                if not refined_data:
+                    start = response_content.find('{')
+                    end = response_content.rfind('}')
+                    if start != -1 and end != -1 and end > start:
+                        try:
+                            refined_data = json.loads(response_content[start:end+1])
+                        except json.JSONDecodeError:
+                            pass
+
+            if not refined_data:
+                return {
+                    "persona_preservation_score": 5.0,
+                    "speech_style_alignment_score": 5.0,
+                    "accuracy_score": 5.0,
+                    "average_score": 5.0,
+                    "feedback": "Failed to parse critic response JSON."
+                }
+
+            for key in ["persona_preservation_score", "speech_style_alignment_score", "accuracy_score", "average_score"]:
+                if key in refined_data:
+                    try:
+                        refined_data[key] = float(refined_data[key])
+                    except (ValueError, TypeError):
+                        refined_data[key] = 5.0
+
+            if "average_score" not in refined_data:
+                scores = [refined_data.get("persona_preservation_score", 5.0),
+                          refined_data.get("speech_style_alignment_score", 5.0),
+                          refined_data.get("accuracy_score", 5.0)]
+                refined_data["average_score"] = sum(scores) / len(scores)
+
+            return refined_data
+
+        except Exception as e:
+            return {
+                "persona_preservation_score": 5.0,
+                "speech_style_alignment_score": 5.0,
+                "accuracy_score": 5.0,
+                "average_score": 5.0,
+                "feedback": f"Critic pass failed: {e}"
+            }
+
+    @staticmethod
+    def refine_character_profile(profile, raw_st_data=None, model=None, interactive=False):
         """
         Uses a local LLM to refine and clean character profile metadata fields.
         Returns the updated profile (modifying fields like alt_names, character_info, backstory, rp_mannerisms).
@@ -190,16 +313,32 @@ class CharacterImporter:
 
         # Fallback to existing profile fields if raw_st_data is missing
         if not raw_personality:
-            raw_personality = profile.get("personality_type", "")
+            raw_personality = profile.get("raw_personality") or profile.get("personality_type", "")
         if not raw_description:
-            raw_description = profile.get("backstory", "")
+            raw_description = profile.get("raw_description") or profile.get("backstory", "")
         if not raw_scenario:
             raw_scenario = profile.get("character_info", {}).get("other", "")
+        if not raw_mes_example:
+            raw_mes_example = profile.get("mes_example", "")
 
-        # 2. Formulate prompt
+        def clean_raw(text):
+            if not text:
+                return ""
+            return text.replace("{{char}}", char_name).replace("<START>", "").strip()
+
+        raw_personality = clean_raw(raw_personality)
+        raw_description = clean_raw(raw_description)
+        raw_scenario = clean_raw(raw_scenario)
+        raw_mes_example = clean_raw(raw_mes_example)
+
+        # 2. Formulate prompts
         system_prompt = (
             "You are an expert character profile extraction and cleaning assistant.\n"
-            "Analyze the provided raw character information and extract structured details strictly based on the text.\n"
+            "Analyze the provided raw character details and extract structured profile fields.\n"
+            "CRITICAL: You must preserve as much distinct persona, unique voice, slang, dialect, and speech style/habits as possible. "
+            "Do NOT sanitize, simplify, or homogenize the character's unique traits into generic descriptions. "
+            "If the character speaks in a certain way (e.g., uses specific slang, stutters, speaks in all lowercase, has capitalization quirks, or has a specific dialect), "
+            "you MUST reflect this explicitly in the extracted fields (especially 'rp_mannerisms', 'personality_type', and 'system_prompt').\n\n"
             "Respond ONLY with a valid JSON object matching the following schema. "
             "Do not include any conversational intro/outro text, explanations, or code blocks.\n\n"
             "{\n"
@@ -209,11 +348,11 @@ class CharacterImporter:
             '  "appearance": "Short description of appearance, height, hair, clothing, eyes",\n'
             '  "likes": ["list of strings containing likes/hobbies, or empty list"],\n'
             '  "dislikes": ["list of strings containing dislikes/aversions, or empty list"],\n'
-            '  "rp_mannerisms": ["List of 3-5 specific conversational traits, e.g. \'frequently stutters when nervous\', \'speaks in a polite, formal tone\'"],\n'
-            '  "personality_type": "Concise 1-3 sentence summary of personality",\n'
-            '  "backstory": "Clean, narrative biography summary of history and origin",\n'
+            '  "rp_mannerisms": ["List of 3-5 specific conversational traits, formatting rules, or stylistic mannerisms extracted from raw text and dialogue examples. E.g., \'always uses lowercase\', \'frequently stutters when nervous\', \'speaks in a polite, formal tone\', \'uses asterisks for actions like *smiles*\'"],\n'
+            '  "personality_type": "Summary of personality, preserving unique voice and distinct character persona",\n'
+            '  "backstory": "Narrative biography summary of history and origin, preserving any critical background details and persona",\n'
             '  "other": "Refined description of the roleplay scenario or other setting details",\n'
-            '  "system_prompt": "A highly immersive, detailed system prompt for the roleplay. It should write instructions on how the AI should roleplay as this character (e.g. \'You are [Name], a... Describe actions in asterisks... Use a stuttering tone...\'). Keep it in the second person (\'You are...\')."\n'
+            '  "system_prompt": "A highly immersive, detailed system prompt for the roleplay. Instruct the AI on how to roleplay as this character. It must detail specific speech patterns, vocabulary, punctuation/formatting quirks (e.g., asterisks for actions, stutters, specific casing). Keep it in the second person (\'You are...\')."\n'
             "}"
         )
 
@@ -230,107 +369,208 @@ class CharacterImporter:
             "4. Return ONLY valid JSON."
         )
 
+        correction_system_prompt = (
+            "You are an expert character profile extraction and cleaning assistant.\n"
+            "You previously generated a refined character profile, but a critic evaluated it and provided feedback on how it can be improved to better preserve the character's distinct persona and speech style.\n"
+            "Modify the previous refined profile to incorporate the critic's feedback. "
+            "Make sure the character's unique voice, slang, punctuation/formatting quirks (like lowercase, asterisks), and details are preserved as much as possible.\n\n"
+            "Respond ONLY with a valid JSON object matching the following schema. "
+            "Do not include any conversational intro/outro text, explanations, or code blocks.\n\n"
+            "{\n"
+            '  "alt_names": "Comma-separated string of nicknames, aliases or alternative names, or empty string",\n'
+            '  "gender": "Character gender (e.g. Male, Female, Non-binary, Unknown)",\n'
+            '  "age": "Character age (e.g. 24, Unknown)",\n'
+            '  "appearance": "Short description of appearance, height, hair, clothing, eyes",\n'
+            '  "likes": ["list of strings containing likes/hobbies, or empty list"],\n'
+            '  "dislikes": ["list of strings containing dislikes/aversions, or empty list"],\n'
+            '  "rp_mannerisms": ["List of 3-5 specific conversational traits, formatting rules, or stylistic mannerisms extracted from raw text and dialogue examples. E.g., \'always uses lowercase\', \'frequently stutters when nervous\', \'speaks in a polite, formal tone\', \'uses asterisks for actions like *smiles*\'"],\n'
+            '  "personality_type": "Summary of personality, preserving unique voice and distinct character persona",\n'
+            '  "backstory": "Narrative biography summary of history and origin, preserving any critical background details and persona",\n'
+            '  "other": "Refined description of the roleplay scenario or other setting details",\n'
+            '  "system_prompt": "A highly immersive, detailed system prompt for the roleplay. Instruct the AI on how to roleplay as this character. It must detail specific speech patterns, vocabulary, punctuation/formatting quirks (e.g., asterisks for actions, stutters, specific casing). Keep it in the second person (\'You are...\')."\n'
+            "}"
+        )
+
+        refusal_triggers = [
+            "i cannot fulfill", "against safety guidelines", "i am unable to",
+            "cannot generate content", "against policy", "cannot assist with this"
+        ]
+
+        best_profile = None
+        best_score = -1.0
+        attempt = 1
+        max_attempts = 4
+        
+        active_refined_data = None
         messages = [
             {"role": "system", "content": system_prompt},
             {"role": "user", "content": user_content}
         ]
 
-        try:
-            # Enforce JSON formatting
-            result = _ollama_chat_compat(
-                model=refine_model,
-                messages=messages,
-                stream=False,
-                format="json",
-                think=False,
-                options={"temperature": 0.1}
-            )
-
-            response_content = result.get("message", {}).get("content", "").strip()
-
-            # Refusal detection: check for common safety guidelines / refusal templates
-            refusal_triggers = [
-                "i cannot fulfill", "against safety guidelines", "i am unable to",
-                "cannot generate content", "against policy", "cannot assist with this"
-            ]
-            if any(trigger in response_content.lower() for trigger in refusal_triggers):
-                print(f"{Fore.YELLOW}[WARNING] Local model refused to process character card due to safety constraints. Falling back to rule-based import.")
-                return profile
-
-            # Parse JSON
-            refined_data = None
+        while attempt <= max_attempts:
+            print(Fore.CYAN + f"[SYSTEM] (Attempt {attempt}/{max_attempts}) Generating refined profile fields...")
             try:
-                refined_data = json.loads(response_content)
-            except json.JSONDecodeError:
-                # Attempt regex-based cleanup of markdown code block
-                match = re.search(r'```(?:json)?\s*(\{.*?\})\s*```', response_content, re.DOTALL | re.IGNORECASE)
-                if match:
-                    try:
-                        refined_data = json.loads(match.group(1))
-                    except json.JSONDecodeError:
-                        pass
-                
-                # Fallback to finding first/last brackets
-                if not refined_data:
-                    start = response_content.find('{')
-                    end = response_content.rfind('}')
-                    if start != -1 and end != -1 and end > start:
+                result = _ollama_chat_compat(
+                    model=refine_model,
+                    messages=messages,
+                    stream=False,
+                    format="json",
+                    think=False,
+                    options={"temperature": 0.1 if attempt == 1 else 0.3}
+                )
+
+                response_content = result.get("message", {}).get("content", "").strip()
+
+                if any(trigger in response_content.lower() for trigger in refusal_triggers):
+                    print(f"{Fore.YELLOW}[WARNING] Local model refused to process character card due to safety constraints.")
+                    if best_profile:
+                        return best_profile
+                    return profile
+
+                refined_data = None
+                try:
+                    refined_data = json.loads(response_content)
+                except json.JSONDecodeError:
+                    match = re.search(r'```(?:json)?\s*(\{.*?\})\s*```', response_content, re.DOTALL | re.IGNORECASE)
+                    if match:
                         try:
-                            refined_data = json.loads(response_content[start:end+1])
+                            refined_data = json.loads(match.group(1))
                         except json.JSONDecodeError:
                             pass
+                    
+                    if not refined_data:
+                        start = response_content.find('{')
+                        end = response_content.rfind('}')
+                        if start != -1 and end != -1 and end > start:
+                            try:
+                                refined_data = json.loads(response_content[start:end+1])
+                            except json.JSONDecodeError:
+                                pass
 
-            if not refined_data:
-                print(f"{Fore.YELLOW}[WARNING] Failed to parse AI refinement JSON response. Falling back to rule-based values.")
-                return profile
+                if not refined_data:
+                    print(f"{Fore.YELLOW}[WARNING] Failed to parse AI refinement JSON response.")
+                    attempt += 1
+                    continue
 
-            # Merge refined fields into the profile
-            if "alt_names" in refined_data and isinstance(refined_data["alt_names"], str):
-                profile["alt_names"] = refined_data["alt_names"].strip()
-            
-            if "personality_type" in refined_data and isinstance(refined_data["personality_type"], str):
-                profile["personality_type"] = refined_data["personality_type"].strip()
-                
-            if "backstory" in refined_data and isinstance(refined_data["backstory"], str):
-                profile["backstory"] = refined_data["backstory"].strip()
-                
-            if "system_prompt" in refined_data and isinstance(refined_data["system_prompt"], str):
-                profile["system_prompt"] = refined_data["system_prompt"].strip()
+                active_refined_data = refined_data
 
-            if "rp_mannerisms" in refined_data and isinstance(refined_data["rp_mannerisms"], list):
-                cleaned_mannerisms = [m.strip() for m in refined_data["rp_mannerisms"] if isinstance(m, str) and m.strip()]
-                if cleaned_mannerisms:
-                    profile["rp_mannerisms"] = cleaned_mannerisms
+                temp_profile = profile.copy()
+                if "alt_names" in refined_data and isinstance(refined_data["alt_names"], str):
+                    temp_profile["alt_names"] = refined_data["alt_names"].strip()
+                if "personality_type" in refined_data and isinstance(refined_data["personality_type"], str):
+                    temp_profile["personality_type"] = refined_data["personality_type"].strip()
+                if "backstory" in refined_data and isinstance(refined_data["backstory"], str):
+                    temp_profile["backstory"] = refined_data["backstory"].strip()
+                if "system_prompt" in refined_data and isinstance(refined_data["system_prompt"], str):
+                    temp_profile["system_prompt"] = refined_data["system_prompt"].strip()
+                if "rp_mannerisms" in refined_data and isinstance(refined_data["rp_mannerisms"], list):
+                    temp_profile["rp_mannerisms"] = [m.strip() for m in refined_data["rp_mannerisms"] if isinstance(m, str) and m.strip()]
+                
+                if "character_info" not in temp_profile:
+                    temp_profile["character_info"] = {}
+                t_info = temp_profile["character_info"]
+                
+                if "gender" in refined_data and isinstance(refined_data["gender"], str):
+                    t_info["gender"] = refined_data["gender"].strip()
+                if "age" in refined_data and isinstance(refined_data["age"], str):
+                    t_info["age"] = refined_data["age"].strip()
+                if "appearance" in refined_data and isinstance(refined_data["appearance"], str):
+                    t_info["appearance"] = refined_data["appearance"].strip()
+                if "likes" in refined_data and isinstance(refined_data["likes"], list):
+                    t_info["likes"] = [x.strip() for x in refined_data["likes"] if isinstance(x, str) and x.strip()]
+                if "dislikes" in refined_data and isinstance(refined_data["dislikes"], list):
+                    t_info["dislikes"] = [x.strip() for x in refined_data["dislikes"] if isinstance(x, str) and x.strip()]
+                if "other" in refined_data and isinstance(refined_data["other"], str):
+                    t_info["other"] = refined_data["other"].strip()
 
-            # Update character_info dict safely
-            if "character_info" not in profile:
-                profile["character_info"] = {}
-                
-            info = profile["character_info"]
-            
-            if "gender" in refined_data and isinstance(refined_data["gender"], str):
-                info["gender"] = refined_data["gender"].strip()
-                
-            if "age" in refined_data and isinstance(refined_data["age"], str):
-                info["age"] = refined_data["age"].strip()
-                
-            if "appearance" in refined_data and isinstance(refined_data["appearance"], str):
-                info["appearance"] = refined_data["appearance"].strip()
-                
-            if "likes" in refined_data and isinstance(refined_data["likes"], list):
-                info["likes"] = [x.strip() for x in refined_data["likes"] if isinstance(x, str) and x.strip()]
-                
-            if "dislikes" in refined_data and isinstance(refined_data["dislikes"], list):
-                info["dislikes"] = [x.strip() for x in refined_data["dislikes"] if isinstance(x, str) and x.strip()]
+                temp_profile["raw_personality"] = raw_personality
+                temp_profile["raw_description"] = raw_description
+                temp_profile["mes_example"] = raw_mes_example
 
-            if "other" in refined_data and isinstance(refined_data["other"], str):
-                info["other"] = refined_data["other"].strip()
+                print(Fore.CYAN + f"[SYSTEM] Running Critic Pass to evaluate generated fields...")
+                critic_res = CharacterImporter.run_critic_pass(
+                    temp_profile,
+                    raw_personality,
+                    raw_description,
+                    raw_scenario,
+                    raw_mes_example,
+                    model=refine_model
+                )
 
-            return profile
+                avg_score = critic_res.get("average_score", 5.0)
+                feedback = critic_res.get("feedback", "No feedback provided.")
+                p_score = critic_res.get("persona_preservation_score", 5.0)
+                s_score = critic_res.get("speech_style_alignment_score", 5.0)
+                a_score = critic_res.get("accuracy_score", 5.0)
 
-        except Exception as e:
-            print(f"{Fore.YELLOW}[WARNING] AI refinement failed: {e}. Falling back to rule-based values.")
-            return profile
+                print(Fore.CYAN + f"[SYSTEM] AI Critic Score: {avg_score:.2f}/10.0 (Persona: {p_score}/10, Speech Style: {s_score}/10, Accuracy: {a_score}/10)")
+                print(Fore.CYAN + f"[SYSTEM] Critic Feedback: {feedback}")
+
+                if avg_score > best_score:
+                    best_score = avg_score
+                    best_profile = temp_profile
+
+                if best_score >= 8.5:
+                    print(Fore.GREEN + f"[SUCCESS] Critique passed threshold (8.5). Merging refined fields.")
+                    return best_profile
+
+                if attempt == max_attempts:
+                    break
+
+                if interactive:
+                    print(Fore.YELLOW + f"\nRefinement did not meet target quality (8.5/10.0).")
+                    print("Options:")
+                    print("  [1] Retry refinement with Critic Feedback (AI will adjust content)")
+                    print("  [2] Accept and merge this version anyway")
+                    print("  [3] Skip AI refinement (keep basic card import)")
+
+                    choice = ""
+                    while choice not in ["1", "2", "3"]:
+                        choice = input("Select an option [1-3] (default: 1): ").strip()
+                        if not choice:
+                            choice = "1"
+
+                    if choice == "2":
+                        print(Fore.GREEN + "[SUCCESS] Merging current refined version.")
+                        return temp_profile
+                    elif choice == "3":
+                        print(Fore.YELLOW + "[INFO] Skipping AI refinement, reverting to baseline.")
+                        return profile
+
+                    print(Fore.CYAN + "[SYSTEM] Retrying refinement with feedback...")
+                else:
+                    print(Fore.YELLOW + f"[INFO] Quality score {avg_score:.2f} is below 8.5. Retrying automatically...")
+
+                correction_user_content = (
+                    f"Character Name: {char_name}\n"
+                    f"--- RAW SOURCE DATA ---\n"
+                    f"Raw Personality:\n{raw_personality}\n\n"
+                    f"Raw Description/Backstory:\n{raw_description}\n\n"
+                    f"Raw Scenario/Other Details:\n{raw_scenario}\n\n"
+                    f"Raw Dialogue Examples:\n{raw_mes_example}\n\n"
+                    f"--- PREVIOUS ATTEMPT ---\n"
+                    f"{json.dumps(active_refined_data, indent=2)}\n\n"
+                    f"--- CRITIC FEEDBACK ---\n"
+                    f"Critic Score: {avg_score:.2f}/10.0\n"
+                    f"Feedback: {feedback}\n\n"
+                    "Please refine the profile again, strictly addressing the critic feedback to ensure high fidelity and distinct persona preservation. Return ONLY valid JSON."
+                )
+
+                messages = [
+                    {"role": "system", "content": correction_system_prompt},
+                    {"role": "user", "content": correction_user_content}
+                ]
+                attempt += 1
+
+            except Exception as e:
+                print(f"{Fore.YELLOW}[WARNING] AI refinement attempt {attempt} failed: {e}.")
+                attempt += 1
+
+        if best_profile:
+            print(Fore.YELLOW + f"[WARNING] AI refinement did not achieve target score (8.5/10.0). Using best attempt (Score: {best_score:.2f}/10.0).")
+            return best_profile
+
+        return profile
 
     @staticmethod
     def save_profile(profile, filename=None):
@@ -371,7 +611,7 @@ class CharacterImporter:
             print(f"{Fore.RED}[ERROR] Failed to save profile: {e}")
             return False
 
-def import_character(source_path, refine=False, model=None):
+def import_character(source_path, refine=False, model=None, interactive=False):
     """Main entry point for importing a character with optional AI refinement."""
     data = None
     avatar_path = "img/No_Image_Error.png"
@@ -428,7 +668,12 @@ def import_character(source_path, refine=False, model=None):
                 with open(save_path, "r", encoding="utf-8") as f:
                     saved_profile = json.load(f)
                 
-                refined_profile = CharacterImporter.refine_character_profile(saved_profile, raw_st_data=data, model=refine_model)
+                refined_profile = CharacterImporter.refine_character_profile(
+                    saved_profile,
+                    raw_st_data=data,
+                    model=refine_model,
+                    interactive=interactive
+                )
                 
                 # Overwrite the saved profile with refined contents
                 CharacterImporter.save_profile(refined_profile, filename=os.path.basename(save_path))
