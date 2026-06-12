@@ -44,7 +44,8 @@ class TestCharacterImporterRefine(unittest.TestCase):
             "personality_type": "Curious and analytical",
             "backstory": "An AI assistant created to help write code.",
             "other": "Optimized programming scenario",
-            "system_prompt": "You are Lily, a smart AI coder."
+            "system_prompt": "You are Lily, a smart AI coder.",
+            "lorebook_entries": []
         }
         critic_json = {
             "persona_preservation_score": 9.0,
@@ -204,7 +205,12 @@ class TestCharacterImporterConvert(unittest.TestCase):
         # Second attempt (critic): returns a low score (e.g. 5.0)
         # Third attempt (correction): returns a corrected profile
         # Fourth attempt (critic): returns a high score (9.0)
-        refined_json_1 = {"personality_type": "Somewhat bubbly"}
+        refined_json_1 = {
+            "system_prompt": "You are Alice.",
+            "personality_type": "Somewhat bubbly",
+            "backstory": "An adventurer.",
+            "lorebook_entries": []
+        }
         critic_json_1 = {
             "persona_preservation_score": 5.0,
             "speech_style_alignment_score": 5.0,
@@ -212,7 +218,12 @@ class TestCharacterImporterConvert(unittest.TestCase):
             "average_score": 5.0,
             "feedback": "Needs to be much more bubbly!"
         }
-        refined_json_2 = {"personality_type": "Extremely bubbly and energetic!"}
+        refined_json_2 = {
+            "system_prompt": "You are Alice.",
+            "personality_type": "Extremely bubbly and energetic!",
+            "backstory": "An adventurer.",
+            "lorebook_entries": []
+        }
         critic_json_2 = {
             "persona_preservation_score": 9.0,
             "speech_style_alignment_score": 9.0,

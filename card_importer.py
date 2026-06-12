@@ -91,13 +91,12 @@ def main():
 
         refined_profile = CharacterImporter.refine_character_profile(profile, model=model, interactive=True)
 
-        # Save refined profile
-        try:
-            with open(profile_path, "w", encoding="utf-8") as f:
-                json.dump(refined_profile, f, indent=4, ensure_ascii=False)
-            print(Fore.GREEN + f"[SUCCESS] Refined and saved profile to {profile_path}")
-        except Exception as e:
-            print(Fore.RED + f"[ERROR] Failed to save refined profile: {e}")
+        # Save refined profile using save_profile to handle lorebook generation
+        saved_path = CharacterImporter.save_profile(refined_profile, filename=os.path.basename(profile_path))
+        if saved_path:
+            print(Fore.GREEN + f"[SUCCESS] Refined and saved profile to {saved_path}")
+        else:
+            print(Fore.RED + f"[ERROR] Failed to save refined profile.")
 
     print(Fore.GREEN + "Card Importer is ready.")
     print(Fore.CYAN + "Commands:")

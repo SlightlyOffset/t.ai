@@ -206,6 +206,20 @@ class CharacterImporter:
             "character_info": profile.get("character_info", {})
         }
 
+        info = proposed_profile.get("character_info") or {}
+        proposed_text = (
+            f"Proposed System Prompt: {proposed_profile['system_prompt']}\n"
+            f"Proposed Personality Type: {proposed_profile['personality_type']}\n"
+            f"Proposed Backstory: {proposed_profile['backstory']}\n"
+            f"Proposed Mannerisms: {', '.join(proposed_profile['rp_mannerisms']) if proposed_profile['rp_mannerisms'] else 'None'}\n"
+            f"Proposed Gender: {info.get('gender', 'Unknown')}\n"
+            f"Proposed Age: {info.get('age', 'Unknown')}\n"
+            f"Proposed Appearance: {info.get('appearance', 'None')}\n"
+            f"Proposed Likes: {', '.join(info.get('likes', [])) if info.get('likes') else 'None'}\n"
+            f"Proposed Dislikes: {', '.join(info.get('dislikes', [])) if info.get('dislikes') else 'None'}\n"
+            f"Proposed Other: {info.get('other', 'None')}"
+        )
+
         critic_user_content = (
             f"Character Name: {char_name}\n"
             f"--- RAW SOURCE DATA ---\n"
@@ -214,7 +228,7 @@ class CharacterImporter:
             f"Raw Scenario/Other Details:\n{raw_scenario}\n\n"
             f"Raw Dialogue Examples:\n{raw_mes_example}\n\n"
             f"--- PROPOSED REFINED PROFILE ---\n"
-            f"{json.dumps(proposed_profile, indent=2)}\n\n"
+            f"{proposed_text}\n\n"
             "Instructions:\n"
             "Compare the proposed refined profile against the raw source data and rate the quality of the refined profile based on the following criteria (score 1 to 10):\n"
             "1. persona_preservation_score: Does the profile capture the unique voice, accent, vocabulary, slang, and emotional/psychological depth of the original character? (Or did it sanitize/homogenize it?)\n"
@@ -409,7 +423,7 @@ class CharacterImporter:
             "CRITICAL: Do NOT add any keys to the JSON that are not explicitly specified in the schema below (do NOT add speaking_style, dialogue_examples, etc.).\n"
             "CRITICAL: Do NOT use unescaped double quotes (\") inside your JSON string values. For measurements, use single quotes (e.g., write 4'9' or 4'9 inches instead of 4'9\"). Double quotes inside strings will break the JSON parser.\n\n"
             "{\n"
-            '  "system_prompt": "<highly_immersive_behavioral_roleplay_instructions_in_second_person_you_are>",\n'
+            '  "system_prompt": "You are [Name]. [Behavioral instructions starting with \'You\' or in second person, detailing speech style, formatting, casing, tone, and mannerisms. E.g. \'You speak with a stutter when nervous. Use asterisks for actions. Always speak in lowercase.\']",\n'
             '  "personality_type": "<personality_summary_preserving_unique_voice>",\n'
             '  "backstory": "<concise_factual_history_and_biography_timeline>",\n'
             '  "lorebook_entries": [\n'
@@ -442,8 +456,9 @@ class CharacterImporter:
             "4. If 'Raw Personality' is empty, you MUST scan the 'Raw Description/Backstory' field to extract the character's personality details for 'personality_type'.\n"
             "5. Do NOT copy-paste raw description blocks verbatim. You must clean, refine, and synthesize them.\n"
             "6. Keep 'system_prompt' strictly to roleplay style/behavior (no bio), and 'backstory' strictly to biography facts/timeline.\n"
-            "7. Extract 2-5 relevant backstory/world info details into 'lorebook_entries'.\n"
-            "8. Return ONLY valid JSON."
+            "7. The 'system_prompt' field MUST be written strictly in the second person (e.g. 'You are Lyrei... You speak...'). It MUST NOT use third-person words like 'she', 'her', 'he', 'him', or 'roleplay as'.\n"
+            "8. Extract 2-5 relevant backstory/world info details into 'lorebook_entries'.\n"
+            "9. Return ONLY valid JSON."
         )
 
         correction_system_prompt = (
@@ -461,7 +476,7 @@ class CharacterImporter:
             "CRITICAL: Do NOT add any keys to the JSON that are not explicitly specified in the schema below (do NOT add speaking_style, dialogue_examples, etc.).\n"
             "CRITICAL: Do NOT use unescaped double quotes (\") inside your JSON string values. For measurements, use single quotes (e.g., write 4'9' or 4'9 inches instead of 4'9\"). Double quotes inside strings will break the JSON parser.\n\n"
             "{\n"
-            '  "system_prompt": "<highly_immersive_behavioral_roleplay_instructions_in_second_person_you_are>",\n'
+            '  "system_prompt": "You are [Name]. [Behavioral instructions starting with \'You\' or in second person, detailing speech style, formatting, casing, tone, and mannerisms. E.g. \'You speak with a stutter when nervous. Use asterisks for actions. Always speak in lowercase.\']",\n'
             '  "personality_type": "<personality_summary_preserving_unique_voice>",\n'
             '  "backstory": "<concise_factual_history_and_biography_timeline>",\n'
             '  "lorebook_entries": [\n'
@@ -539,6 +554,58 @@ class CharacterImporter:
 
                 if not refined_data:
                     print(f"{Fore.YELLOW}[WARNING] Failed to parse AI refinement JSON response.")
+                    attempt += 1
+                    continue
+
+                # Strict JSON validation to ensure all critical keys are present and correctly typed
+                errors = []
+                required_keys = ["system_prompt", "personality_type", "backstory", "lorebook_entries"]
+                missing = [k for k in required_keys if k not in refined_data]
+                if missing:
+                    errors.append(f"Missing required JSON keys: {missing}")
+                
+                if "backstory" in refined_data and not isinstance(refined_data["backstory"], str):
+                    errors.append("backstory must be a string containing a cohesive narrative paragraph, NOT a list or dictionary.")
+                    
+                if "system_prompt" in refined_data and isinstance(refined_data["system_prompt"], str):
+                    sp_lower = refined_data["system_prompt"].lower()
+                    if sp_lower.startswith("roleplay as") or " she " in sp_lower or " her " in sp_lower or " he " in sp_lower or " him " in sp_lower:
+                        errors.append("system_prompt must be written strictly in the second person (e.g. starting with 'You are [Name]... You speak...'), NOT in the third person ('She is...', 'Roleplay as...').")
+
+                if "lorebook_entries" in refined_data:
+                    entries = refined_data["lorebook_entries"]
+                    if not isinstance(entries, list):
+                        errors.append("lorebook_entries must be a list of objects.")
+                    else:
+                        for idx, entry in enumerate(entries):
+                            if not isinstance(entry, dict):
+                                errors.append(f"lorebook_entries[{idx}] must be a dictionary.")
+                            else:
+                                if "keys" not in entry:
+                                    errors.append(f"lorebook_entries[{idx}] is missing the 'keys' list.")
+                                elif not isinstance(entry["keys"], list):
+                                    errors.append(f"lorebook_entries[{idx}]['keys'] must be a list of trigger words.")
+                                if "content" not in entry:
+                                    errors.append(f"lorebook_entries[{idx}] is missing the 'content' string.")
+                                elif not isinstance(entry["content"], str):
+                                    errors.append(f"lorebook_entries[{idx}]['content'] must be a string.")
+
+                if errors:
+                    err_msg = "Validation failed:\n" + "\n".join(f" - {e}" for e in errors)
+                    print(f"{Fore.YELLOW}[WARNING] AI response failed validation:\n{err_msg}")
+                    
+                    # Update messages with the validation feedback for the correction retry
+                    correction_user_content = (
+                        f"Your previous JSON response failed validation with the following errors:\n"
+                        f"{err_msg}\n\n"
+                        f"Please generate the JSON again, correcting these errors. Ensure backstory is a narrative string, system_prompt is strictly in the second person ('You are...'), and lorebook_entries items strictly have the keys 'keys' (list of strings) and 'content' (string). Return ONLY the corrected JSON."
+                    )
+                    messages = [
+                        {"role": "system", "content": system_prompt},
+                        {"role": "user", "content": user_content},
+                        {"role": "assistant", "content": response_content},
+                        {"role": "user", "content": correction_user_content}
+                    ]
                     attempt += 1
                     continue
 
@@ -688,6 +755,10 @@ class CharacterImporter:
 
         if not filename.endswith(".json"):
             filename += ".json"
+
+        # Remove raw backup fields to prevent profile JSON bloat/crowding
+        profile.pop("raw_description", None)
+        profile.pop("raw_personality", None)
 
         # If there are lorebook entries in the profile, extract them and save to a separate lorebook file
         lorebook_entries = profile.pop("lorebook_entries", None)
