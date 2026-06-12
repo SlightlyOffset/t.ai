@@ -2536,8 +2536,18 @@ class TaiMenu(App):
                 compact_msg = f"[dim]🛠️ {status}: {server}/{tool} (Result: {result_len} chars)[/dim]"
                 
                 def mount_compact_tool_result():
-                    res_label = Label(compact_msg, classes="message_row ai_row message ai_bubble")
-                    container.mount(res_label, before=ai_msg)
+                    res_label = Label(compact_msg, classes="message ai_bubble")
+                    row = Horizontal(res_label, classes="message_row ai_row")
+                    target = None
+                    if ai_msg.parent and ai_msg.parent in container.children:
+                        target = ai_msg.parent
+                    elif ai_msg in container.children:
+                        target = ai_msg
+                    
+                    if target:
+                        container.mount(row, before=target)
+                    else:
+                        container.mount(row)
                     container.scroll_end(animate=False)
                 self.app.call_from_thread(mount_compact_tool_result)
                 
