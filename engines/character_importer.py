@@ -6,6 +6,28 @@ import shutil
 from PIL import Image
 from colorama import Fore
 
+def _heal_and_load_json(text):
+    """Attempts to parse JSON, healing unescaped quotes if needed."""
+    try:
+        return json.loads(text)
+    except Exception:
+        try:
+            key_pattern = r'[a-zA-Z0-9_-]+'
+            pattern = re.compile(
+                r'("(' + key_pattern + r')"\s*:\s*")(.*?)("(?=\s*(?:,\s*"' + key_pattern + r'"\s*:|\s*\})))',
+                re.DOTALL
+            )
+            def replacer(match):
+                prefix = match.group(1)
+                val = match.group(3)
+                suffix = match.group(4)
+                escaped_val = re.sub(r'(?<!\\)"', r'\"', val)
+                return prefix + escaped_val + suffix
+            healed = pattern.sub(replacer, text)
+            return json.loads(healed)
+        except Exception:
+            raise
+
 class CharacterImporter:
     """
     Handles importing and converting character profiles from external formats.
@@ -324,7 +346,7 @@ class CharacterImporter:
                     if isinstance(func_args_str, dict):
                         refined_data = func_args_str
                     else:
-                        refined_data = json.loads(func_args_str)
+                        refined_data = _heal_and_load_json(func_args_str)
                 except Exception as e:
                     print(f"{Fore.YELLOW}[WARNING] Failed to parse tool call arguments: {e}")
 
@@ -335,12 +357,16 @@ class CharacterImporter:
                 # Check if the response content is a JSON-formatted pseudo-tool call
                 # e.g., {"name": "save_refined_profile", "parameters": {...}}
                 if response_content.startswith("{") and '"parameters"' in response_content:
-                    try:
-                        pseudo_call = json.loads(response_content)
-                        if isinstance(pseudo_call, dict) and "parameters" in pseudo_call:
-                            refined_data = pseudo_call["parameters"]
-                    except Exception:
-                        pass
+                    # Attempt to heal missing closing braces (very common on local LLMs)
+                    for i in range(5):
+                        try:
+                            candidate = response_content + ("}" * i)
+                            pseudo_call = _heal_and_load_json(candidate)
+                            if isinstance(pseudo_call, dict) and "parameters" in pseudo_call:
+                                refined_data = pseudo_call["parameters"]
+                                break
+                        except Exception:
+                            pass
 
                 if not refined_data:
                     # Refusal detection: check for common safety guidelines / refusal templates
@@ -352,27 +378,42 @@ class CharacterImporter:
                         print(f"{Fore.YELLOW}[WARNING] Local model refused to process character card due to safety constraints. Falling back to rule-based import.")
                         return profile
 
-                    # Parse JSON
-                    try:
-                        refined_data = json.loads(response_content)
-                    except json.JSONDecodeError:
+                    # Parse JSON with healing
+                    for i in range(5):
+                        try:
+                            candidate = response_content + ("}" * i)
+                            refined_data = _heal_and_load_json(candidate)
+                            if isinstance(refined_data, dict):
+                                break
+                        except Exception:
+                            pass
+                            
+                    if not refined_data:
                         # Attempt regex-based cleanup of markdown code block
                         match = re.search(r'```(?:json)?\s*(\{.*?\})\s*```', response_content, re.DOTALL | re.IGNORECASE)
                         if match:
-                            try:
-                                refined_data = json.loads(match.group(1))
-                            except json.JSONDecodeError:
-                                pass
+                            for i in range(5):
+                                try:
+                                    candidate = match.group(1) + ("}" * i)
+                                    refined_data = _heal_and_load_json(candidate)
+                                    if isinstance(refined_data, dict):
+                                        break
+                                except Exception:
+                                    pass
                         
                         # Fallback to finding first/last brackets
                         if not refined_data:
                             start = response_content.find('{')
                             end = response_content.rfind('}')
                             if start != -1 and end != -1 and end > start:
-                                try:
-                                    refined_data = json.loads(response_content[start:end+1])
-                                except json.JSONDecodeError:
-                                    pass
+                                for i in range(5):
+                                    try:
+                                        candidate = response_content[start:end+1] + ("}" * i)
+                                        refined_data = _heal_and_load_json(candidate)
+                                        if isinstance(refined_data, dict):
+                                            break
+                                    except Exception:
+                                        pass
 
             if not refined_data:
                 if get_setting("debug_mode", False):
@@ -428,8 +469,9 @@ class CharacterImporter:
             if "dislikes" in refined_data and isinstance(refined_data["dislikes"], list):
                 info["dislikes"] = [x.strip() for x in refined_data["dislikes"] if isinstance(x, str) and x.strip()]
 
-            if "other" in refined_data and isinstance(refined_data["other"], str):
-                info["other"] = refined_data["other"].strip()
+            other_val = refined_data.get("other") or refined_data.get("other_details")
+            if isinstance(other_val, str):
+                info["other"] = other_val.strip()
 
             return profile
 

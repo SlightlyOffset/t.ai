@@ -187,6 +187,66 @@ class TestCharacterImporterRefine(unittest.TestCase):
 
     @patch("ollama.chat")
     @patch("engines.config.get_setting", return_value="llama3.2")
+    def test_refine_character_profile_other_details_fallback(self, mock_setting, mock_chat):
+        # Set up a mock response that has 'other_details' instead of 'other'
+        refined_json = {
+            "alt_names": "Lily",
+            "gender": "Female",
+            "age": "19",
+            "appearance": "Silver hair, blue eyes",
+            "likes": ["Coding"],
+            "dislikes": ["Bugs"],
+            "rp_mannerisms": ["speaks with code snippets"],
+            "personality_type": "Curious and analytical",
+            "backstory": "An AI assistant.",
+            "other_details": "Scenario with other_details key",
+            "system_prompt": "You are Lily, a smart AI coder."
+        }
+        mock_chat.return_value = {
+            "message": {
+                "content": json.dumps(refined_json)
+            }
+        }
+
+        refined = CharacterImporter.refine_character_profile(
+            self.base_profile.copy(),
+            raw_st_data=self.raw_st_data,
+            model="llama3.2"
+        )
+
+        self.assertEqual(refined["character_info"]["other"], "Scenario with other_details key")
+
+    @patch("ollama.chat")
+    @patch("engines.config.get_setting", return_value="llama3.2")
+    def test_refine_character_profile_unescaped_quotes_healing(self, mock_setting, mock_chat):
+        # Set up a mock response that has unescaped quotes in a string value (like 4'9")
+        raw_response = (
+            '{"name": "save_refined_profile", "parameters": {'
+            '"alt_names": "", "gender": "Female", "age": "19", '
+            '"appearance": "Lily stands at 4\'9\\" (actually 4\'9", unescaped) tall.", '
+            '"likes": ["Coding"], "dislikes": ["Bugs"], '
+            '"rp_mannerisms": ["polite"], "personality_type": "Analytical", '
+            '"backstory": "An assistant.", "other": "A scenario", '
+            '"system_prompt": "You are Lily."}}'
+        )
+        mock_chat.return_value = {
+            "message": {
+                "content": raw_response
+            }
+        }
+
+        refined = CharacterImporter.refine_character_profile(
+            self.base_profile.copy(),
+            raw_st_data=self.raw_st_data,
+            model="llama3.2"
+        )
+
+        # It should successfully parse and merge the healed values
+        self.assertEqual(refined["character_info"]["appearance"], 'Lily stands at 4\'9" (actually 4\'9\", unescaped) tall.')
+        self.assertEqual(refined["character_info"]["other"], "A scenario")
+
+    @patch("ollama.chat")
+    @patch("engines.config.get_setting", return_value="llama3.2")
     def test_refine_character_profile_malformed_json_fallback(self, mock_setting, mock_chat):
         # Mock malformed JSON response
         mock_chat.return_value = {
