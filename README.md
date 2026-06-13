@@ -120,8 +120,6 @@ Open your local `settings.json` and paste the generated URLs:
 ### VRAM & Model Recommendations (e.g., 6GB VRAM GPUs)
 Running 8B parameter models with tool-calling capabilities alongside OS desktop overhead can exceed VRAM limits, causing **VRAM spillover** into system RAM (Shared memory) and slowing down token generation speeds to a crawl.
 * **Recommended Utility Model**: For background tasks (like character card imports and refinements), set `refine_model` in **Settings > Plugins > mcp_st_importer** to **`qwen2.5:3b`**. At ~2.2 GB, it fits entirely on the GPU (leaving room for Windows desktop overhead) and has excellent tool-calling and JSON extraction precision.
-* **Hermes 3 (8B)**: If you prefer Hermes 3, pull the 3-bit version to avoid VRAM spillover: `ollama pull hermes3:8b-q3_K_M`.
-* **Uncensored Options**: If you need a fully uncensored utility model, use `hermes3:8b-q3_K_M` or a Dolphin fine-tune.
 * **VRAM Optimization Settings**:
   * Set `"unload_tts_after_generation": true` in `settings.json` (or via **Settings > TTS / Audio > Auto-Unload Local TTS**) to automatically unload local XTTS models from GPU memory immediately after audio generation, freeing VRAM for the LLM.
   * Set `"max_input_tokens"` (e.g., `4096` or `6200`) in `settings.json` (or via **Settings > Default Backend > Max Context Tokens**) to cap context-window usage and prevent massive prompt payloads from causing OOM or spillover.
@@ -223,6 +221,6 @@ Edit `settings.json` to customize your experience:
 * [x] **Cloud & Audio**: Colab Bridge, Streaming TTS, and XTTS v2 Integration.
 * [x] **TUI Overhaul**: High-fidelity bubble layout and terminal image rendering.
 * [x] **Security Sprint**: Comprehensive vulnerability remediation and hardening.
-* [ ] **Agentic Intelligence (v2.0.0)**: Transform t.ai into an autonomous agent (File I/O, Code Execution).
+* [ ] **Agentic Intelligence**: Transform t.ai into an autonomous agent (File I/O, Code Execution).
 * [ ] **Dedicated Command Mode**: Structured `Ctrl+!` input for complex task handling.
 * [ ] **Live2D Integration**: Map relationship scores and future emotional states to sprite changes and animations.
