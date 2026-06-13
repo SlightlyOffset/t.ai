@@ -1358,11 +1358,24 @@ def get_respond_stream(user_input: str, profile: dict, profile_path: str = None,
                                 result_content = mcp_manager.call_tool(func_name, func_args)
                         else:
                             result_content = json.dumps({"error": "Unknown tool or MCP disabled."})
-                            
+
+                        # Annotate tool result with clear status prefix for LLM interpretation.
+                        # Small models can misread plain-text results; an explicit tag steers them.
+                        _is_tool_error = False
+                        try:
+                            _parsed_result = json.loads(result_content)
+                            _is_tool_error = "error" in _parsed_result
+                        except (json.JSONDecodeError, TypeError):
+                            _is_tool_error = result_content.lower().startswith(("error", "failed"))
+
+                        annotated_result = (
+                            f"[TOOL RESULT - {'ERROR' if _is_tool_error else 'SUCCESS'}]\n{result_content}"
+                        )
+
                         messages.append({
                             "role": "tool",
                             "tool_call_id": tc_id,
-                            "content": result_content
+                            "content": annotated_result
                         })
                         
                         yield {

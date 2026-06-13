@@ -719,6 +719,53 @@ class TestResponsesPipeline(unittest.TestCase):
         self.assertEqual(last_call_json["messages"][-1]["role"], "system")
         self.assertIn("tool-calling interface is unsupported", last_call_json["messages"][-1]["content"])
 
+    def test_tool_result_annotation_success(self):
+        """Verify that successful tool results are prefixed with [TOOL RESULT - SUCCESS]."""
+        import json
+        # Plain text success
+        result = "Successfully imported character card from cards/lyrei.png to profiles/Lyrei.json"
+        _is_tool_error = False
+        try:
+            parsed = json.loads(result)
+            _is_tool_error = "error" in parsed
+        except (json.JSONDecodeError, TypeError):
+            _is_tool_error = result.lower().startswith(("error", "failed"))
+
+        self.assertFalse(_is_tool_error)
+        annotated = f"[TOOL RESULT - {'ERROR' if _is_tool_error else 'SUCCESS'}]\n{result}"
+        self.assertTrue(annotated.startswith("[TOOL RESULT - SUCCESS]"))
+        self.assertIn(result, annotated)
+
+    def test_tool_result_annotation_error_json(self):
+        """Verify that JSON error tool results are prefixed with [TOOL RESULT - ERROR]."""
+        import json
+        result = json.dumps({"error": "Tool execution returned an error."})
+        _is_tool_error = False
+        try:
+            parsed = json.loads(result)
+            _is_tool_error = "error" in parsed
+        except (json.JSONDecodeError, TypeError):
+            _is_tool_error = result.lower().startswith(("error", "failed"))
+
+        self.assertTrue(_is_tool_error)
+        annotated = f"[TOOL RESULT - {'ERROR' if _is_tool_error else 'SUCCESS'}]\n{result}"
+        self.assertTrue(annotated.startswith("[TOOL RESULT - ERROR]"))
+
+    def test_tool_result_annotation_error_plaintext(self):
+        """Verify that plain-text error/failed results are prefixed with [TOOL RESULT - ERROR]."""
+        import json
+        for result in ["Error importing card: some exception", "Failed to import character card from foo.png."]:
+            _is_tool_error = False
+            try:
+                parsed = json.loads(result)
+                _is_tool_error = "error" in parsed
+            except (json.JSONDecodeError, TypeError):
+                _is_tool_error = result.lower().startswith(("error", "failed"))
+
+            self.assertTrue(_is_tool_error, f"Expected error detection for: {result}")
+            annotated = f"[TOOL RESULT - {'ERROR' if _is_tool_error else 'SUCCESS'}]\n{result}"
+            self.assertTrue(annotated.startswith("[TOOL RESULT - ERROR]"))
+
 
 if __name__ == "__main__":
     unittest.main()
