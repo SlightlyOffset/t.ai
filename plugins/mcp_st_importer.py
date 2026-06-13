@@ -84,8 +84,19 @@ def import_st_card(filepath: str, overwrite: bool = False, refine: bool = True) 
             _log("ALREADY_EXISTS", {"target_path": target_path, "result": msg})
             return msg
             
-        _log("IMPORT_START", {"filepath": filepath, "refine": refine})
-        success_path = import_character(filepath, refine=refine)
+        # Read plugin configuration
+        config_path = os.path.join(project_root, "plugins", "mcp_st_importer.json")
+        refine_model = None
+        if os.path.exists(config_path):
+            try:
+                with open(config_path, "r", encoding="utf-8") as f:
+                    cfg = json.load(f)
+                    refine_model = cfg.get("refine_model")
+            except Exception as e:
+                _log("CONFIG_READ_ERROR", {"error": str(e)})
+
+        _log("IMPORT_START", {"filepath": filepath, "refine": refine, "refine_model": refine_model})
+        success_path = import_character(filepath, refine=refine, model=refine_model)
         
         if success_path:
             msg = f"Successfully imported character card from {filepath} to {success_path}"

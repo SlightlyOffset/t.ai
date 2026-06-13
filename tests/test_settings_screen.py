@@ -46,7 +46,6 @@ class TestSettingsScreen(unittest.TestCase):
             "#default_llm_model": MagicMock(value="fluffy/l3-8b-stheno-v3.2"),
             "#summarizer_model": MagicMock(value="gemma2"),
             "#local_utility_model": MagicMock(value="phi3"),
-            "#importer_model": MagicMock(value="llama3"),
             "#tts_enabled": MagicMock(value=False),
             "#character_speak": MagicMock(value=True),
             "#speak_narration": MagicMock(value=True),
