@@ -1319,15 +1319,13 @@ def get_respond_stream(user_input: str, profile: dict, profile_path: str = None,
                         break # Finished normally
                         
                     # Process tool calls
-                    if full_reply.strip():
-                        messages.append({"role": "assistant", "content": full_reply})
-                    else:
-                        # Append the tool call message
-                        messages.append({
-                            "role": "assistant", 
-                            "content": "",
-                            "tool_calls": tool_calls_buffer
-                        })
+                    # Append the tool call message, ensuring tool_calls are included
+                    # even if the model also generated text before the tool call
+                    messages.append({
+                        "role": "assistant", 
+                        "content": full_reply.strip(),
+                        "tool_calls": tool_calls_buffer
+                    })
                         
                     for tc in tool_calls_buffer:
                         tc_id = tc.get("id")
