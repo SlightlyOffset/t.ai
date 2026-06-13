@@ -2,7 +2,6 @@ from mcp.server.fastmcp import FastMCP
 import os
 import sys
 import traceback
-from datetime import datetime
 
 # Add project root to sys.path
 project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -15,24 +14,6 @@ import json
 
 mcp = FastMCP("st_importer")
 
-# ---------------------------------------------------------------------------
-# Lightweight logger using stderr (independent of main app's debug_mode setting,
-# since this module runs inside a separate MCP subprocess).
-# ---------------------------------------------------------------------------
-def _log(category: str, detail):
-    """Log to stderr so the main application/client can capture and log it."""
-    try:
-        ts = datetime.now()
-        entry = {
-            "timestamp": ts.strftime("%Y-%m-%d %H:%M:%S"),
-            "category": f"MCP_ST_IMPORTER_{category}",
-            "detail": detail,
-        }
-        sys.stderr.write(json.dumps(entry, ensure_ascii=False, default=str) + "\n")
-        sys.stderr.flush()
-    except Exception:
-        pass  # never crash the tool over logging
-
 
 @mcp.tool()
 def import_st_card(filepath: str, overwrite: bool = False, refine: bool = True) -> str:
@@ -44,41 +25,31 @@ def import_st_card(filepath: str, overwrite: bool = False, refine: bool = True) 
         overwrite: If True, overwrites an existing profile with the same name.
         refine: MUST BE True. If True, uses local AI to properly format the card into the system's native format. Always set this to true to prevent text dumps.
     """
-    _log("CALL", {"filepath": filepath, "overwrite": overwrite, "refine": refine, "cwd": os.getcwd()})
-
     if not os.path.exists(filepath):
-        _log("FILE_NOT_FOUND", {"filepath": filepath})
         return f"Error: File not found at {filepath}"
         
     try:
         # Extract name to see if profile already exists
         data = None
         if filepath.lower().endswith((".png", ".webp")):
-            _log("EXTRACT_PNG", {"filepath": filepath})
             data = CharacterImporter.extract_from_png(filepath)
         elif filepath.lower().endswith(".json"):
-            _log("EXTRACT_JSON", {"filepath": filepath})
             try:
                 with open(filepath, "r", encoding="utf-8") as f:
                     raw_json = json.load(f)
                     data = raw_json.get("data") if "data" in raw_json else raw_json
             except Exception as e:
-                _log("JSON_READ_ERROR", {"filepath": filepath, "error": str(e)})
                 return f"Error reading JSON: {str(e)}"
                 
         if not data or "name" not in data:
-            _log("NO_DATA_OR_NAME", {"filepath": filepath, "data_keys": list(data.keys()) if data else None})
             return f"Error: Could not extract character data or name from {filepath}"
             
         char_name = data["name"]
         safe_name = sanitize_profile_name(char_name)
         target_path = os.path.abspath(os.path.join("profiles", f"{safe_name}.json"))
-        _log("RESOLVED", {"char_name": char_name, "safe_name": safe_name, "target_path": target_path, "exists": os.path.exists(target_path)})
         
         if os.path.exists(target_path) and not overwrite:
-            msg = f"Failed to import character card from {filepath}. It already exists (try overwrite=True)."
-            _log("ALREADY_EXISTS", {"target_path": target_path, "result": msg})
-            return msg
+            return f"Failed to import character card from {filepath}. It already exists (try overwrite=True)."
             
         # Read plugin configuration
         config_path = os.path.join(project_root, "plugins", "mcp_st_importer", "plugin.json")
@@ -88,23 +59,16 @@ def import_st_card(filepath: str, overwrite: bool = False, refine: bool = True) 
                 with open(config_path, "r", encoding="utf-8") as f:
                     cfg = json.load(f)
                     refine_model = cfg.get("refine_model")
-            except Exception as e:
-                _log("CONFIG_READ_ERROR", {"error": str(e)})
+            except Exception:
+                pass
 
-        _log("IMPORT_START", {"filepath": filepath, "refine": refine, "refine_model": refine_model})
         success_path = import_character(filepath, refine=refine, model=refine_model)
         
         if success_path:
-            msg = f"Successfully imported character card from {filepath} to {success_path}"
-            _log("IMPORT_SUCCESS", {"success_path": success_path, "result": msg})
-            return msg
+            return f"Successfully imported character card from {filepath} to {success_path}"
         else:
-            msg = f"Failed to import character card from {filepath}."
-            _log("IMPORT_FAILED", {"result": msg})
-            return msg
+            return f"Failed to import character card from {filepath}."
     except Exception as e:
-        tb = traceback.format_exc()
-        _log("IMPORT_EXCEPTION", {"error": str(e), "traceback": tb})
         return f"Error importing card: {str(e)}"
 
 def initialize(context):
