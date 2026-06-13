@@ -46,7 +46,7 @@ def import_st_card(filepath: str, overwrite: bool = False, refine: bool = True) 
     Args:
         filepath: The absolute path to the .png or .json card file.
         overwrite: If True, overwrites an existing profile with the same name.
-        refine: If True, uses local AI to refine the extracted fields.
+        refine: MUST BE True. If True, uses local AI to properly format the card into the system's native format. Always set this to true to prevent text dumps.
     """
     _log("CALL", {"filepath": filepath, "overwrite": overwrite, "refine": refine, "cwd": os.getcwd()})
 
