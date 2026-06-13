@@ -119,7 +119,7 @@ Open your local `settings.json` and paste the generated URLs:
 
 ### VRAM & Model Recommendations (e.g., 6GB VRAM GPUs)
 Running 8B parameter models with tool-calling capabilities alongside OS desktop overhead can exceed VRAM limits, causing **VRAM spillover** into system RAM (Shared memory) and slowing down token generation speeds to a crawl.
-* **Recommended Utility Model**: For background tasks (like character card imports and refinements), set `local_utility_model` in `settings.json` to **`qwen2.5:3b`**. At ~2.2 GB, it fits entirely on the GPU (leaving room for Windows desktop overhead) and has excellent tool-calling and JSON extraction precision.
+* **Recommended Utility Model**: For background tasks (like character card imports and refinements), set `refine_model` in **Settings > Plugins > mcp_st_importer** to **`qwen2.5:3b`**. At ~2.2 GB, it fits entirely on the GPU (leaving room for Windows desktop overhead) and has excellent tool-calling and JSON extraction precision.
 * **Hermes 3 (8B)**: If you prefer Hermes 3, pull the 3-bit version to avoid VRAM spillover: `ollama pull hermes3:8b-q3_K_M`.
 * **Uncensored Options**: If you need a fully uncensored utility model, use `hermes3:8b-q3_K_M` or a Dolphin fine-tune.
 * **VRAM Optimization Settings**:
