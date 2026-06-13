@@ -122,6 +122,10 @@ Running 8B parameter models with tool-calling capabilities alongside OS desktop 
 * **Recommended Utility Model**: For background tasks (like character card imports and refinements), set `local_utility_model` in `settings.json` to **`qwen2.5:3b`**. At ~2.2 GB, it fits entirely on the GPU (leaving room for Windows desktop overhead) and has excellent tool-calling and JSON extraction precision.
 * **Hermes 3 (8B)**: If you prefer Hermes 3, pull the 3-bit version to avoid VRAM spillover: `ollama pull hermes3:8b-q3_K_M`.
 * **Uncensored Options**: If you need a fully uncensored utility model, use `hermes3:8b-q3_K_M` or a Dolphin fine-tune.
+* **VRAM Optimization Settings**:
+  * Set `"unload_tts_after_generation": true` in `settings.json` (or via **Settings > TTS / Audio > Auto-Unload Local TTS**) to automatically unload local XTTS models from GPU memory immediately after audio generation, freeing VRAM for the LLM.
+  * Set `"max_input_tokens"` (e.g., `4096` or `6200`) in `settings.json` (or via **Settings > Default Backend > Max Context Tokens**) to cap context-window usage and prevent massive prompt payloads from causing OOM or spillover.
+  * Set `"local_llm_keep_alive": "5m"` (or set to `"0"` to unload immediately) to manage how long Ollama caches models in VRAM.
 
 ---
 
@@ -207,6 +211,9 @@ Edit `settings.json` to customize your experience:
 * `image_protocol`: Choose avatar rendering protocol (`auto`, `kitty`, `sixel`, `blocky`).
 * `auto_recap_on_start`: Let the AI summarize the previous chat context upon booting.
 * `privacy_mode`: Redact sensitive information from being sent to remote LLMs.
+* `max_input_tokens`: Maximum context window length in tokens sent to the LLM (default `6200`).
+* `local_llm_keep_alive`: Ollama model keep-alive duration (e.g. `"5m"`, or `"0"` to unload immediately).
+* `unload_tts_after_generation`: Auto-unload the local XTTS model from VRAM after generating speech (default `false`).
 
 ---
 
