@@ -1374,6 +1374,23 @@ class TaiMenu(App):
         self.remount_all_image_bubbles()
         self.update_highlight_themes()
 
+        # Dynamic MCP Connection Management
+        try:
+            mcp_enabled = result.get("mcp_enabled", False)
+            import threading
+            from engines.mcp_client import mcp_manager
+            
+            def manage_mcp_connections():
+                if mcp_enabled:
+                    mcp_manager.load_server_configs()
+                    mcp_manager.connect_all()
+                else:
+                    mcp_manager.disconnect_all()
+            
+            threading.Thread(target=manage_mcp_connections, daemon=True, name="SettingsMCPManagerThread").start()
+        except Exception:
+            pass
+
     def compose(self) -> ComposeResult:
         self._current_char_avatar_path, self._current_user_avatar_path = get_initial_avatar_paths(
             self.char_path,

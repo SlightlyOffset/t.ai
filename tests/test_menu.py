@@ -810,5 +810,60 @@ class TestMenu(unittest.TestCase):
         mock_set_active_session.assert_called_with("Elena", "default")
         app.reload_chat_list_for_session.assert_called_with("default")
 
+    @patch('engines.mcp_client.mcp_manager')
+    @patch('threading.Thread')
+    def test_on_settings_saved_dynamic_mcp_enabled(self, mock_thread_cls, mock_mcp_manager):
+        """Test that saving settings with MCP enabled triggers load_server_configs and connect_all."""
+        from ui.menu import TaiMenu
+        
+        # Configure mock Thread to run target immediately and synchronously
+        mock_thread = MagicMock()
+        mock_thread_cls.return_value = mock_thread
+        
+        def mock_start():
+            # Call the target function directly
+            target = mock_thread_cls.call_args[1].get('target')
+            target()
+        mock_thread.start.side_effect = mock_start
+
+        # Create mock TaiMenu app
+        app = MagicMock(spec=TaiMenu)
+        app.character_profile = {}
+        app.on_settings_saved = TaiMenu.on_settings_saved.__get__(app, TaiMenu)
+
+        # Call with mcp_enabled = True
+        app.on_settings_saved({"mcp_enabled": True})
+
+        # Assertions
+        mock_mcp_manager.load_server_configs.assert_called_once()
+        mock_mcp_manager.connect_all.assert_called_once()
+        mock_mcp_manager.disconnect_all.assert_not_called()
+
+    @patch('engines.mcp_client.mcp_manager')
+    @patch('threading.Thread')
+    def test_on_settings_saved_dynamic_mcp_disabled(self, mock_thread_cls, mock_mcp_manager):
+        """Test that saving settings with MCP disabled triggers disconnect_all."""
+        from ui.menu import TaiMenu
+        
+        mock_thread = MagicMock()
+        mock_thread_cls.return_value = mock_thread
+        
+        def mock_start():
+            target = mock_thread_cls.call_args[1].get('target')
+            target()
+        mock_thread.start.side_effect = mock_start
+
+        app = MagicMock(spec=TaiMenu)
+        app.character_profile = {}
+        app.on_settings_saved = TaiMenu.on_settings_saved.__get__(app, TaiMenu)
+
+        # Call with mcp_enabled = False
+        app.on_settings_saved({"mcp_enabled": False})
+
+        # Assertions
+        mock_mcp_manager.disconnect_all.assert_called_once()
+        mock_mcp_manager.load_server_configs.assert_not_called()
+        mock_mcp_manager.connect_all.assert_not_called()
+
 if __name__ == "__main__":
     unittest.main()
