@@ -728,6 +728,7 @@ def _perform_post_processing(
     candidate_metrics: list,
     critic_applied: bool,
     post_process_callback=None,
+    interaction_mode: str = "rp",
 ):
     """Handles background tasks like sentiment scoring and saving history."""
     try:
@@ -752,22 +753,23 @@ def _perform_post_processing(
 
         new_scene = current_scene
 
-        # Parse for scene updates
-        scene_match = re.search(r'\[SCENE:\s*(.*?)\]', reply)
-        if scene_match:
-            new_scene = scene_match.group(1).strip()
-            reply = re.sub(r'\[SCENE:\s*.*?\]', '', reply).strip()
-        else:
-            # Attempt to extract scene dynamically from current turn
-            extracted = extract_scene_from_text(user_input, reply, model=None)
-            if extracted:
-                new_scene = extracted
+        if interaction_mode != "casual":
+            # Parse for scene updates
+            scene_match = re.search(r'\[SCENE:\s*(.*?)\]', reply)
+            if scene_match:
+                new_scene = scene_match.group(1).strip()
+                reply = re.sub(r'\[SCENE:\s*.*?\]', '', reply).strip()
+            else:
+                # Attempt to extract scene dynamically from current turn
+                extracted = extract_scene_from_text(user_input, reply, model=None)
+                if extracted:
+                    new_scene = extracted
 
         # Load history to provide context for sentiment scoring
         full_history = memory_manager.load_history(history_profile_name)
 
         # Score sentiment
-        if is_regeneration:
+        if is_regeneration or interaction_mode == "casual":
             score_change = 0
         else:
             score_change = get_sentiment_score(user_input, None, remote_url, profile, recent_history=full_history)
@@ -974,17 +976,24 @@ def get_respond_stream(user_input: str, profile: dict, profile_path: str = None,
     narrative_plan = None
 
     # Handle Dynamic Scene Context and Memory Core
-    scene_instruction = f"CURRENT SCENE: {current_scene}. Keep this context in mind."
-    if interaction_mode == "rp":
-        scene_instruction += " If the location or activity changes significantly, append [SCENE: new location] at the VERY end of your response."
+    if interaction_mode == "casual":
+        scene_instruction = ""
+        if memory_core:
+            scene_instruction = f"{memory_core}"
+        if activated_lore:
+            scene_instruction = f"{activated_lore}\n\n{scene_instruction}" if scene_instruction else f"{activated_lore}"
+    else:
+        scene_instruction = f"CURRENT SCENE: {current_scene}. Keep this context in mind."
+        if interaction_mode == "rp":
+            scene_instruction += " If the location or activity changes significantly, append [SCENE: new location] at the VERY end of your response."
 
-    if memory_core:
-        # Prepend the Memory Core to provide long-term context
-        scene_instruction = f"{memory_core}\n\n{scene_instruction}"
+        if memory_core:
+            # Prepend the Memory Core to provide long-term context
+            scene_instruction = f"{memory_core}\n\n{scene_instruction}"
 
-    if activated_lore:
-        # Prepend activated lore to provide immediate world/character context
-        scene_instruction = f"{activated_lore}\n\n{scene_instruction}"
+        if activated_lore:
+            # Prepend activated lore to provide immediate world/character context
+            scene_instruction = f"{activated_lore}\n\n{scene_instruction}"
 
     if system_extra_info:
         system_extra_info = f"{scene_instruction}\n{system_extra_info}"
@@ -1436,6 +1445,7 @@ def get_respond_stream(user_input: str, profile: dict, profile_path: str = None,
                 "candidate_metrics": candidate_metrics,
                 "critic_applied": critic_applied,
                 "post_process_callback": post_process_callback,
+                "interaction_mode": interaction_mode,
             },
             daemon=True,
         )

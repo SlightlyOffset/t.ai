@@ -115,11 +115,21 @@ Mannerisms to watch for: {', '.join(user_profile.get('rp_mannerisms', []))}
 """
 
     # 3. Dynamic Context (Relationship and Tone)
-    rel_rule = get_relationship_rule(rel_score)
-    rel_label = rel_rule.get("label", "Neutral")
-    rel_instruction = rel_rule.get("instruction", "") if mode == "rp" else ""
-    
-    system_content = f"""{base_prompt}
+    if mode == "casual":
+        system_content = f"""{base_prompt}
+
+{char_details}
+{user_details}
+
+[CONTEXT]
+Mode: CASUAL
+"""
+    else:
+        rel_rule = get_relationship_rule(rel_score)
+        rel_label = rel_rule.get("label", "Neutral")
+        rel_instruction = rel_rule.get("instruction", "")
+        
+        system_content = f"""{base_prompt}
 
 {char_details}
 {user_details}
