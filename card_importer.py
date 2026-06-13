@@ -20,7 +20,7 @@ def main():
             return
 
         from engines.config import get_setting
-        model = get_setting("local_utility_model", "llama3.2")
+        model = get_setting("importer_model") or get_setting("default_llm_model", "llama3.2")
         refine_choice = input(f"Would you like to run AI refinement using local model '{model}'? (y/n) [n]: ").strip().lower()
         refine = refine_choice in ["y", "yes"]
 
@@ -45,7 +45,7 @@ def main():
         print(Fore.CYAN + f"[SYSTEM] Found {len(files)} potential cards. Starting batch import...")
         
         from engines.config import get_setting
-        model = get_setting("local_utility_model", "llama3.2")
+        model = get_setting("importer_model") or get_setting("default_llm_model", "llama3.2")
         refine_choice = input(f"Would you like to run AI refinement on ALL imported cards using '{model}'? (y/n) [n]: ").strip().lower()
         refine = refine_choice in ["y", "yes"]
 
@@ -86,7 +86,7 @@ def main():
             return
 
         from engines.config import get_setting
-        model = get_setting("local_utility_model", "llama3.2")
+        model = get_setting("importer_model") or get_setting("default_llm_model", "llama3.2")
         print(Fore.CYAN + f"[SYSTEM] Running AI profile refinement on '{profile.get('name', 'Unknown')}' using model '{model}'...")
 
         refined_profile = CharacterImporter.refine_character_profile(profile, model=model)

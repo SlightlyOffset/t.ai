@@ -119,6 +119,7 @@ class SettingsScreen(ModalScreen):
         default_llm_model = settings.get("default_llm_model", "fluffy/l3-8b-stheno-v3.2")
         summarizer_model = settings.get("summarizer_model", "gemma2:2b")
         local_utility_model = settings.get("local_utility_model", "phi3")
+        importer_model = settings.get("importer_model", "")
         memory_limit = str(settings.get("memory_limit", 15))
         repetition_penalty = str(settings.get("repetition_penalty", 1.15))
         max_tokens = str(settings.get("max_tokens", 300))
@@ -215,6 +216,9 @@ class SettingsScreen(ModalScreen):
                         with Horizontal(classes="settings_row"):
                             yield Label("Local Utility Model:", classes="settings_label")
                             yield Input(value=local_utility_model, id="local_utility_model", classes="settings_widget")
+                        with Horizontal(classes="settings_row"):
+                            yield Label("Importer Refine Model:", classes="settings_label")
+                            yield Input(value=importer_model, id="importer_model", classes="settings_widget", placeholder="Leave blank to use default_llm_model")
                         with Horizontal(classes="settings_row"):
                             yield Label("Memory Message Limit:", classes="settings_label")
                             yield Input(value=memory_limit, id="memory_limit", classes="settings_widget")
@@ -457,6 +461,7 @@ class SettingsScreen(ModalScreen):
             "default_llm_model": self.query_one("#default_llm_model", Input).value.strip(),
             "summarizer_model": self.query_one("#summarizer_model", Input).value.strip(),
             "local_utility_model": self.query_one("#local_utility_model", Input).value.strip(),
+            "importer_model": self.query_one("#importer_model", Input).value.strip(),
             "memory_limit": memory_limit,
             "repetition_penalty": repetition_penalty,
             "max_tokens": max_tokens,

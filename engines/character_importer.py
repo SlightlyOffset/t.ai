@@ -195,7 +195,7 @@ class CharacterImporter:
         if not profile:
             return profile
 
-        refine_model = model or get_setting("local_utility_model", "llama3.2")
+        refine_model = model or get_setting("importer_model") or get_setting("default_llm_model", "llama3.2")
         char_name = profile.get("name", "Unknown")
 
         # 1. Gather all raw context from raw_st_data or the profile
@@ -568,7 +568,7 @@ def import_character(source_path, refine=False, model=None):
         # 2. Run AI refinement on top of the saved profile if requested
         if refine:
             from engines.config import get_setting
-            refine_model = model or get_setting("local_utility_model", "llama3.2")
+            refine_model = model or get_setting("importer_model") or get_setting("default_llm_model", "llama3.2")
             print(Fore.CYAN + f"[SYSTEM] Running AI profile refinement using local model '{refine_model}'...")
             
             try:
