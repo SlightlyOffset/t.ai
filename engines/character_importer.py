@@ -198,7 +198,7 @@ class CharacterImporter:
         refine_model = model
         if not refine_model:
             try:
-                config_path = os.path.join("plugins", "mcp_st_importer.json")
+                config_path = os.path.join("plugins", "mcp_st_importer", "plugin.json")
                 if os.path.exists(config_path):
                     with open(config_path, "r", encoding="utf-8") as f:
                         cfg = json.load(f)
@@ -581,7 +581,7 @@ def import_character(source_path, refine=False, model=None):
             refine_model = model
             if not refine_model:
                 try:
-                    config_path = os.path.join("plugins", "mcp_st_importer.json")
+                    config_path = os.path.join("plugins", "mcp_st_importer", "plugin.json")
                     if os.path.exists(config_path):
                         with open(config_path, "r", encoding="utf-8") as f:
                             cfg = json.load(f)

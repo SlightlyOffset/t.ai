@@ -85,7 +85,7 @@ def import_st_card(filepath: str, overwrite: bool = False, refine: bool = True) 
             return msg
             
         # Read plugin configuration
-        config_path = os.path.join(project_root, "plugins", "mcp_st_importer.json")
+        config_path = os.path.join(project_root, "plugins", "mcp_st_importer", "plugin.json")
         refine_model = None
         if os.path.exists(config_path):
             try:
@@ -117,4 +117,3 @@ def initialize(context):
 
 if __name__ == "__main__":
     mcp.run()
-
