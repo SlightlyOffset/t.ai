@@ -16,24 +16,20 @@ import json
 mcp = FastMCP("st_importer")
 
 # ---------------------------------------------------------------------------
-# Lightweight file logger (independent of main app's debug_mode setting,
+# Lightweight logger using stderr (independent of main app's debug_mode setting,
 # since this module runs inside a separate MCP subprocess).
 # ---------------------------------------------------------------------------
-_DEBUG_DIR = os.path.join(project_root, "debug")
-
 def _log(category: str, detail):
-    """Append a JSON-lines entry to debug/debug_YYYYMMDD.log."""
+    """Log to stderr so the main application/client can capture and log it."""
     try:
-        os.makedirs(_DEBUG_DIR, exist_ok=True)
         ts = datetime.now()
         entry = {
             "timestamp": ts.strftime("%Y-%m-%d %H:%M:%S"),
             "category": f"MCP_ST_IMPORTER_{category}",
             "detail": detail,
         }
-        log_path = os.path.join(_DEBUG_DIR, f"debug_{ts.strftime('%Y%m%d')}.log")
-        with open(log_path, "a", encoding="utf-8") as f:
-            f.write(json.dumps(entry, ensure_ascii=False, default=str) + "\n")
+        sys.stderr.write(json.dumps(entry, ensure_ascii=False, default=str) + "\n")
+        sys.stderr.flush()
     except Exception:
         pass  # never crash the tool over logging
 
