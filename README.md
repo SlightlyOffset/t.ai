@@ -109,6 +109,26 @@ Open your local `settings.json` and paste the generated URLs:
 
 ---
 
+## 🛠️ Model Context Protocol (MCP) & Tool Calling
+
+`t.ai` supports the Model Context Protocol (MCP) to allow tool-capable local models (like `Qwen 2.5` or `Hermes 3`) to execute external system tools dynamically during chat.
+
+### Hybrid Command & Tool Architecture
+1. **Deterministic Slash Commands**: Commands like `//import_card <path> [--refine|-r]` execute safely in a background thread to prevent UI freezing, outputting live refinement progress directly inside the TUI console. They work regardless of what chat model you have loaded.
+2. **Conversational Tool Calling**: If your active chat model supports tool-calling, your companion can automatically run tools (e.g. `import_st_card`) conversationally mid-chat when you request it. If the active model does not support tool calling (like `fluffy/l3-8b-stheno-v3.2`), the app automatically intercepts the API rejection and transparently falls back to regular text generation without crashing.
+
+### VRAM & Model Recommendations (e.g., 6GB VRAM GPUs)
+Running 8B parameter models with tool-calling capabilities alongside OS desktop overhead can exceed VRAM limits, causing **VRAM spillover** into system RAM (Shared memory) and slowing down token generation speeds to a crawl.
+* **Recommended Utility Model**: For background tasks (like character card imports and refinements), set `refine_model` in **Settings > Plugins > mcp_st_importer** to **`qwen2.5:3b`**. At ~2.2 GB, it fits entirely on the GPU (leaving room for Windows desktop overhead) and has excellent tool-calling and JSON extraction precision.
+* **Hermes 3 (8B)**: If you prefer Hermes 3, pull the 3-bit version to avoid VRAM spillover: `ollama pull hermes3:8b-q3_K_M`.
+* **Uncensored Options**: If you need a fully uncensored utility model, use `hermes3:8b-q3_K_M` or a Dolphin fine-tune.
+* **VRAM Optimization Settings**:
+  * Set `"unload_tts_after_generation": true` in `settings.json` (or via **Settings > TTS / Audio > Auto-Unload Local TTS**) to automatically unload local XTTS models from GPU memory immediately after audio generation, freeing VRAM for the LLM.
+  * Set `"max_input_tokens"` (e.g., `4096` or `6200`) in `settings.json` (or via **Settings > Default Backend > Max Context Tokens**) to cap context-window usage and prevent massive prompt payloads from causing OOM or spillover.
+  * Set `"local_llm_keep_alive": "5m"` (or set to `"0"` to unload immediately) to manage how long Ollama caches models in VRAM.
+
+---
+
 ## 🔒 Security & Privacy
 
 * **Privacy-First Design**: Mandatory HTTPS for remote services and secure masking of API tokens/sensitive keys in the UI.
@@ -191,6 +211,9 @@ Edit `settings.json` to customize your experience:
 * `image_protocol`: Choose avatar rendering protocol (`auto`, `kitty`, `sixel`, `blocky`).
 * `auto_recap_on_start`: Let the AI summarize the previous chat context upon booting.
 * `privacy_mode`: Redact sensitive information from being sent to remote LLMs.
+* `max_input_tokens`: Maximum context window length in tokens sent to the LLM (default `6200`).
+* `local_llm_keep_alive`: Ollama model keep-alive duration (e.g. `"5m"`, or `"0"` to unload immediately).
+* `unload_tts_after_generation`: Auto-unload the local XTTS model from VRAM after generating speech (default `false`).
 
 ---
 

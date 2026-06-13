@@ -40,6 +40,7 @@ def iterate_response_events(
     is_regeneration: bool = False,
     user_name: str = "User",
     post_process_callback = None,
+    tool_call_handler = None,
 ):
     """
     Yield response streaming events decoupled from UI concerns.
@@ -64,6 +65,7 @@ def iterate_response_events(
         is_regeneration=is_regeneration,
         user_name=user_name,
         post_process_callback=post_process_callback,
+        tool_call_handler=tool_call_handler,
     )
 
     while True:
@@ -71,6 +73,10 @@ def iterate_response_events(
         if stream_active:
             try:
                 chunk = next(stream_iterator)
+                if isinstance(chunk, dict):
+                    yield chunk
+                    continue
+                    
                 target_text += chunk
                 current_buffer += chunk
                 execute_hooks("on_llm_chunk", {"chunk": chunk, "full_response": target_text})

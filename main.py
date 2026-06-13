@@ -25,7 +25,8 @@ def ensure_directories():
         "template",
         "response_rule",
         "lorebooks",
-        "plugins"
+        "plugins",
+        "mcp_servers"
     ]
     for directory in required_dirs:
         if not os.path.exists(directory):

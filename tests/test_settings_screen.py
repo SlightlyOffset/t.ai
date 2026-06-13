@@ -44,7 +44,7 @@ class TestSettingsScreen(unittest.TestCase):
             "#image_size": MagicMock(value="medium"),
             "#suppress_errors": MagicMock(value=True),
             "#default_llm_model": MagicMock(value="fluffy/l3-8b-stheno-v3.2"),
-            "#summarizer_model": MagicMock(value="gemma2:2b"),
+            "#summarizer_model": MagicMock(value="gemma2"),
             "#local_utility_model": MagicMock(value="phi3"),
             "#tts_enabled": MagicMock(value=False),
             "#character_speak": MagicMock(value=True),
@@ -54,6 +54,7 @@ class TestSettingsScreen(unittest.TestCase):
             "#narration_tts_voice": MagicMock(value="en-US-AndrewNeural"),
             "#show_tts_engine": MagicMock(value=True),
             "#privacy_mode": MagicMock(value=False),
+            "#mcp_enabled": MagicMock(value=False),
             "#debug_mode": MagicMock(value=False),
             "#execute_command": MagicMock(value=False),
             "#overhaul_pipeline_enabled": MagicMock(value=True),
@@ -64,6 +65,9 @@ class TestSettingsScreen(unittest.TestCase):
             "#overhaul_candidates_enabled": MagicMock(value=False),
             "#overhaul_critic_enabled": MagicMock(value=False),
             "#overhaul_style_profile": MagicMock(value="balanced"),
+            "#max_input_tokens": MagicMock(value="6200"),
+            "#local_llm_keep_alive": MagicMock(value="5m"),
+            "#unload_tts_after_generation": MagicMock(value=False),
             "#settings_error": MagicMock()
         }
 

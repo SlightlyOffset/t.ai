@@ -124,7 +124,7 @@ def get_or_create_optimized_image(image_path_or_url: str, max_dim: int = 800) ->
             img.verify()
     except Exception:
         # Invalid image file (corrupted or unreadable)
-        if local_path.startswith(CACHE_DIR):
+        if os.path.normcase(local_path).startswith(os.path.normcase(CACHE_DIR)):
             try:
                 os.remove(local_path)
             except Exception:

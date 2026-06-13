@@ -15,6 +15,11 @@ class TestResponsesPipeline(unittest.TestCase):
                 mock_self._target(*mock_self._args, **mock_self._kwargs)
                 
         self.mock_thread_start.side_effect = run_sync
+        
+        # Clear the model tool support cache to ensure test independence
+        import engines.responses
+        if hasattr(engines.responses, "_MODEL_TOOL_SUPPORT_CACHE"):
+            engines.responses._MODEL_TOOL_SUPPORT_CACHE.clear()
 
     def tearDown(self):
         self.thread_patcher.stop()
@@ -563,6 +568,203 @@ class TestResponsesPipeline(unittest.TestCase):
 
         result_chunks = list(get_respond_stream("Hi", profile, history_profile_name="test_profile"))
         self.assertEqual(result_chunks, ["Hello ", "world!"])
+
+    @patch("engines.responses.requests.post")
+    @patch("engines.responses.get_setting")
+    def test_ollama_chat_compat_tool_calling_fallback(self, mock_get_setting, mock_post):
+        # Setup configs
+        def get_setting_mock(key, default=None):
+            if key == "local_llm_url":
+                return "http://127.0.0.1:11434/v1"
+            if key == "debug_mode":
+                return True
+            return default
+        mock_get_setting.side_effect = get_setting_mock
+        
+        # Test non-streaming error recovery (HTTP 400 with tools -> retries without tools)
+        import requests
+        mock_response_fail = MagicMock()
+        mock_response_fail.status_code = 400
+        mock_response_fail.raise_for_status.side_effect = requests.exceptions.HTTPError("Bad Request", response=mock_response_fail)
+        
+        mock_response_success = MagicMock()
+        mock_response_success.status_code = 200
+        mock_response_success.json.return_value = {
+            "choices": [{"message": {"role": "assistant", "content": "Success content without tools"}}]
+        }
+        
+        mock_post.side_effect = [mock_response_fail, mock_response_success]
+        
+        from engines.responses import _ollama_chat_compat
+        
+        result = _ollama_chat_compat(
+            model="test-model",
+            messages=[{"role": "user", "content": "test"}],
+            stream=False,
+            tools=[{"type": "function", "function": {"name": "test_tool"}}]
+        )
+        
+        self.assertEqual(result["message"]["content"], "Success content without tools")
+        self.assertEqual(mock_post.call_count, 2)
+        # First call has tools
+        self.assertIn("tools", mock_post.call_args_list[0].kwargs["json"])
+        # Second call does not have tools
+        self.assertNotIn("tools", mock_post.call_args_list[1].kwargs["json"])
+        messages = mock_post.call_args_list[1].kwargs["json"]["messages"]
+        self.assertEqual(messages[-1]["role"], "system")
+        self.assertIn("tool-calling interface is unsupported", messages[-1]["content"])
+
+    @patch("engines.responses.requests.post")
+    @patch("engines.responses.get_setting")
+    def test_ollama_chat_compat_stream_tool_calling_fallback(self, mock_get_setting, mock_post):
+        def get_setting_mock(key, default=None):
+            if key == "local_llm_url":
+                return "http://127.0.0.1:11434/v1"
+            if key == "debug_mode":
+                return True
+            return default
+        mock_get_setting.side_effect = get_setting_mock
+        
+        # Test streaming error recovery
+        import requests
+        mock_response_fail = MagicMock()
+        mock_response_fail.status_code = 400
+        mock_response_fail.raise_for_status.side_effect = requests.exceptions.HTTPError("Bad Request", response=mock_response_fail)
+        
+        mock_response_success = MagicMock()
+        mock_response_success.status_code = 200
+        # Mock generator/iterator for SSE stream
+        mock_response_success.iter_lines.return_value = [
+            'data: {"choices": [{"delta": {"content": "Stream chunk"}}]}'
+        ]
+        
+        mock_post.side_effect = [mock_response_fail, mock_response_success]
+        
+        from engines.responses import _ollama_chat_compat
+        
+        generator = _ollama_chat_compat(
+            model="test-model",
+            messages=[{"role": "user", "content": "test"}],
+            stream=True,
+            tools=[{"type": "function", "function": {"name": "test_tool"}}]
+        )
+        
+        chunks = list(generator)
+        self.assertEqual(chunks[0]["message"]["content"], "Stream chunk")
+        self.assertEqual(mock_post.call_count, 2)
+        self.assertIn("tools", mock_post.call_args_list[0].kwargs["json"])
+        self.assertNotIn("tools", mock_post.call_args_list[1].kwargs["json"])
+        messages = mock_post.call_args_list[1].kwargs["json"]["messages"]
+        self.assertEqual(messages[-1]["role"], "system")
+        self.assertIn("tool-calling interface is unsupported", messages[-1]["content"])
+
+    @patch("engines.responses.requests.post")
+    @patch("engines.responses.get_setting")
+    def test_ollama_chat_compat_tool_calling_caching(self, mock_get_setting, mock_post):
+        # Setup configs
+        def get_setting_mock(key, default=None):
+            if key == "local_llm_url":
+                return "http://127.0.0.1:11434/v1"
+            return default
+        mock_get_setting.side_effect = get_setting_mock
+        
+        import requests
+        # First call fails with 400
+        mock_response_fail = MagicMock()
+        mock_response_fail.status_code = 400
+        mock_response_fail.raise_for_status.side_effect = requests.exceptions.HTTPError("Bad Request", response=mock_response_fail)
+        
+        # Second call succeeds
+        mock_response_success = MagicMock()
+        mock_response_success.status_code = 200
+        mock_response_success.json.return_value = {
+            "choices": [{"message": {"role": "assistant", "content": "Success content 1"}}]
+        }
+        
+        # Third call succeeds (subsequent call to the cached unsupported model)
+        mock_response_success_2 = MagicMock()
+        mock_response_success_2.status_code = 200
+        mock_response_success_2.json.return_value = {
+            "choices": [{"message": {"role": "assistant", "content": "Success content 2"}}]
+        }
+        
+        mock_post.side_effect = [mock_response_fail, mock_response_success, mock_response_success_2]
+        
+        from engines.responses import _ollama_chat_compat, _MODEL_TOOL_SUPPORT_CACHE
+        
+        # Call 1 (should fail -> fallback -> success)
+        result1 = _ollama_chat_compat(
+            model="cached-unsupported-model",
+            messages=[{"role": "user", "content": "test"}],
+            stream=False,
+            tools=[{"type": "function", "function": {"name": "test_tool"}}]
+        )
+        self.assertEqual(result1["message"]["content"], "Success content 1")
+        self.assertEqual(mock_post.call_count, 2)
+        self.assertFalse(_MODEL_TOOL_SUPPORT_CACHE.get("cached-unsupported-model", True))
+        
+        # Call 2 (should be cached as unsupported, so it shouldn't send tools at all, hence only 1 call to requests.post)
+        result2 = _ollama_chat_compat(
+            model="cached-unsupported-model",
+            messages=[{"role": "user", "content": "test"}],
+            stream=False,
+            tools=[{"type": "function", "function": {"name": "test_tool"}}]
+        )
+        self.assertEqual(result2["message"]["content"], "Success content 2")
+        self.assertEqual(mock_post.call_count, 3) # 2 from before + 1 new call
+        
+        # Verify that tools was not in the payload of the last call
+        last_call_json = mock_post.call_args_list[-1].kwargs["json"]
+        self.assertNotIn("tools", last_call_json)
+        self.assertEqual(last_call_json["messages"][-1]["role"], "system")
+        self.assertIn("tool-calling interface is unsupported", last_call_json["messages"][-1]["content"])
+
+    def test_tool_result_annotation_success(self):
+        """Verify that successful tool results are prefixed with [TOOL RESULT - SUCCESS]."""
+        import json
+        # Plain text success
+        result = "Successfully imported character card from cards/lyrei.png to profiles/Lyrei.json"
+        _is_tool_error = False
+        try:
+            parsed = json.loads(result)
+            _is_tool_error = "error" in parsed
+        except (json.JSONDecodeError, TypeError):
+            _is_tool_error = result.lower().startswith(("error", "failed"))
+
+        self.assertFalse(_is_tool_error)
+        annotated = f"[TOOL RESULT - {'ERROR' if _is_tool_error else 'SUCCESS'}]\n{result}"
+        self.assertTrue(annotated.startswith("[TOOL RESULT - SUCCESS]"))
+        self.assertIn(result, annotated)
+
+    def test_tool_result_annotation_error_json(self):
+        """Verify that JSON error tool results are prefixed with [TOOL RESULT - ERROR]."""
+        import json
+        result = json.dumps({"error": "Tool execution returned an error."})
+        _is_tool_error = False
+        try:
+            parsed = json.loads(result)
+            _is_tool_error = "error" in parsed
+        except (json.JSONDecodeError, TypeError):
+            _is_tool_error = result.lower().startswith(("error", "failed"))
+
+        self.assertTrue(_is_tool_error)
+        annotated = f"[TOOL RESULT - {'ERROR' if _is_tool_error else 'SUCCESS'}]\n{result}"
+        self.assertTrue(annotated.startswith("[TOOL RESULT - ERROR]"))
+
+    def test_tool_result_annotation_error_plaintext(self):
+        """Verify that plain-text error/failed results are prefixed with [TOOL RESULT - ERROR]."""
+        import json
+        for result in ["Error importing card: some exception", "Failed to import character card from foo.png."]:
+            _is_tool_error = False
+            try:
+                parsed = json.loads(result)
+                _is_tool_error = "error" in parsed
+            except (json.JSONDecodeError, TypeError):
+                _is_tool_error = result.lower().startswith(("error", "failed"))
+
+            self.assertTrue(_is_tool_error, f"Expected error detection for: {result}")
+            annotated = f"[TOOL RESULT - {'ERROR' if _is_tool_error else 'SUCCESS'}]\n{result}"
+            self.assertTrue(annotated.startswith("[TOOL RESULT - ERROR]"))
 
 
 if __name__ == "__main__":

@@ -122,6 +122,8 @@ class SettingsScreen(ModalScreen):
         memory_limit = str(settings.get("memory_limit", 15))
         repetition_penalty = str(settings.get("repetition_penalty", 1.15))
         max_tokens = str(settings.get("max_tokens", 300))
+        max_input_tokens = str(settings.get("max_input_tokens", 6200))
+        local_llm_keep_alive = str(settings.get("local_llm_keep_alive", "5m"))
 
         tts_enabled = settings.get("tts_enabled", False)
         character_speak = settings.get("character_speak", True)
@@ -131,11 +133,13 @@ class SettingsScreen(ModalScreen):
         narration_tts_voice = settings.get("narration_tts_voice", "en-US-AndrewNeural")
         tts_rate = str(settings.get("tts_rate", 170))
         show_tts_engine = settings.get("show_tts_engine", True)
+        unload_tts_after_generation = settings.get("unload_tts_after_generation", False)
 
         remote_llm_url = settings.get("remote_llm_url") or ""
         remote_tts_url = settings.get("remote_tts_url") or ""
         local_llm_url = settings.get("local_llm_url") or ""
         privacy_mode = settings.get("privacy_mode", False)
+        mcp_enabled = settings.get("mcp_enabled", False)
 
         debug_mode = settings.get("debug_mode", False)
         execute_command = settings.get("execute_command", False)
@@ -223,6 +227,12 @@ class SettingsScreen(ModalScreen):
                         with Horizontal(classes="settings_row"):
                             yield Label("Max Response Tokens:", classes="settings_label")
                             yield Input(value=max_tokens, id="max_tokens", classes="settings_widget")
+                        with Horizontal(classes="settings_row"):
+                            yield Label("Max Context Tokens:", classes="settings_label")
+                            yield Input(value=max_input_tokens, id="max_input_tokens", classes="settings_widget")
+                        with Horizontal(classes="settings_row"):
+                            yield Label("Ollama Keep-Alive:", classes="settings_label")
+                            yield Input(value=local_llm_keep_alive, id="local_llm_keep_alive", classes="settings_widget")
 
                 with TabPane("TTS / Audio", id="tab_tts"):
                     with VerticalScroll(classes="settings_pane"):
@@ -265,6 +275,9 @@ class SettingsScreen(ModalScreen):
                         with Horizontal(classes="settings_row"):
                             yield Label("Show TTS Engine Selector:", classes="settings_label")
                             yield Switch(value=show_tts_engine, id="show_tts_engine", classes="settings_widget")
+                        with Horizontal(classes="settings_row"):
+                            yield Label("Auto-Unload Local TTS:", classes="settings_label")
+                            yield Switch(value=unload_tts_after_generation, id="unload_tts_after_generation", classes="settings_widget")
 
                 with TabPane("Cloud Tunnel", id="tab_cloud"):
                     with VerticalScroll(classes="settings_pane"):
@@ -283,6 +296,9 @@ class SettingsScreen(ModalScreen):
                         with Horizontal(classes="settings_row"):
                             yield Label("Debug Mode:", classes="settings_label")
                             yield Switch(value=debug_mode, id="debug_mode", classes="settings_widget")
+                        with Horizontal(classes="settings_row"):
+                            yield Label("Enable MCP (Tool Calling):", classes="settings_label")
+                            yield Switch(value=mcp_enabled, id="mcp_enabled", classes="settings_widget")
                         with Horizontal(classes="settings_row"):
                             yield Label("Allow Command Execution:", classes="settings_label")
                             yield Switch(value=execute_command, id="execute_command", classes="settings_widget")
@@ -439,6 +455,16 @@ class SettingsScreen(ModalScreen):
             self.show_error("Overhaul Candidate Count must be a positive integer.")
             return
 
+        try:
+            max_input_tokens = int(self.query_one("#max_input_tokens", Input).value.strip())
+            if max_input_tokens <= 0:
+                raise ValueError()
+        except ValueError:
+            self.show_error("Max Context Tokens must be a positive integer.")
+            return
+
+        local_llm_keep_alive = self.query_one("#local_llm_keep_alive", Input).value.strip()
+
         # 2. Build updated settings dict
         updated_settings = {
             "interaction_mode": self.query_one("#interaction_mode", Select).value,
@@ -456,6 +482,8 @@ class SettingsScreen(ModalScreen):
             "memory_limit": memory_limit,
             "repetition_penalty": repetition_penalty,
             "max_tokens": max_tokens,
+            "max_input_tokens": max_input_tokens,
+            "local_llm_keep_alive": local_llm_keep_alive,
 
             "tts_enabled": self.query_one("#tts_enabled", Switch).value,
             "character_speak": self.query_one("#character_speak", Switch).value,
@@ -465,11 +493,13 @@ class SettingsScreen(ModalScreen):
             "narration_tts_voice": self.query_one("#narration_tts_voice", Select).value,
             "tts_rate": tts_rate,
             "show_tts_engine": self.query_one("#show_tts_engine", Switch).value,
+            "unload_tts_after_generation": self.query_one("#unload_tts_after_generation", Switch).value,
 
             "remote_llm_url": remote_llm or None,
             "remote_tts_url": remote_tts or None,
             "local_llm_url": local_llm or None,
             "privacy_mode": self.query_one("#privacy_mode", Switch).value,
+            "mcp_enabled": self.query_one("#mcp_enabled", Switch).value,
 
             "debug_mode": self.query_one("#debug_mode", Switch).value,
             "execute_command": self.query_one("#execute_command", Switch).value,

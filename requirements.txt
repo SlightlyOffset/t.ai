@@ -8,3 +8,4 @@ pyttsx3
 python-dotenv
 Pillow
 pytest
+mcp>=1.0.0

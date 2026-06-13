@@ -250,3 +250,31 @@ Label {
     border: none;
     padding: 0 1;
 }
+
+ToolApproval {
+    height: auto;
+    padding: 1 2;
+    margin: 1 0;
+}
+
+ToolApproval Label {
+    margin-bottom: 1;
+    width: 100%;
+    height: auto;
+}
+
+ToolApproval Horizontal {
+    height: auto;
+    margin-top: 1;
+    margin-bottom: 1;
+}
+
+ToolApproval Button {
+    margin-right: 2;
+}
+
+ToolApproval Checkbox {
+    margin-top: 1;
+    width: 100%;
+    height: auto;
+}

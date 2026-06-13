@@ -23,6 +23,42 @@ from textual.containers import Vertical, Horizontal, ScrollableContainer
 from textual import work, events
 from textual.reactive import reactive
 from textual.message import Message
+from textual.widgets import Checkbox
+
+class ToolApproval(Vertical):
+    """Widget to request user approval for an MCP tool call."""
+    def __init__(self, server_name: str, tool_name: str, args: dict, event: threading.Event, state: dict, **kwargs):
+        super().__init__(**kwargs)
+        self.server_name = server_name
+        self.tool_name = tool_name
+        self.args = args
+        self.event = event
+        self.state = state
+
+    def compose(self):
+        yield Label(f"🛠️ [bold]Tool Request:[/bold] {self.server_name} / {self.tool_name}")
+        yield Label(f"[dim]Args: {json.dumps(self.args, indent=2)}[/dim]")
+        with Horizontal():
+            yield Button("✅ Approve", id="approve", variant="success")
+            yield Button("❌ Deny", id="deny", variant="error")
+        yield Checkbox("Always auto-approve this server", id="always_approve")
+
+    def on_button_pressed(self, event):
+        if event.button.id == "approve":
+            self.state["approved"] = True
+            always = self.query_one("#always_approve", Checkbox).value
+            if always:
+                from engines.mcp_client import mcp_manager
+                mcp_manager.update_auto_approve(self.server_name, True)
+        else:
+            self.state["approved"] = False
+            self.state["result"] = json.dumps({"error": "User denied the tool call."})
+        
+        self.event.set()
+        if self.parent and isinstance(self.parent, Horizontal) and "message_row" in self.parent.classes:
+            self.parent.remove()
+        else:
+            self.remove()
 
 # First-party imports
 from engines.app_commands import RestartRequested, normalize_command_prefix
@@ -1268,7 +1304,8 @@ class TaiMenu(App):
 
         has_history = memory_manager.has_history(self.history_profile_name) and memory_manager.get_history_length(self.history_profile_name) > 0
         if not has_history:
-            self.print_starter_message()
+            if get_setting("interaction_mode", "rp") != "casual":
+                self.print_starter_message()
         else:
             self.reload_chat_from_history()
 
@@ -1336,6 +1373,23 @@ class TaiMenu(App):
         self.update_sidebar()
         self.remount_all_image_bubbles()
         self.update_highlight_themes()
+
+        # Dynamic MCP Connection Management
+        try:
+            mcp_enabled = result.get("mcp_enabled", False)
+            import threading
+            from engines.mcp_client import mcp_manager
+            
+            def manage_mcp_connections():
+                if mcp_enabled:
+                    mcp_manager.load_server_configs()
+                    mcp_manager.connect_all()
+                else:
+                    mcp_manager.disconnect_all()
+            
+            threading.Thread(target=manage_mcp_connections, daemon=True, name="SettingsMCPManagerThread").start()
+        except Exception:
+            pass
 
     def compose(self) -> ComposeResult:
         self._current_char_avatar_path, self._current_user_avatar_path = get_initial_avatar_paths(
@@ -1703,6 +1757,7 @@ class TaiMenu(App):
             if val is not None:
                 if update_setting("interaction_mode", val):
                     self.add_message(f"Interaction mode set to [bold]{val.upper()}[/bold]", role="system")
+                    self.handle_interaction_mode_change(val)
                 else:
                     self.add_message(f"Failed to set interaction mode to [bold]{val.upper()}[/bold]", role="system")
             else:
@@ -1718,6 +1773,39 @@ class TaiMenu(App):
                         event.select.value = Select.NULL
                     except Exception:
                         pass
+
+    def handle_interaction_mode_change(self, new_mode: str) -> None:
+        """Handles switching conversation sessions when the interaction mode changes."""
+        if not self.history_profile_name:
+            return
+
+        from engines.config import get_active_session, set_active_session
+        from engines.utilities import sanitize_profile_name
+        
+        current_session = get_active_session(self.history_profile_name)
+        safe_char = sanitize_profile_name(self.history_profile_name)
+        
+        if new_mode == "casual":
+            if current_session != "casual":
+                # Save current session as the last RP session
+                update_setting(f"last_rp_session_{safe_char}", current_session)
+                
+                # Ensure casual session exists (initially empty)
+                if not memory_manager.has_history(self.history_profile_name, "casual"):
+                    memory_manager.save_history(self.history_profile_name, [], session_name="casual")
+                
+                # Switch to casual session
+                set_active_session(self.history_profile_name, "casual")
+                self.reload_chat_list_for_session("casual")
+        else: # rp mode
+            if current_session == "casual":
+                last_rp = get_setting(f"last_rp_session_{safe_char}", "default")
+                if last_rp == "casual":
+                    last_rp = "default"
+                
+                # Switch back to last RP session
+                set_active_session(self.history_profile_name, last_rp)
+                self.reload_chat_list_for_session(last_rp)
 
     def populate_image_protocols(self) -> None:
         """Populate image protocol selection and sync current setting."""
@@ -1756,6 +1844,14 @@ class TaiMenu(App):
             if generate_audio(text, temp_filename, voice=voice, engine=engine, clone_ref=clone_ref, language=language, user_name=user_name):
                 self.audio_file_queue.put(temp_filename)
             self.tts_text_queue.task_done()
+            
+            # Auto-unload local XTTS model if queue is empty and VRAM setting is enabled
+            if self.tts_text_queue.empty() and get_setting("unload_tts_after_generation", False):
+                try:
+                    from engines.xtts_local import XTTSWorker
+                    XTTSWorker().unload_model()
+                except Exception:
+                    pass
 
     def tts_playback_worker(self) -> None:
         """Worker thread for playing TTS audio files."""
@@ -1768,6 +1864,8 @@ class TaiMenu(App):
     def print_starter_message(self) -> None:
         """Prints starter messages to the chat list and extracts the initial scene in the background."""
         self._visible_message_count = 0
+        if get_setting("interaction_mode", "rp") == "casual":
+            return
         if not self.character_profile:
             return
         starter_messages = list(self.character_profile.get("starter_messages", []))
@@ -1906,7 +2004,7 @@ class TaiMenu(App):
                     new_messages_to_sum,
                     user_name=self.user_name,
                     char_name=self.ch_name,
-                    model=char_model,
+                    model=None,
                 )
                 # Persist the update
                 new_last_index = len(older_history)
@@ -1914,7 +2012,7 @@ class TaiMenu(App):
             else:
                 summary = existing_core
         else:
-            summary = generate_recap_summary(older_history, user_name=self.user_name, char_name=self.ch_name, model=char_model)
+            summary = generate_recap_summary(older_history, user_name=self.user_name, char_name=self.ch_name, model=None)
             # Save the initial memory core
             new_last_index = len(older_history)
             memory_manager.update_memory_core(self.history_profile_name, summary, new_last_index)
@@ -2015,7 +2113,8 @@ class TaiMenu(App):
         # Only do this if the history doesn't exist yet, to avoid repeating starter messages on every launch
         has_history = memory_manager.has_history(self.history_profile_name) and memory_manager.get_history_length(self.history_profile_name) > 0
         if not has_history:
-            self.print_starter_message()
+            if get_setting("interaction_mode", "rp") != "casual":
+                self.print_starter_message()
 
         # Run a history recap on startup only when enabled and prior history exists.
         if get_setting("auto_recap_on_start", False) and has_history:
@@ -2217,6 +2316,20 @@ class TaiMenu(App):
 
         # Handle commands (original message)
         if message.startswith("//"):
+            if message.startswith("//import_card"):
+                def run_import_in_thread():
+                    try:
+                        command_action = handle_command_input(message, self.history_profile_name)
+                        if command_action and command_action["type"] == "command_success" and command_action["messages"]:
+                            combined_msg = "\n".join(command_action["messages"])
+                            self.call_from_thread(self.add_message, combined_msg, role="command")
+                    except Exception as e:
+                        self.call_from_thread(self.add_message, f"[ERROR] Command failed: {e}", role="command")
+                
+                self.add_message(f"[SYSTEM] Starting card import/refinement in background: {message[len('//import_card '):]}...", role="command")
+                threading.Thread(target=run_import_in_thread, daemon=True).start()
+                return
+
             try:
                 command_action = handle_command_input(message, self.history_profile_name)
             except RestartRequested:
@@ -2428,6 +2541,39 @@ class TaiMenu(App):
             self.character_profile["relationship_score"] = new_score
             self.app.call_from_thread(self.update_sidebar)
 
+        def ui_tool_handler(server_name, tool_name, args, auto_approve):
+            if auto_approve:
+                return True, ""
+                
+            tool_event = threading.Event()
+            tool_state = {"approved": False, "result": ""}
+            
+            def render_approval_ui():
+                approval_widget = ToolApproval(
+                    server_name=server_name,
+                    tool_name=tool_name,
+                    args=args,
+                    event=tool_event,
+                    state=tool_state,
+                    classes="message ai_bubble"
+                )
+                row = Horizontal(approval_widget, classes="message_row ai_row")
+                target = None
+                if ai_msg.parent and ai_msg.parent in container.children:
+                    target = ai_msg.parent
+                elif ai_msg in container.children:
+                    target = ai_msg
+                
+                if target:
+                    container.mount(row, before=target)
+                else:
+                    container.mount(row)
+                container.scroll_end(animate=False)
+                
+            self.app.call_from_thread(render_approval_ui)
+            tool_event.wait()
+            return tool_state["approved"], tool_state["result"]
+
         for event in iterate_response_events(
             message=message,
             character_profile=self.character_profile,
@@ -2435,6 +2581,7 @@ class TaiMenu(App):
             is_regeneration=is_regeneration,
             user_name=user_name,
             post_process_callback=on_post_processed,
+            tool_call_handler=ui_tool_handler,
         ):
 
             if event["type"] == "chunk":
@@ -2443,6 +2590,30 @@ class TaiMenu(App):
                 self.app.call_from_thread(container.scroll_end, animate=False)
             elif event["type"] == "tts":
                 self.tts_text_queue.put(event["payload"])
+            elif event["type"] == "tool_result":
+                # Show compact UI of the result
+                status = "✅ Success" if event["approved"] else "❌ Denied"
+                server = event["server"]
+                tool = event["tool"]
+                result_len = len(str(event["result"]))
+                compact_msg = f"[dim]🛠️ {status}: {server}/{tool} (Result: {result_len} chars)[/dim]"
+                
+                def mount_compact_tool_result():
+                    res_label = Label(compact_msg, classes="message ai_bubble")
+                    row = Horizontal(res_label, classes="message_row ai_row")
+                    target = None
+                    if ai_msg.parent and ai_msg.parent in container.children:
+                        target = ai_msg.parent
+                    elif ai_msg in container.children:
+                        target = ai_msg
+                    
+                    if target:
+                        container.mount(row, before=target)
+                    else:
+                        container.mount(row)
+                    container.scroll_end(animate=False)
+                self.app.call_from_thread(mount_compact_tool_result)
+                
             elif event["type"] == "complete":
                 full_response = event["full_response"]
 

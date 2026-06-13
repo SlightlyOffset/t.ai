@@ -70,13 +70,24 @@ def build_system_prompt(profile: dict, rel_score: int | float, mode: str = "rp",
         str: The full system instruction string.
     """
     base_prompt = profile.get("system_prompt", "")
+    user_profile = load_user_profile()
 
-    # 1. Companion Character Details
-    backstory = profile.get("backstory", "Unknown.")
-    mannerisms = ", ".join(profile.get("rp_mannerisms", []))
-    info = profile.get("character_info", {})
+    if mode == "casual":
+        char_details = f"""
+[CHARACTER PROFILE]
+Name: {profile.get('name', 'Unknown')}
+"""
+        user_details = f"""
+[USER PROFILE]
+Name: {user_profile.get('name', 'User') if user_profile else 'User'}
+"""
+    else:
+        # 1. Companion Character Details
+        backstory = profile.get("backstory", "Unknown.")
+        mannerisms = ", ".join(profile.get("rp_mannerisms", []))
+        info = profile.get("character_info", {})
 
-    char_details = f"""
+        char_details = f"""
 [CHARACTER PROFILE]
 Name: {profile.get('name', 'Unknown')}
 Alternate Names: {profile.get('alt_names', 'None')}
@@ -89,12 +100,11 @@ Dislikes: {', '.join(info.get('dislikes', []))}
 Mannerisms: {mannerisms}
 """
 
-    # 2. User Profile Details (Who the AI thinks it's talking to)
-    user_profile = load_user_profile()
-    user_details = ""
-    if user_profile:
-        u_info = user_profile.get("character_info", {})
-        user_details = f"""
+        # 2. User Profile Details (Who the AI thinks it's talking to)
+        user_details = ""
+        if user_profile:
+            u_info = user_profile.get("character_info", {})
+            user_details = f"""
 [USER PROFILE (WHO YOU ARE TALKING TO)]
 Name: {user_profile.get('name', 'User')}
 Personality: {user_profile.get('personality_type', 'Unknown')}
@@ -105,11 +115,21 @@ Mannerisms to watch for: {', '.join(user_profile.get('rp_mannerisms', []))}
 """
 
     # 3. Dynamic Context (Relationship and Tone)
-    rel_rule = get_relationship_rule(rel_score)
-    rel_label = rel_rule.get("label", "Neutral")
-    rel_instruction = rel_rule.get("instruction", "") if mode == "rp" else ""
-    
-    system_content = f"""{base_prompt}
+    if mode == "casual":
+        system_content = f"""{base_prompt}
+
+{char_details}
+{user_details}
+
+[CONTEXT]
+Mode: CASUAL
+"""
+    else:
+        rel_rule = get_relationship_rule(rel_score)
+        rel_label = rel_rule.get("label", "Neutral")
+        rel_instruction = rel_rule.get("instruction", "")
+        
+        system_content = f"""{base_prompt}
 
 {char_details}
 {user_details}

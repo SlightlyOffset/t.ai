@@ -513,8 +513,10 @@ class TestMenu(unittest.TestCase):
 
     @patch('ui.menu.threading.Thread')
     @patch('ui.menu.memory_manager')
-    def test_print_starter_message_with_multiple(self, mock_memory_manager, mock_thread):
+    @patch('ui.menu.get_setting')
+    def test_print_starter_message_with_multiple(self, mock_get_setting, mock_memory_manager, mock_thread):
         """Test that print_starter_message shuffles multiple messages and populates alternatives."""
+        mock_get_setting.return_value = "rp"
         class DummyMenu(TaiMenu):
             def __init__(self):
                 self.character_profile = {"starter_messages": ["msg1", "msg2", "msg3"], "relationship_score": 5}
@@ -663,6 +665,31 @@ class TestMenu(unittest.TestCase):
         app.refresh_last_ai_message("msg2", index=1, total=3)
         self.assertEqual(app._visible_message_count, 1)
 
+    @patch('ui.menu.get_setting')
+    def test_print_starter_message_casual_mode(self, mock_get_setting):
+        """Verify that print_starter_message returns early and does not print/save when mode is casual."""
+        mock_get_setting.return_value = "casual"
+        
+        class DummyMenu(TaiMenu):
+            def __init__(self):
+                self.character_profile = {
+                    "starter_messages": ["msg1"],
+                    "relationship_score": 0
+                }
+                self.history_profile_name = "test_profile"
+                self.user_profile = {"name": "TestUser"}
+                self._visible_message_count = 10
+
+        app = DummyMenu()
+        app.add_message = MagicMock()
+        
+        app.print_starter_message()
+        
+        # Verify that add_message was NOT called
+        self.assertFalse(app.add_message.called)
+        # Verify it reset visible message count, but did not populate or save
+        self.assertEqual(app._visible_message_count, 0)
+
     def test_highlight_narration_asterisks(self):
         """Verify that ChatInput's highlight map identifies single, double, and triple asterisk narration."""
         from ui.menu import ChatInput
@@ -741,6 +768,102 @@ class TestMenu(unittest.TestCase):
         self.assertEqual(h0[2][0], 23)
         self.assertEqual(h0[2][1], 30)
         self.assertEqual(h0[2][2], "speech")
+
+    @patch('ui.menu.get_setting')
+    @patch('ui.menu.update_setting')
+    @patch('engines.config.get_active_session')
+    @patch('engines.config.set_active_session')
+    @patch('engines.memory_v2.memory_manager.has_history')
+    @patch('engines.memory_v2.memory_manager.save_history')
+    def test_handle_interaction_mode_change(self, mock_save_history, mock_has_history, mock_set_active_session, mock_get_active_session, mock_update_setting, mock_get_setting):
+        """Test that changing modes switches between casual and RP sessions properly."""
+        app = MagicMock(spec=TaiMenu)
+        app.history_profile_name = "Elena"
+        app.reload_chat_list_for_session = MagicMock()
+        
+        # Test switching from default RP to casual mode
+        mock_get_active_session.return_value = "default"
+        mock_has_history.return_value = False
+        
+        TaiMenu.handle_interaction_mode_change(app, "casual")
+        
+        # Should save the last RP session
+        mock_update_setting.assert_any_call("last_rp_session_Elena", "default")
+        # Should ensure casual history file exists (saves empty list)
+        mock_save_history.assert_called_with("Elena", [], session_name="casual")
+        # Should set active session to "casual"
+        mock_set_active_session.assert_called_with("Elena", "casual")
+        # Should reload chat list
+        app.reload_chat_list_for_session.assert_called_with("casual")
+        
+        # Reset mocks
+        mock_update_setting.reset_mock()
+        mock_set_active_session.reset_mock()
+        app.reload_chat_list_for_session.reset_mock()
+        
+        # Test switching back from casual to RP mode
+        mock_get_active_session.return_value = "casual"
+        mock_get_setting.return_value = "default"
+        
+        TaiMenu.handle_interaction_mode_change(app, "rp")
+        # Should load last RP session ("default")
+        mock_set_active_session.assert_called_with("Elena", "default")
+        app.reload_chat_list_for_session.assert_called_with("default")
+
+    @patch('engines.mcp_client.mcp_manager')
+    @patch('threading.Thread')
+    def test_on_settings_saved_dynamic_mcp_enabled(self, mock_thread_cls, mock_mcp_manager):
+        """Test that saving settings with MCP enabled triggers load_server_configs and connect_all."""
+        from ui.menu import TaiMenu
+        
+        # Configure mock Thread to run target immediately and synchronously
+        mock_thread = MagicMock()
+        mock_thread_cls.return_value = mock_thread
+        
+        def mock_start():
+            # Call the target function directly
+            target = mock_thread_cls.call_args[1].get('target')
+            target()
+        mock_thread.start.side_effect = mock_start
+
+        # Create mock TaiMenu app
+        app = MagicMock(spec=TaiMenu)
+        app.character_profile = {}
+        app.on_settings_saved = TaiMenu.on_settings_saved.__get__(app, TaiMenu)
+
+        # Call with mcp_enabled = True
+        app.on_settings_saved({"mcp_enabled": True})
+
+        # Assertions
+        mock_mcp_manager.load_server_configs.assert_called_once()
+        mock_mcp_manager.connect_all.assert_called_once()
+        mock_mcp_manager.disconnect_all.assert_not_called()
+
+    @patch('engines.mcp_client.mcp_manager')
+    @patch('threading.Thread')
+    def test_on_settings_saved_dynamic_mcp_disabled(self, mock_thread_cls, mock_mcp_manager):
+        """Test that saving settings with MCP disabled triggers disconnect_all."""
+        from ui.menu import TaiMenu
+        
+        mock_thread = MagicMock()
+        mock_thread_cls.return_value = mock_thread
+        
+        def mock_start():
+            target = mock_thread_cls.call_args[1].get('target')
+            target()
+        mock_thread.start.side_effect = mock_start
+
+        app = MagicMock(spec=TaiMenu)
+        app.character_profile = {}
+        app.on_settings_saved = TaiMenu.on_settings_saved.__get__(app, TaiMenu)
+
+        # Call with mcp_enabled = False
+        app.on_settings_saved({"mcp_enabled": False})
+
+        # Assertions
+        mock_mcp_manager.disconnect_all.assert_called_once()
+        mock_mcp_manager.load_server_configs.assert_not_called()
+        mock_mcp_manager.connect_all.assert_not_called()
 
 if __name__ == "__main__":
     unittest.main()

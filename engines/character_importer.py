@@ -6,6 +6,28 @@ import shutil
 from PIL import Image
 from colorama import Fore
 
+def _heal_and_load_json(text):
+    """Attempts to parse JSON, healing unescaped quotes if needed."""
+    try:
+        return json.loads(text)
+    except Exception:
+        try:
+            key_pattern = r'[a-zA-Z0-9_-]+'
+            pattern = re.compile(
+                r'("(' + key_pattern + r')"\s*:\s*")(.*?)("(?=\s*(?:,\s*"' + key_pattern + r'"\s*:|\s*\})))',
+                re.DOTALL
+            )
+            def replacer(match):
+                prefix = match.group(1)
+                val = match.group(3)
+                suffix = match.group(4)
+                escaped_val = re.sub(r'(?<!\\)"', r'\"', val)
+                return prefix + escaped_val + suffix
+            healed = pattern.sub(replacer, text)
+            return json.loads(healed)
+        except Exception:
+            raise
+
 class CharacterImporter:
     """
     Handles importing and converting character profiles from external formats.
@@ -173,7 +195,18 @@ class CharacterImporter:
         if not profile:
             return profile
 
-        refine_model = model or get_setting("local_utility_model", "llama3.2")
+        refine_model = model
+        if not refine_model:
+            try:
+                config_path = os.path.join("plugins", "mcp_st_importer", "plugin.json")
+                if os.path.exists(config_path):
+                    with open(config_path, "r", encoding="utf-8") as f:
+                        cfg = json.load(f)
+                        refine_model = cfg.get("refine_model")
+            except Exception:
+                pass
+        if not refine_model:
+            refine_model = get_setting("default_llm_model", "llama3.2")
         char_name = profile.get("name", "Unknown")
 
         # 1. Gather all raw context from raw_st_data or the profile
@@ -235,54 +268,178 @@ class CharacterImporter:
             {"role": "user", "content": user_content}
         ]
 
+        # Define the structured tool calling schema
+        tools = [
+            {
+                "type": "function",
+                "function": {
+                    "name": "save_refined_profile",
+                    "description": "Submits the fully structured, cleaned, and refined character profile details.",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "alt_names": {
+                                "type": "string",
+                                "description": "Comma-separated string of nicknames, aliases or alternative names, or empty string"
+                            },
+                            "gender": {
+                                "type": "string",
+                                "description": "Character gender (e.g. Male, Female, Non-binary, Unknown)"
+                            },
+                            "age": {
+                                "type": "string",
+                                "description": "Character age (e.g. 24, Unknown)"
+                            },
+                            "appearance": {
+                                "type": "string",
+                                "description": "Short description of appearance, height, hair, clothing, eyes"
+                            },
+                            "likes": {
+                                "type": "array",
+                                "items": {"type": "string"},
+                                "description": "List of strings containing likes/hobbies, or empty list"
+                            },
+                            "dislikes": {
+                                "type": "array",
+                                "items": {"type": "string"},
+                                "description": "List of strings containing dislikes/aversions, or empty list"
+                            },
+                            "rp_mannerisms": {
+                                "type": "array",
+                                "items": {"type": "string"},
+                                "description": "List of 3-5 specific conversational traits, e.g. 'frequently stutters when nervous', 'speaks in a polite, formal tone'"
+                            },
+                            "personality_type": {
+                                "type": "string",
+                                "description": "Concise 1-3 sentence summary of personality"
+                            },
+                            "backstory": {
+                                "type": "string",
+                                "description": "Clean, narrative biography summary of history and origin"
+                            },
+                            "other": {
+                                "type": "string",
+                                "description": "Refined description of the roleplay scenario or other setting details"
+                            },
+                            "system_prompt": {
+                                "type": "string",
+                                "description": "A highly immersive, detailed system prompt for the roleplay. It should write instructions on how the AI should roleplay as this character. Keep it in the second person ('You are...')."
+                            }
+                        },
+                        "required": [
+                            "alt_names", "gender", "age", "appearance", "likes", "dislikes", 
+                            "rp_mannerisms", "personality_type", "backstory", "other", "system_prompt"
+                        ]
+                    }
+                }
+            }
+        ]
+
         try:
-            # Enforce JSON formatting
+            # Call compat function with tools
             result = _ollama_chat_compat(
                 model=refine_model,
                 messages=messages,
                 stream=False,
-                format="json",
                 think=False,
-                options={"temperature": 0.1}
+                options={"temperature": 0.1},
+                tools=tools
             )
 
-            response_content = result.get("message", {}).get("content", "").strip()
-
-            # Refusal detection: check for common safety guidelines / refusal templates
-            refusal_triggers = [
-                "i cannot fulfill", "against safety guidelines", "i am unable to",
-                "cannot generate content", "against policy", "cannot assist with this"
-            ]
-            if any(trigger in response_content.lower() for trigger in refusal_triggers):
-                print(f"{Fore.YELLOW}[WARNING] Local model refused to process character card due to safety constraints. Falling back to rule-based import.")
-                return profile
-
-            # Parse JSON
             refined_data = None
-            try:
-                refined_data = json.loads(response_content)
-            except json.JSONDecodeError:
-                # Attempt regex-based cleanup of markdown code block
-                match = re.search(r'```(?:json)?\s*(\{.*?\})\s*```', response_content, re.DOTALL | re.IGNORECASE)
-                if match:
-                    try:
-                        refined_data = json.loads(match.group(1))
-                    except json.JSONDecodeError:
-                        pass
-                
-                # Fallback to finding first/last brackets
-                if not refined_data:
-                    start = response_content.find('{')
-                    end = response_content.rfind('}')
-                    if start != -1 and end != -1 and end > start:
+            tool_calls = result.get("message", {}).get("tool_calls")
+            
+            if tool_calls and len(tool_calls) > 0:
+                tool_call = tool_calls[0]
+                function_data = tool_call.get("function", {})
+                func_args_str = function_data.get("arguments", "{}")
+                try:
+                    if isinstance(func_args_str, dict):
+                        refined_data = func_args_str
+                    else:
+                        refined_data = _heal_and_load_json(func_args_str)
+                except Exception as e:
+                    print(f"{Fore.YELLOW}[WARNING] Failed to parse tool call arguments: {e}")
+
+            # Fallback to text output parsing if tool calling did not produce structured arguments
+            if not refined_data:
+                response_content = result.get("message", {}).get("content", "").strip()
+
+                # Check if the response content is a JSON-formatted pseudo-tool call
+                # e.g., {"name": "save_refined_profile", "parameters": {...}}
+                if response_content.startswith("{") and '"parameters"' in response_content:
+                    # Attempt to heal missing closing braces (very common on local LLMs)
+                    for i in range(5):
                         try:
-                            refined_data = json.loads(response_content[start:end+1])
-                        except json.JSONDecodeError:
+                            candidate = response_content + ("}" * i)
+                            pseudo_call = _heal_and_load_json(candidate)
+                            if isinstance(pseudo_call, dict) and "parameters" in pseudo_call:
+                                refined_data = pseudo_call["parameters"]
+                                break
+                        except Exception:
                             pass
 
+                if not refined_data:
+                    # Refusal detection: check for common safety guidelines / refusal templates
+                    refusal_triggers = [
+                        "i cannot fulfill", "against safety guidelines", "i am unable to",
+                        "cannot generate content", "against policy", "cannot assist with this"
+                    ]
+                    if any(trigger in response_content.lower() for trigger in refusal_triggers):
+                        print(f"{Fore.YELLOW}[WARNING] Local model refused to process character card due to safety constraints. Falling back to rule-based import.")
+                        return profile
+
+                    # Parse JSON with healing
+                    for i in range(5):
+                        try:
+                            candidate = response_content + ("}" * i)
+                            refined_data = _heal_and_load_json(candidate)
+                            if isinstance(refined_data, dict):
+                                break
+                        except Exception:
+                            pass
+                            
+                    if not refined_data:
+                        # Attempt regex-based cleanup of markdown code block
+                        match = re.search(r'```(?:json)?\s*(\{.*?\})\s*```', response_content, re.DOTALL | re.IGNORECASE)
+                        if match:
+                            for i in range(5):
+                                try:
+                                    candidate = match.group(1) + ("}" * i)
+                                    refined_data = _heal_and_load_json(candidate)
+                                    if isinstance(refined_data, dict):
+                                        break
+                                except Exception:
+                                    pass
+                        
+                        # Fallback to finding first/last brackets
+                        if not refined_data:
+                            start = response_content.find('{')
+                            end = response_content.rfind('}')
+                            if start != -1 and end != -1 and end > start:
+                                for i in range(5):
+                                    try:
+                                        candidate = response_content[start:end+1] + ("}" * i)
+                                        refined_data = _heal_and_load_json(candidate)
+                                        if isinstance(refined_data, dict):
+                                            break
+                                    except Exception:
+                                        pass
+
             if not refined_data:
-                print(f"{Fore.YELLOW}[WARNING] Failed to parse AI refinement JSON response. Falling back to rule-based values.")
+                if get_setting("debug_mode", False):
+                    print(f"{Fore.MAGENTA}[DEBUG] Raw model response: {result}{Fore.RESET}")
+                print(f"{Fore.YELLOW}[WARNING] Failed to parse AI refinement (both tool calling and JSON parsing failed). Falling back to rule-based values.")
                 return profile
+
+            # Clean up any fields that were double-serialized as JSON strings (common on smaller models)
+            for list_field in ["likes", "dislikes", "rp_mannerisms"]:
+                val = refined_data.get(list_field)
+                if isinstance(val, str) and val.strip().startswith("["):
+                    try:
+                        refined_data[list_field] = json.loads(val)
+                    except Exception:
+                        pass
 
             # Merge refined fields into the profile
             if "alt_names" in refined_data and isinstance(refined_data["alt_names"], str):
@@ -323,8 +480,9 @@ class CharacterImporter:
             if "dislikes" in refined_data and isinstance(refined_data["dislikes"], list):
                 info["dislikes"] = [x.strip() for x in refined_data["dislikes"] if isinstance(x, str) and x.strip()]
 
-            if "other" in refined_data and isinstance(refined_data["other"], str):
-                info["other"] = refined_data["other"].strip()
+            other_val = refined_data.get("other") or refined_data.get("other_details")
+            if isinstance(other_val, str):
+                info["other"] = other_val.strip()
 
             return profile
 
@@ -356,7 +514,7 @@ class CharacterImporter:
         target_path = os.path.abspath(os.path.join(profiles_dir, filename))
 
         # Security check: Ensure the target path is still within the profiles directory
-        if not target_path.startswith(profiles_dir):
+        if not os.path.normcase(target_path).startswith(os.path.normcase(profiles_dir)):
             print(f"{Fore.RED}[ERROR] Path traversal attempt detected.")
             return False
 
@@ -420,8 +578,18 @@ def import_character(source_path, refine=False, model=None):
              
         # 2. Run AI refinement on top of the saved profile if requested
         if refine:
-            from engines.config import get_setting
-            refine_model = model or get_setting("local_utility_model", "llama3.2")
+            refine_model = model
+            if not refine_model:
+                try:
+                    config_path = os.path.join("plugins", "mcp_st_importer", "plugin.json")
+                    if os.path.exists(config_path):
+                        with open(config_path, "r", encoding="utf-8") as f:
+                            cfg = json.load(f)
+                            refine_model = cfg.get("refine_model")
+                except Exception:
+                    pass
+            if not refine_model:
+                refine_model = get_setting("default_llm_model", "llama3.2")
             print(Fore.CYAN + f"[SYSTEM] Running AI profile refinement using local model '{refine_model}'...")
             
             try:

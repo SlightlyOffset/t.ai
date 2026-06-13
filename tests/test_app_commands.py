@@ -279,6 +279,36 @@ class TestAppCommands(unittest.TestCase):
         self.assertTrue(result)
         mock_set_active.assert_called_with("Meryl", "adventure3")
 
+    @patch('sys.stdout', new_callable=StringIO)
+    def test_import_card_usage(self, mock_stdout):
+        result = app_commands("//import_card")
+        self.assertTrue(result)
+        self.assertIn("[ERROR] Usage: //import_card", strip_ansi(mock_stdout.getvalue()))
+
+    @patch('sys.stdout', new_callable=StringIO)
+    def test_import_card_not_found(self, mock_stdout):
+        result = app_commands("//import_card non_existent_file.png")
+        self.assertTrue(result)
+        self.assertIn("[ERROR] File not found: non_existent_file.png", strip_ansi(mock_stdout.getvalue()))
+
+    @patch('engines.app_commands.import_character')
+    @patch('os.path.exists', return_value=True)
+    @patch('sys.stdout', new_callable=StringIO)
+    def test_import_card_success(self, mock_stdout, mock_exists, mock_import):
+        result = app_commands("//import_card cards/dummy.png --refine")
+        self.assertTrue(result)
+        mock_import.assert_called_once_with("cards/dummy.png", refine=True)
+        self.assertIn("[SYSTEM] Successfully imported character card: dummy.png", strip_ansi(mock_stdout.getvalue()))
+
+    @patch('engines.app_commands.import_character')
+    @patch('os.path.exists', return_value=True)
+    @patch('sys.stdout', new_callable=StringIO)
+    def test_import_card_success_short_flag(self, mock_stdout, mock_exists, mock_import):
+        result = app_commands("//import_card cards/dummy.png -r")
+        self.assertTrue(result)
+        mock_import.assert_called_once_with("cards/dummy.png", refine=True)
+        self.assertIn("[SYSTEM] Successfully imported character card: dummy.png", strip_ansi(mock_stdout.getvalue()))
+
 if __name__ == "__main__":
     unittest.main()
 

@@ -13,6 +13,7 @@ import ollama
 import requests
 from concurrent.futures import ThreadPoolExecutor
 from engines.memory_v2 import memory_manager
+from engines.mcp_client import mcp_manager
 from engines.config import get_setting
 from engines.narrative_pipeline import (
     append_turn_telemetry,
@@ -135,28 +136,57 @@ def parse_sse_stream(response: requests.Response):
                 if isinstance(choices, list) and choices:
                     delta = choices[0].get("delta", {})
                     content = delta.get("content", "")
-                    if content:
-                        yield content
+                    tool_calls = delta.get("tool_calls", None)
+                    if content or tool_calls:
+                        yield {"content": content, "tool_calls": tool_calls}
             except Exception:
                 pass
 
-def _ollama_chat_compat(model: str, messages: list, stream: bool = False, format: str = None, options: dict = None, think: bool = False, timeout: float = 180.0):
+_MODEL_TOOL_SUPPORT_CACHE = {}
+
+def _ollama_chat_compat(model: str, messages: list, stream: bool = False, format: str = None, options: dict = None, think: bool = False, timeout: float = 180.0, tools: list = None):
     """
-    OpenAI-compatible / Kobold-compatible backend driver that matches the signature of ollama.chat.
+    OpenAI-compatible / Kobold-compatible driver that matches the signature of ollama.chat.
     If running in a mocked test environment (ollama.chat is patched), routes calls directly to the mock.
     """
     from unittest.mock import Mock
     if hasattr(ollama, "chat") and isinstance(ollama.chat, Mock):
-        return ollama.chat(model=model, messages=messages, stream=stream, format=format, options=options, think=think)
+        return ollama.chat(model=model, messages=messages, stream=stream, format=format, options=options, think=think, tools=tools)
 
     local_url = get_setting("local_llm_url", "http://localhost:11434/v1")
     full_url = f"{local_url.rstrip('/')}/chat/completions"
     
     payload = {
         "model": model,
-        "messages": [{"role": m["role"], "content": m["content"]} for m in messages],
+        "messages": [{"role": m["role"], "content": m["content"], **({"tool_calls": m["tool_calls"]} if "tool_calls" in m else {}), **({"tool_call_id": m["tool_call_id"]} if "tool_call_id" in m else {})} for m in messages],
         "stream": stream
     }
+
+    keep_alive = get_setting("local_llm_keep_alive")
+    if keep_alive is not None:
+        try:
+            if isinstance(keep_alive, str) and keep_alive.isdigit():
+                payload["keep_alive"] = int(keep_alive)
+            elif isinstance(keep_alive, (int, float)):
+                payload["keep_alive"] = keep_alive
+            else:
+                payload["keep_alive"] = keep_alive
+        except (TypeError, ValueError):
+            pass
+
+    model_supports_tools = _MODEL_TOOL_SUPPORT_CACHE.get(model, True)
+    if tools and model_supports_tools:
+        payload["tools"] = tools
+    elif tools and not model_supports_tools:
+        steering_msg = (
+            "System Note: The tool-calling interface is unsupported by your current model configuration. "
+            "If the user's request requires a tool action (such as importing a card), politely inform them that "
+            "you attempted to call a tool to handle their request but could not do so because the current model "
+            "configuration does not support tool-calling. Let them know they can execute the action directly "
+            "using the appropriate command (e.g., '//import_card <path_to_card>'). Otherwise, if the user's "
+            "message is a normal conversation, respond normally without mentioning tools."
+        )
+        payload["messages"] = payload["messages"] + [{"role": "system", "content": steering_msg}]
 
     if options:
         if "temperature" in options:
@@ -180,33 +210,83 @@ def _ollama_chat_compat(model: str, messages: list, stream: bool = False, format
 
     if stream:
         headers = {"Accept": "text/event-stream"}
-        response = requests.post(full_url, json=payload, headers=headers, stream=True, timeout=60)
-        response.raise_for_status()
+        try:
+            response = requests.post(full_url, json=payload, headers=headers, stream=True, timeout=60)
+            response.raise_for_status()
+        except requests.exceptions.HTTPError as e:
+            if response.status_code == 400 and payload.get("tools"):
+                if get_setting("debug_mode", False):
+                    print("[WARNING] Model or Ollama endpoint rejected tools parameter. Retrying without tools...")
+                _MODEL_TOOL_SUPPORT_CACHE[model] = False
+                payload = payload.copy()
+                payload.pop("tools", None)
+                steering_msg = (
+                    "System Note: The tool-calling interface is unsupported by your current model configuration. "
+                    "If the user's request requires a tool action (such as importing a card), politely inform them that "
+                    "you attempted to call a tool to handle their request but could not do so because the current model "
+                    "configuration does not support tool-calling. Let them know they can execute the action directly "
+                    "using the appropriate command (e.g., '//import_card <path_to_card>'). Otherwise, if the user's "
+                    "message is a normal conversation, respond normally without mentioning tools."
+                )
+                payload["messages"] = payload["messages"] + [{"role": "system", "content": steering_msg}]
+                response = requests.post(full_url, json=payload, headers=headers, stream=True, timeout=60)
+                response.raise_for_status()
+            else:
+                raise
         
         def sse_chunk_generator():
-            for content in parse_sse_stream(response):
+            for chunk_data in parse_sse_stream(response):
                 yield {
                     "message": {
                         "role": "assistant",
-                        "content": content
+                        "content": chunk_data.get("content", ""),
+                        "tool_calls": chunk_data.get("tool_calls")
                     }
                 }
         return sse_chunk_generator()
     else:
-        response = requests.post(full_url, json=payload, timeout=timeout)
-        response.raise_for_status()
+        try:
+            response = requests.post(full_url, json=payload, timeout=timeout)
+            response.raise_for_status()
+        except requests.exceptions.HTTPError as e:
+            if response.status_code == 400 and payload.get("tools"):
+                if get_setting("debug_mode", False):
+                    print("[WARNING] Model or Ollama endpoint rejected tools parameter. Retrying without tools...")
+                _MODEL_TOOL_SUPPORT_CACHE[model] = False
+                payload = payload.copy()
+                payload.pop("tools", None)
+                steering_msg = (
+                    "System Note: The tool-calling interface is unsupported by your current model configuration. "
+                    "If the user's request requires a tool action (such as importing a card), politely inform them that "
+                    "you attempted to call a tool to handle their request but could not do so because the current model "
+                    "configuration does not support tool-calling. Let them know they can execute the action directly "
+                    "using the appropriate command (e.g., '//import_card <path_to_card>'). Otherwise, if the user's "
+                    "message is a normal conversation, respond normally without mentioning tools."
+                )
+                payload["messages"] = payload["messages"] + [{"role": "system", "content": steering_msg}]
+                response = requests.post(full_url, json=payload, timeout=timeout)
+                response.raise_for_status()
+            else:
+                raise
         res_data = response.json()
         
         content = ""
+        tool_calls = None
         choices = res_data.get("choices")
         if isinstance(choices, list) and choices:
-            content = choices[0].get("message", {}).get("content", "")
+            msg = choices[0].get("message", {})
+            content = msg.get("content", "")
+            tool_calls = msg.get("tool_calls")
+            
+        res_message = {
+            "role": "assistant",
+            "content": content
+        }
+        if tool_calls:
+            res_message["tool_calls"] = tool_calls
             
         return {
-            "message": {
-                "role": "assistant",
-                "content": content
-            }
+            "message": res_message
         }
 
 def update_profile_score(profile_path: str, score_change: int):
@@ -648,6 +728,7 @@ def _perform_post_processing(
     candidate_metrics: list,
     critic_applied: bool,
     post_process_callback=None,
+    interaction_mode: str = "rp",
 ):
     """Handles background tasks like sentiment scoring and saving history."""
     try:
@@ -672,25 +753,26 @@ def _perform_post_processing(
 
         new_scene = current_scene
 
-        # Parse for scene updates
-        scene_match = re.search(r'\[SCENE:\s*(.*?)\]', reply)
-        if scene_match:
-            new_scene = scene_match.group(1).strip()
-            reply = re.sub(r'\[SCENE:\s*.*?\]', '', reply).strip()
-        else:
-            # Attempt to extract scene dynamically from current turn
-            extracted = extract_scene_from_text(user_input, reply, model=model)
-            if extracted:
-                new_scene = extracted
+        if interaction_mode != "casual":
+            # Parse for scene updates
+            scene_match = re.search(r'\[SCENE:\s*(.*?)\]', reply)
+            if scene_match:
+                new_scene = scene_match.group(1).strip()
+                reply = re.sub(r'\[SCENE:\s*.*?\]', '', reply).strip()
+            else:
+                # Attempt to extract scene dynamically from current turn
+                extracted = extract_scene_from_text(user_input, reply, model=None)
+                if extracted:
+                    new_scene = extracted
 
         # Load history to provide context for sentiment scoring
         full_history = memory_manager.load_history(history_profile_name)
 
         # Score sentiment
-        if is_regeneration:
+        if is_regeneration or interaction_mode == "casual":
             score_change = 0
         else:
-            score_change = get_sentiment_score(user_input, model, remote_url, profile, recent_history=full_history)
+            score_change = get_sentiment_score(user_input, None, remote_url, profile, recent_history=full_history)
 
         # Calculate new relationship score with damped logarithmic scaling
         # Cap between -100 and 100
@@ -790,7 +872,7 @@ def _perform_post_processing(
             print(f"Background post-processing failed: {e}")
             traceback.print_exc()
 
-def get_respond_stream(user_input: str, profile: dict, profile_path: str = None, system_extra_info: str = None, history_profile_name: str = None, is_regeneration: bool = False, user_name: str = "User", post_process_callback=None):
+def get_respond_stream(user_input: str, profile: dict, profile_path: str = None, system_extra_info: str = None, history_profile_name: str = None, is_regeneration: bool = False, user_name: str = "User", post_process_callback=None, tool_call_handler=None):
     """
     Generates a streaming response from the LLM (Local Ollama or Remote API).
     Parses sentiment tags [REL: +X] to update relationship status in real-time.
@@ -894,17 +976,24 @@ def get_respond_stream(user_input: str, profile: dict, profile_path: str = None,
     narrative_plan = None
 
     # Handle Dynamic Scene Context and Memory Core
-    scene_instruction = f"CURRENT SCENE: {current_scene}. Keep this context in mind."
-    if interaction_mode == "rp":
-        scene_instruction += " If the location or activity changes significantly, append [SCENE: new location] at the VERY end of your response."
+    if interaction_mode == "casual":
+        scene_instruction = ""
+        if memory_core:
+            scene_instruction = f"{memory_core}"
+        if activated_lore:
+            scene_instruction = f"{activated_lore}\n\n{scene_instruction}" if scene_instruction else f"{activated_lore}"
+    else:
+        scene_instruction = f"CURRENT SCENE: {current_scene}. Keep this context in mind."
+        if interaction_mode == "rp":
+            scene_instruction += " If the location or activity changes significantly, append [SCENE: new location] at the VERY end of your response."
 
-    if memory_core:
-        # Prepend the Memory Core to provide long-term context
-        scene_instruction = f"{memory_core}\n\n{scene_instruction}"
+        if memory_core:
+            # Prepend the Memory Core to provide long-term context
+            scene_instruction = f"{memory_core}\n\n{scene_instruction}"
 
-    if activated_lore:
-        # Prepend activated lore to provide immediate world/character context
-        scene_instruction = f"{activated_lore}\n\n{scene_instruction}"
+        if activated_lore:
+            # Prepend activated lore to provide immediate world/character context
+            scene_instruction = f"{activated_lore}\n\n{scene_instruction}"
 
     if system_extra_info:
         system_extra_info = f"{scene_instruction}\n{system_extra_info}"
@@ -968,7 +1057,11 @@ def get_respond_stream(user_input: str, profile: dict, profile_path: str = None,
 
     sys_tokens = est_tokens(system_content)
     input_tokens = est_tokens(user_input)
-    max_input_tokens = 6200
+    max_input_tokens = get_setting("max_input_tokens", 6200)
+    try:
+        max_input_tokens = int(max_input_tokens)
+    except (TypeError, ValueError):
+        max_input_tokens = 6200
 
     has_starter = False
     if prompt_history and prompt_history[0].get("role") == "assistant":
@@ -1176,51 +1269,150 @@ def get_respond_stream(user_input: str, profile: dict, profile_path: str = None,
                 stream = response.iter_content(chunk_size=None, decode_unicode=True)
             # Handle Local Ollama Request
             else:
-                ollama_stream = _ollama_chat_compat(
-                    model=model,
-                    messages=messages,
-                    stream=True,
-                    think=False,
-                    options={"temperature": generation_temperature, "repeat_penalty": generation_repetition_penalty, "num_predict": max_tokens},
-                )
+                mcp_enabled = get_setting("mcp_enabled", False)
+                available_tools = mcp_manager.get_available_tools() if mcp_enabled else None
+                
+                max_tool_rounds = 5
+                current_round = 0
+                
+                while current_round < max_tool_rounds:
+                    current_round += 1
+                    
+                    ollama_stream = _ollama_chat_compat(
+                        model=model,
+                        messages=messages,
+                        stream=True,
+                        think=False,
+                        options={"temperature": generation_temperature, "repeat_penalty": generation_repetition_penalty, "num_predict": max_tokens},
+                        tools=available_tools
+                    )
 
-                def ollama_gen():
-                    for chunk in ollama_stream:
-                        if not chunk:
-                            continue
-                        # Handle dictionary format
-                        if isinstance(chunk, dict):
-                            message = chunk.get("message", {})
-                            if isinstance(message, dict):
-                                content = message.get("content", "")
-                                if content:
-                                    yield content
-                        # Handle newer Ollama Pydantic object format
-                        elif hasattr(chunk, "message"):
-                            message = chunk.message
-                            if hasattr(message, "content"):
-                                content = getattr(message, "content", "")
-                                if content:
-                                    yield content
-                            elif isinstance(message, dict):
-                                content = message.get("content", "")
-                                if content:
-                                    yield content
-                        # Handle list format fallback
-                        elif isinstance(chunk, list):
-                            for nested in chunk:
-                                if isinstance(nested, dict):
-                                    message = nested.get("message", {})
-                                    if isinstance(message, dict):
-                                        content = message.get("content", "")
-                                        if content:
-                                            yield content
-                stream = ollama_gen()
+                    tool_calls_buffer = []
+                    
+                    def ollama_gen():
+                        for chunk in ollama_stream:
+                            if not chunk:
+                                continue
+                            
+                            content = ""
+                            tool_calls = None
+                            
+                            # Handle dictionary format
+                            if isinstance(chunk, dict):
+                                message = chunk.get("message", {})
+                                if isinstance(message, dict):
+                                    content = message.get("content", "")
+                                    tool_calls = message.get("tool_calls")
+                                    
+                            # Handle newer Ollama Pydantic object format
+                            elif hasattr(chunk, "message"):
+                                message = chunk.message
+                                if hasattr(message, "content"):
+                                    content = getattr(message, "content", "")
+                                    tool_calls = getattr(message, "tool_calls", None)
+                                elif isinstance(message, dict):
+                                    content = message.get("content", "")
+                                    tool_calls = message.get("tool_calls")
+                                    
+                            # Handle list format fallback
+                            elif isinstance(chunk, list):
+                                for nested in chunk:
+                                    if isinstance(nested, dict):
+                                        message = nested.get("message", {})
+                                        if isinstance(message, dict):
+                                            content = message.get("content", "")
+                                            tool_calls = message.get("tool_calls")
+                                            if tool_calls:
+                                                tool_calls_buffer.extend(tool_calls)
+                                            if content:
+                                                yield content
+                                continue # Skip the rest since list format already yielded
+                            
+                            if tool_calls:
+                                tool_calls_buffer.extend(tool_calls)
+                                
+                            if content:
+                                yield content
 
-            # Iterate through the generator stream — yield content directly, no tag filtering needed
-            for content in stream:
-                full_reply += content
-                yield content
+                    stream = ollama_gen()
+
+                    for content in stream:
+                        full_reply += content
+                        yield content
+                        
+                    if not tool_calls_buffer:
+                        break # Finished normally
+                        
+                    # Process tool calls
+                    # Append the tool call message, ensuring tool_calls are included
+                    # even if the model also generated text before the tool call
+                    messages.append({
+                        "role": "assistant", 
+                        "content": full_reply.strip(),
+                        "tool_calls": tool_calls_buffer
+                    })
+                        
+                    for tc in tool_calls_buffer:
+                        tc_id = tc.get("id")
+                        function_data = tc.get("function", {})
+                        func_name = function_data.get("name", "")
+                        func_args_str = function_data.get("arguments", "{}")
+                        
+                        try:
+                            func_args = json.loads(func_args_str)
+                        except:
+                            func_args = {}
+                            
+                        result_content = ""
+                        if mcp_enabled and "__" in func_name:
+                            server_name = func_name.split("__")[0]
+                            config = mcp_manager.configs.get(server_name)
+                            auto_approve = config.auto_approve if config else False
+                            
+                            approved = False
+                            if tool_call_handler:
+                                approved, result_content = tool_call_handler(server_name, func_name, func_args, auto_approve)
+                            else:
+                                approved = auto_approve
+                                if not approved:
+                                    result_content = json.dumps({"error": "Tool call denied (no handler and auto_approve is false)."})
+                                    
+                            if approved:
+                                result_content = mcp_manager.call_tool(func_name, func_args)
+                        else:
+                            result_content = json.dumps({"error": "Unknown tool or MCP disabled."})
+
+                        # Annotate tool result with clear status prefix for LLM interpretation.
+                        # Small models can misread plain-text results; an explicit tag steers them.
+                        _is_tool_error = False
+                        try:
+                            _parsed_result = json.loads(result_content)
+                            _is_tool_error = "error" in _parsed_result
+                        except (json.JSONDecodeError, TypeError):
+                            _is_tool_error = result_content.lower().startswith(("error", "failed"))
+
+                        annotated_result = (
+                            f"[TOOL RESULT - {'ERROR' if _is_tool_error else 'SUCCESS'}]\n{result_content}"
+                        )
+
+                        messages.append({
+                            "role": "tool",
+                            "tool_call_id": tc_id,
+                            "content": annotated_result
+                        })
+                        
+                        yield {
+                            "type": "tool_result",
+                            "server": server_name,
+                            "tool": func_name,
+                            "args": func_args,
+                            "result": result_content,
+                            "approved": approved
+                        }
+                        
+                    # Re-run LLM loop after executing tools
+                    full_reply += "\n" # Add newline between tool call text and new output
+
 
         log_debug("LLM_STREAM_SUCCESS", {"len": len(full_reply)})
 
@@ -1253,6 +1445,7 @@ def get_respond_stream(user_input: str, profile: dict, profile_path: str = None,
                 "candidate_metrics": candidate_metrics,
                 "critic_applied": critic_applied,
                 "post_process_callback": post_process_callback,
+                "interaction_mode": interaction_mode,
             },
             daemon=True,
         )

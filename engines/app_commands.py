@@ -647,15 +647,38 @@ def app_commands(ops: str, suppress_output: bool = False):
     def _import_card(args):
         """Imports a character card (PNG or JSON) from SillyTavern format."""
         if not args:
-            _log("[ERROR] Usage: //import_card <path_to_card_png_or_json>", Fore.RED)
+            _log("[ERROR] Usage: //import_card <path_to_card_png_or_json> [--refine|-r]", Fore.RED)
             return
 
-        path = args.strip().strip('"').strip("'")
+        # Parse options
+        refine = False
+        parts = args.split()
+        path_parts = []
+        for part in parts:
+            if part in ("--refine", "-r"):
+                refine = True
+            else:
+                path_parts.append(part)
+        path = " ".join(path_parts).strip().strip('"').strip("'")
+
         if not os.path.exists(path):
             _log(f"[ERROR] File not found: {path}", Fore.RED)
             return
 
-        import_character(path)
+        import io
+        from contextlib import redirect_stdout
+        f = io.StringIO()
+        with redirect_stdout(f):
+            import_character(path, refine=refine)
+            
+        captured_output = f.getvalue().strip()
+        if captured_output:
+            for line in captured_output.split("\n"):
+                if line.strip():
+                    # Strip any colorama codes so they render correctly in the TUI console
+                    clean_line = re.sub(r'\x1b\[[0-9;]*m', '', line)
+                    _log(clean_line, Fore.WHITE)
+
         _log(
             f"[SYSTEM] Successfully imported character card: {os.path.basename(path)}",
             Fore.GREEN,
