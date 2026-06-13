@@ -1827,6 +1827,14 @@ class TaiMenu(App):
             if generate_audio(text, temp_filename, voice=voice, engine=engine, clone_ref=clone_ref, language=language, user_name=user_name):
                 self.audio_file_queue.put(temp_filename)
             self.tts_text_queue.task_done()
+            
+            # Auto-unload local XTTS model if queue is empty and VRAM setting is enabled
+            if self.tts_text_queue.empty() and get_setting("unload_tts_after_generation", False):
+                try:
+                    from engines.xtts_local import XTTSWorker
+                    XTTSWorker().unload_model()
+                except Exception:
+                    pass
 
     def tts_playback_worker(self) -> None:
         """Worker thread for playing TTS audio files."""
@@ -1979,7 +1987,7 @@ class TaiMenu(App):
                     new_messages_to_sum,
                     user_name=self.user_name,
                     char_name=self.ch_name,
-                    model=char_model,
+                    model=None,
                 )
                 # Persist the update
                 new_last_index = len(older_history)
@@ -1987,7 +1995,7 @@ class TaiMenu(App):
             else:
                 summary = existing_core
         else:
-            summary = generate_recap_summary(older_history, user_name=self.user_name, char_name=self.ch_name, model=char_model)
+            summary = generate_recap_summary(older_history, user_name=self.user_name, char_name=self.ch_name, model=None)
             # Save the initial memory core
             new_last_index = len(older_history)
             memory_manager.update_memory_core(self.history_profile_name, summary, new_last_index)

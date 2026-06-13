@@ -65,6 +65,9 @@ class TestSettingsScreen(unittest.TestCase):
             "#overhaul_candidates_enabled": MagicMock(value=False),
             "#overhaul_critic_enabled": MagicMock(value=False),
             "#overhaul_style_profile": MagicMock(value="balanced"),
+            "#max_input_tokens": MagicMock(value="6200"),
+            "#local_llm_keep_alive": MagicMock(value="5m"),
+            "#unload_tts_after_generation": MagicMock(value=False),
             "#settings_error": MagicMock()
         }
 

@@ -162,6 +162,18 @@ def _ollama_chat_compat(model: str, messages: list, stream: bool = False, format
         "stream": stream
     }
 
+    keep_alive = get_setting("local_llm_keep_alive")
+    if keep_alive is not None:
+        try:
+            if isinstance(keep_alive, str) and keep_alive.isdigit():
+                payload["keep_alive"] = int(keep_alive)
+            elif isinstance(keep_alive, (int, float)):
+                payload["keep_alive"] = keep_alive
+            else:
+                payload["keep_alive"] = keep_alive
+        except (TypeError, ValueError):
+            pass
+
     model_supports_tools = _MODEL_TOOL_SUPPORT_CACHE.get(model, True)
     if tools and model_supports_tools:
         payload["tools"] = tools
@@ -747,7 +759,7 @@ def _perform_post_processing(
             reply = re.sub(r'\[SCENE:\s*.*?\]', '', reply).strip()
         else:
             # Attempt to extract scene dynamically from current turn
-            extracted = extract_scene_from_text(user_input, reply, model=model)
+            extracted = extract_scene_from_text(user_input, reply, model=None)
             if extracted:
                 new_scene = extracted
 
@@ -758,7 +770,7 @@ def _perform_post_processing(
         if is_regeneration:
             score_change = 0
         else:
-            score_change = get_sentiment_score(user_input, model, remote_url, profile, recent_history=full_history)
+            score_change = get_sentiment_score(user_input, None, remote_url, profile, recent_history=full_history)
 
         # Calculate new relationship score with damped logarithmic scaling
         # Cap between -100 and 100
@@ -1036,7 +1048,11 @@ def get_respond_stream(user_input: str, profile: dict, profile_path: str = None,
 
     sys_tokens = est_tokens(system_content)
     input_tokens = est_tokens(user_input)
-    max_input_tokens = 6200
+    max_input_tokens = get_setting("max_input_tokens", 6200)
+    try:
+        max_input_tokens = int(max_input_tokens)
+    except (TypeError, ValueError):
+        max_input_tokens = 6200
 
     has_starter = False
     if prompt_history and prompt_history[0].get("role") == "assistant":
