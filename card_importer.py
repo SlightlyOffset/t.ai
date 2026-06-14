@@ -11,27 +11,58 @@ def main():
     def _import_card(args):
         """Imports a character card (PNG, WEBP or JSON) from SillyTavern format."""
         if not args:
-            print(Fore.RED + "[ERROR] Usage: //import <path_to_card_png_or_json>")
+            print(Fore.RED + "[ERROR] Usage: //import <path_to_card_png_or_json> [-r | --refine] [-l | --lore]")
             return
 
-        path = args.strip().strip('"').strip("'")
+        # Parse options
+        refine = False
+        lore = False
+        parts = args.split()
+        path_parts = []
+        for part in parts:
+            if part in ("-r", "--refine"):
+                refine = True
+            elif part in ("-l", "--lore"):
+                lore = True
+            else:
+                path_parts.append(part)
+        path = " ".join(path_parts).strip().strip('"').strip("'")
+
         if not os.path.exists(path):
             print(Fore.RED + f"[ERROR] File not found: {path}")
             return
 
-        model = CharacterImporter.get_default_refine_model()
-        refine_choice = input(f"Would you like to run AI refinement using local model '{model}'? (y/n) [n]: ").strip().lower()
-        refine = refine_choice in ["y", "yes"]
+        has_flags = any(p in ("-r", "--refine", "-l", "--lore") for p in parts)
+        if not has_flags:
+            model = CharacterImporter.get_default_refine_model()
+            refine_choice = input(f"Would you like to run AI refinement using local model '{model}'? (y/n) [n]: ").strip().lower()
+            refine = refine_choice in ["y", "yes"]
 
-        import_character(path, refine=refine)
+            lore_choice = input(f"Would you like to run AI lore extraction? (y/n) [n]: ").strip().lower()
+            lore = lore_choice in ["y", "yes"]
+
+        import_character(path, refine=refine, lore=lore)
 
     def _batch_import(args):
         """Imports all character cards from a directory."""
         if not args:
-            print(Fore.RED + "[ERROR] Usage: //batch_import <directory_path>")
+            print(Fore.RED + "[ERROR] Usage: //batch_import <directory_path> [-r | --refine] [-l | --lore]")
             return
 
-        dir_path = args.strip().strip('"').strip("'")
+        # Parse options
+        refine = False
+        lore = False
+        parts = args.split()
+        path_parts = []
+        for part in parts:
+            if part in ("-r", "--refine"):
+                refine = True
+            elif part in ("-l", "--lore"):
+                lore = True
+            else:
+                path_parts.append(part)
+        dir_path = " ".join(path_parts).strip().strip('"').strip("'")
+
         if not os.path.isdir(dir_path):
             print(Fore.RED + f"[ERROR] Directory not found: {dir_path}")
             return
@@ -43,15 +74,20 @@ def main():
 
         print(Fore.CYAN + f"[SYSTEM] Found {len(files)} potential cards. Starting batch import...")
         
-        model = CharacterImporter.get_default_refine_model()
-        refine_choice = input(f"Would you like to run AI refinement on ALL imported cards using '{model}'? (y/n) [n]: ").strip().lower()
-        refine = refine_choice in ["y", "yes"]
+        has_flags = any(p in ("-r", "--refine", "-l", "--lore") for p in parts)
+        if not has_flags:
+            model = CharacterImporter.get_default_refine_model()
+            refine_choice = input(f"Would you like to run AI refinement on ALL imported cards using '{model}'? (y/n) [n]: ").strip().lower()
+            refine = refine_choice in ["y", "yes"]
+
+            lore_choice = input(f"Would you like to run AI lore extraction on ALL imported cards? (y/n) [n]: ").strip().lower()
+            lore = lore_choice in ["y", "yes"]
 
         success_count = 0
         for f in files:
             full_path = os.path.join(dir_path, f)
             print(Fore.WHITE + f" -> Importing {f}...")
-            if import_character(full_path, refine=refine):
+            if import_character(full_path, refine=refine, lore=lore):
                 success_count += 1
         
         print(Fore.GREEN + f"\n[SUCCESS] Batch import complete. {success_count}/{len(files)} characters imported.")
@@ -159,8 +195,8 @@ def main():
 
     print(Fore.GREEN + "Card Importer is ready.")
     print(Fore.CYAN + "Commands:")
-    print(Fore.CYAN + "  //import <path>        - Import a single character card (PNG/WEBP/JSON)")
-    print(Fore.CYAN + "  //batch_import <dir>   - Import all cards from a directory")
+    print(Fore.CYAN + "  //import <path> [-r] [-l] - Import a single character card (PNG/WEBP/JSON)")
+    print(Fore.CYAN + "  //batch_import <dir> [-r] [-l] - Import all cards from a directory")
     print(Fore.CYAN + "  //refine <name>        - Run AI refinement on an existing profile (e.g. Lily.json)")
     print(Fore.CYAN + "  //lorebook <name> [card] - Generate lorebook for a profile (optional source card)")
     print(Fore.CYAN + "  Ctrl+C                 - Exit")

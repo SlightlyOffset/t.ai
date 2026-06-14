@@ -804,8 +804,8 @@ class CharacterImporter:
             print(f"{Fore.YELLOW}[WARNING] AI lorebook extraction failed: {e}")
             return None
 
-def import_character(source_path, refine=False, model=None):
-    """Main entry point for importing a character with optional AI refinement."""
+def import_character(source_path, refine=False, lore=False, model=None):
+    """Main entry point for importing a character with optional AI refinement and lore extraction."""
     data = None
     avatar_path = "img/No_Image_Error.png"
 
@@ -870,14 +870,14 @@ def import_character(source_path, refine=False, model=None):
         else:
             print(f"{Fore.YELLOW}[INFO] Conversion may be imperfect. It is recommended to run AI refinement or review the profile.")
 
-        # 3. Generate lorebook from embedded character_book or AI extraction
+        # AI lore extraction is run if lore is True. Rule-based extraction always runs if embedded book exists.
         try:
             with open(save_path, "r", encoding="utf-8") as f:
                 current_profile = json.load(f)
         except Exception:
             current_profile = new_profile
 
-        lorebook_model = model or CharacterImporter.get_default_refine_model() if refine else None
+        lorebook_model = model or CharacterImporter.get_default_refine_model() if lore else None
         print(Fore.CYAN + "[SYSTEM] Generating lorebook...")
         lorebook_path = CharacterImporter.generate_lorebook(
             current_profile, raw_st_data=data, model=lorebook_model
