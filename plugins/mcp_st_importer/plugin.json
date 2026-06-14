@@ -1,5 +1,5 @@
 {
     "enabled": true,
-    "refine_model": "dolphin3:latest",
+    "refine_model": "",
     "num_ctx": 8192
 }
