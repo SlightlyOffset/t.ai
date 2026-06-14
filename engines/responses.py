@@ -1556,3 +1556,40 @@ def get_respond(user_input: str, profile: dict, profile_path: str = None, is_reg
     for chunk in get_respond_stream(user_input, profile, profile_path, is_regeneration=is_regeneration):
         full_response += chunk
     return full_response
+
+
+def unload_all_models() -> None:
+    """
+    Queries local Ollama for all running models and unloads them to free up VRAM immediately.
+    """
+    local_url = get_setting("local_llm_url", "http://localhost:11434/v1")
+    base_url = local_url.replace("/v1", "").rstrip("/")
+    ps_url = f"{base_url}/api/ps"
+    generate_url = f"{base_url}/api/generate"
+    
+    try:
+        log_debug("UNLOAD_ALL_MODELS_START", {"url": ps_url})
+        # Short timeout to prevent blocking application exit if Ollama is unreachable
+        response = requests.get(ps_url, timeout=3)
+        if response.status_code != 200:
+            return
+            
+        data = response.json()
+        running_models = data.get("models", [])
+        if not running_models:
+            log_debug("UNLOAD_ALL_MODELS_NONE")
+            return
+            
+        for m in running_models:
+            model_name = m.get("model") or m.get("name")
+            if model_name:
+                try:
+                    log_debug("MODEL_UNLOAD_SHUTDOWN", {"model": model_name})
+                    requests.post(generate_url, json={"model": model_name, "keep_alive": 0}, timeout=3)
+                except Exception as e:
+                    log_debug("MODEL_UNLOAD_SHUTDOWN_ERROR", {"model": model_name, "error": str(e)})
+                    
+        log_debug("UNLOAD_ALL_MODELS_SUCCESS")
+    except Exception as e:
+        log_debug("UNLOAD_ALL_MODELS_ERROR", {"error": str(e)})
+
