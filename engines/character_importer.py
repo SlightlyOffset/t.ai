@@ -151,7 +151,12 @@ class CharacterImporter:
                 "other": replace_placeholders(g("scenario"))
             },
             "starter_messages": st_data.get("starter_messages") if isinstance(st_data.get("starter_messages"), list) else ([replace_placeholders(g("first_mes"))] if g("first_mes") else []),
-            "system_prompt": st_data.get("system_prompt") or f"Character: {char_name}\nPersonality: {replace_placeholders(g('personality'))}\nDescription: {replace_placeholders(g('description'))}\nScenario: {replace_placeholders(g('scenario'))}",
+            "system_prompt": st_data.get("system_prompt") or (
+                f"You are roleplaying as {char_name}.\n\n"
+                f"[Personality]\n{replace_placeholders(g('personality'))}\n\n"
+                f"[Backstory]\n{replace_placeholders(g('description'))}\n\n"
+                f"[Scenario]\n{replace_placeholders(g('scenario'))}"
+            ),
             "preferred_edge_voice": preferred_edge_voice,
             "tts_engine": tts_engine,
             "voice_clone_ref": voice_clone_ref,
@@ -246,7 +251,7 @@ class CharacterImporter:
             '  "personality_type": "Concise 1-3 sentence summary of personality",\n'
             '  "backstory": "Clean, narrative biography summary of history and origin",\n'
             '  "other": "Refined description of the roleplay scenario or other setting details",\n'
-            '  "system_prompt": "A highly immersive, detailed system prompt for the roleplay. It should write instructions on how the AI should roleplay as this character (e.g. \'You are [Name], a... Describe actions in asterisks... Use a stuttering tone...\'). Keep it in the second person (\'You are...\')."\n'
+            '  "system_prompt": "A highly immersive, refined system prompt for the roleplay. Synthesize the raw backstory, personality, scenario, and examples into active, direct instructions for the AI on how to act, talk, and behave as this character. Write in the second person (e.g. \'You are [Name], a...\'). Do NOT copy the raw backstory or scenario verbatim. Outline their tone, speech pattern, mannerisms, and formatting instructions (e.g. asterisks for actions) in a clean, structured, and actionable format. Limit to 3-5 concise, high-impact paragraphs."\n'
             "}"
         )
 
@@ -257,10 +262,12 @@ class CharacterImporter:
             f"Raw Scenario/Other Details:\n{raw_scenario}\n\n"
             f"Raw Dialogue Examples:\n{raw_mes_example}\n\n"
             "Strict Instructions:\n"
-            "1. Extract only facts directly mentioned or clearly implied.\n"
+            "1. Extract only facts directly mentioned or clearly implied for the attributes (gender, age, appearance, likes, dislikes).\n"
             "2. If age or gender are not mentioned or cannot be inferred, use 'Unknown'.\n"
             "3. Do not invent backstory details. Keep it grounded.\n"
-            "4. Return ONLY valid JSON."
+            "4. For 'system_prompt', synthesize and write a highly refined, active roleplay instruction set in the second person ('You are...'). Do NOT copy the raw fields verbatim; construct a clean, cohesive, and immersive directive detailing the character's persona, attitude, tone, speech pattern, and mannerisms.\n"
+            "5. Translate any weird formatting syntax (such as W++ format, e.g. [Attribute(\"value\")] or [Attribute + value]) into clean, natural human prose for all textual fields.\n"
+            "6. Return ONLY valid JSON."
         )
 
         messages = [
@@ -323,7 +330,15 @@ class CharacterImporter:
                             },
                             "system_prompt": {
                                 "type": "string",
-                                "description": "A highly immersive, detailed system prompt for the roleplay. It should write instructions on how the AI should roleplay as this character. Keep it in the second person ('You are...')."
+                                "description": (
+                                    "A highly immersive, refined system prompt for the roleplay. "
+                                    "Synthesize the raw backstory, personality, scenario, and examples into active, "
+                                    "direct instructions for the AI on how to act, talk, and behave as this character. "
+                                    "Write in the second person (e.g. 'You are [Name], a...'). Do NOT copy the raw "
+                                    "backstory or scenario verbatim. Outline their tone, speech pattern, mannerisms, "
+                                    "and formatting instructions (e.g. asterisks for actions) in a clean, structured, "
+                                    "and actionable format. Limit to 3-5 concise, high-impact paragraphs."
+                                )
                             }
                         },
                         "required": [
@@ -336,11 +351,12 @@ class CharacterImporter:
         ]
 
         try:
-            # Call compat function with tools
+            # Call compat function with tools and JSON formatting format='json'
             result = _ollama_chat_compat(
                 model=refine_model,
                 messages=messages,
                 stream=False,
+                format="json",
                 think=False,
                 options={"temperature": 0.1},
                 tools=tools

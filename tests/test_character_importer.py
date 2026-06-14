@@ -85,6 +85,7 @@ class TestCharacterImporterRefine(unittest.TestCase):
         mock_chat.assert_called_once()
         args, kwargs = mock_chat.call_args
         self.assertEqual(kwargs["model"], "llama3.2")
+        self.assertEqual(kwargs.get("format"), "json")
         self.assertIn("tools", kwargs)
         self.assertEqual(kwargs["tools"][0]["function"]["name"], "save_refined_profile")
 
@@ -136,6 +137,7 @@ class TestCharacterImporterRefine(unittest.TestCase):
         mock_chat.assert_called_once()
         args, kwargs = mock_chat.call_args
         self.assertEqual(kwargs["model"], "llama3.2")
+        self.assertEqual(kwargs.get("format"), "json")
 
     @patch("ollama.chat")
     @patch("engines.config.get_setting", return_value="llama3.2")
@@ -318,6 +320,22 @@ class TestCharacterImporterConvert(unittest.TestCase):
         self.assertEqual(profile["character_info"]["dislikes"], ["bugs", "meetings"])
         self.assertEqual(profile["llm_model"], "")
         self.assertEqual(profile["voice_clone_ref"], "")
+
+    def test_convert_to_project_format_fallback_system_prompt(self):
+        st_data = {
+            "name": "Bob",
+            "personality": "Friendly",
+            "description": "A helpful assistant.",
+            "scenario": "A chat in the office."
+        }
+        profile = CharacterImporter.convert_to_project_format(st_data)
+        expected_prompt = (
+            "You are roleplaying as Bob.\n\n"
+            "[Personality]\nFriendly\n\n"
+            "[Backstory]\nA helpful assistant.\n\n"
+            "[Scenario]\nA chat in the office."
+        )
+        self.assertEqual(profile["system_prompt"], expected_prompt)
 
 
 if __name__ == "__main__":
