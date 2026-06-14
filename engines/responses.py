@@ -490,6 +490,71 @@ def extract_scene_from_starter(starter_text: str, model: str = None) -> str | No
     return None
 
 
+def get_current_main_model() -> str:
+    """
+    Resolves the main chat model for the active session character,
+    falling back to the default local model.
+    """
+    char_profile_name = get_setting("current_character_profile")
+    if char_profile_name:
+        profile_path = os.path.join("profiles", char_profile_name)
+        if os.path.exists(profile_path):
+            try:
+                with open(profile_path, "r", encoding="utf-8") as f:
+                    profile = json.load(f)
+                    main_model = profile.get("llm_model")
+                    if main_model:
+                        return main_model
+            except Exception:
+                pass
+    return get_setting("default_llm_model", "llama3")
+
+
+def _unload_model_and_preload_main(unload_model: str, main_model: str):
+    """
+    Unloads the summarizer model from local Ollama and preloads the main model.
+    """
+    if not unload_model:
+        return
+
+    # Do not unload if the main model is the same as the summarizer model and running locally
+    if main_model == unload_model and not get_setting("remote_llm_url"):
+        return
+
+    local_url = get_setting("local_llm_url", "http://localhost:11434/v1")
+    base_url = local_url.replace("/v1", "").rstrip("/")
+    generate_url = f"{base_url}/api/generate"
+
+    # 1. Unload the summarizer model
+    try:
+        log_debug("MODEL_UNLOAD_START", {"model": unload_model})
+        requests.post(generate_url, json={"model": unload_model, "keep_alive": 0}, timeout=5)
+        log_debug("MODEL_UNLOAD_SUCCESS", {"model": unload_model})
+    except Exception as e:
+        log_debug("MODEL_UNLOAD_ERROR", {"model": unload_model, "error": str(e)})
+
+    # 2. Preload the main model if different
+    if main_model and not get_setting("remote_llm_url") and main_model != unload_model:
+        try:
+            log_debug("MODEL_PRELOAD_START", {"model": main_model})
+            payload = {"model": main_model}
+            
+            keep_alive_setting = get_setting("local_llm_keep_alive")
+            if keep_alive_setting is not None:
+                try:
+                    if isinstance(keep_alive_setting, str) and keep_alive_setting.isdigit():
+                        payload["keep_alive"] = int(keep_alive_setting)
+                    else:
+                        payload["keep_alive"] = keep_alive_setting
+                except (TypeError, ValueError):
+                    pass
+            
+            requests.post(generate_url, json=payload, timeout=15)
+            log_debug("MODEL_PRELOAD_SUCCESS", {"model": main_model})
+        except Exception as e:
+            log_debug("MODEL_PRELOAD_ERROR", {"model": main_model, "error": str(e)})
+
+
 def generate_summary(messages: list, model: str, remote_url: str = None, user_name: str = "User", char_name: str = "Assistant") -> str:
     """
     Generates a concise summary of the provided conversation history.
@@ -529,6 +594,7 @@ def generate_summary(messages: list, model: str, remote_url: str = None, user_na
         {"role": "user", "content": f"[HISTORY]\n{formatted_history}\n[/HISTORY]"}
     ]
 
+    summarizer_model = None
     try:
         # Hybrid Offloading: Summarization is always local, but respects caller-provided model
         summarizer_model = model or get_setting("summarizer_model", get_setting("local_utility_model", "llama3.2"))
@@ -546,6 +612,10 @@ def generate_summary(messages: list, model: str, remote_url: str = None, user_na
     except Exception as e:
         log_debug("SUMMARY_ERROR", {"error": str(e), "traceback": traceback.format_exc()})
         return f"Error generating summary: {str(e)}"
+    finally:
+        if summarizer_model:
+            _unload_model_and_preload_main(summarizer_model, get_current_main_model())
+
 
 def update_rolling_summary(existing_core: str, new_messages: list, model: str,
                            remote_url: str = None, user_name: str = "User",
@@ -581,6 +651,7 @@ def update_rolling_summary(existing_core: str, new_messages: list, model: str,
         {"role": "user", "content": input_content}
     ]
 
+    summarizer_model = None
     try:
         # Hybrid Offloading: Summarization is always local, but respects caller-provided model
         summarizer_model = model or get_setting("summarizer_model", get_setting("local_utility_model", "llama3.2"))
@@ -598,6 +669,9 @@ def update_rolling_summary(existing_core: str, new_messages: list, model: str,
     except Exception as e:
         log_debug("ROLLING_SUMMARY_ERROR", {"error": str(e), "traceback": traceback.format_exc()})
         return f"Error updating rolling summary: {str(e)}"
+    finally:
+        if summarizer_model:
+            _unload_model_and_preload_main(summarizer_model, get_current_main_model())
 
 
 
