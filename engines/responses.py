@@ -201,10 +201,14 @@ def _ollama_chat_compat(model: str, messages: list, stream: bool = False, format
         if max_tok is not None:
             payload["max_tokens"] = max_tok
 
+        num_ctx = options.get("num_ctx")
+        if num_ctx is not None:
+            payload["num_ctx"] = num_ctx
+
     if format == "json":
         payload["response_format"] = {"type": "json_object"}
 
-    for sampler in ["top_p", "top_k", "mirostat", "presence_penalty", "frequency_penalty"]:
+    for sampler in ["top_p", "top_k", "mirostat", "presence_penalty", "frequency_penalty", "num_ctx"]:
         val = get_setting(sampler)
         if val is not None:
             payload[sampler] = val

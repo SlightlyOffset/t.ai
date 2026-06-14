@@ -356,6 +356,17 @@ class CharacterImporter:
         ]
 
         try:
+            # Load num_ctx from plugin config, defaulting to 8192
+            refine_num_ctx = 8192
+            try:
+                config_path = os.path.join("plugins", "mcp_st_importer", "plugin.json")
+                if os.path.exists(config_path):
+                    with open(config_path, "r", encoding="utf-8") as f:
+                        cfg = json.load(f)
+                        refine_num_ctx = int(cfg.get("num_ctx", 8192))
+            except Exception:
+                pass
+
             # Call compat function with tools and JSON formatting format='json'
             result = _ollama_chat_compat(
                 model=refine_model,
@@ -363,7 +374,7 @@ class CharacterImporter:
                 stream=False,
                 format="json",
                 think=False,
-                options={"temperature": 0.1},
+                options={"temperature": 0.1, "num_ctx": refine_num_ctx},
                 tools=tools
             )
 
