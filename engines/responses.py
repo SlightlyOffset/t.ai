@@ -81,6 +81,7 @@ def _is_duplicate_reply(candidate: str, previous_replies: list[str]) -> bool:
 def _extract_remote_message_content(response: requests.Response) -> str:
     """Parse common remote LLM response envelopes, with plain-text fallback."""
     response.raise_for_status()
+    response.encoding = 'utf-8'
 
     result = None
     try:
@@ -122,6 +123,7 @@ def parse_sse_stream(response: requests.Response):
     Parses a Server-Sent Events (SSE) stream from an OpenAI-compatible endpoint.
     Yields text chunks as they arrive.
     """
+    response.encoding = 'utf-8'
     for line in response.iter_lines(decode_unicode=True):
         if not line:
             continue
@@ -256,6 +258,7 @@ def _ollama_chat_compat(model: str, messages: list, stream: bool = False, format
         try:
             response = requests.post(full_url, json=payload, timeout=timeout)
             response.raise_for_status()
+            response.encoding = 'utf-8'
         except requests.exceptions.HTTPError as e:
             if response.status_code == 400 and payload.get("tools"):
                 if get_setting("debug_mode", False):
@@ -277,6 +280,7 @@ def _ollama_chat_compat(model: str, messages: list, stream: bool = False, format
                     payload["messages"] = payload["messages"] + [{"role": "system", "content": steering_msg}]
                 response = requests.post(full_url, json=payload, timeout=timeout)
                 response.raise_for_status()
+                response.encoding = 'utf-8'
             else:
                 raise
         res_data = response.json()
@@ -668,6 +672,7 @@ def _generate_candidate_replies(messages: list, model: str, remote_url: str | No
             }
             response = requests.post(full_url, json=payload, stream=False, timeout=120)
             response.raise_for_status()
+            response.encoding = 'utf-8'
             data = response.json()
             if isinstance(data, dict) and "candidates" in data:
                 candidates = data["candidates"]
@@ -1277,6 +1282,7 @@ def get_respond_stream(user_input: str, profile: dict, profile_path: str = None,
                 }
                 response = requests.post(full_url, json=payload, stream=True, timeout=60)
                 response.raise_for_status()
+                response.encoding = 'utf-8'
                 stream = response.iter_content(chunk_size=None, decode_unicode=True)
             # Handle Local Ollama Request
             else:

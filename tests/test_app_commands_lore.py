@@ -1,6 +1,7 @@
 import unittest
 import os
 import shutil
+from unittest.mock import patch
 from engines.app_commands import app_commands
 
 class TestAppCommandsLore(unittest.TestCase):
@@ -36,7 +37,9 @@ class TestAppCommandsLore(unittest.TestCase):
         if os.path.exists(self.test_lore_dir):
             shutil.rmtree(self.test_lore_dir)
 
-    def test_lore_reload_command(self):
+    @patch('engines.config.get_setting')
+    def test_lore_reload_command(self, mock_get_setting):
+        mock_get_setting.return_value = None
         # We ensure a file exists for the command to find
         os.makedirs("lorebooks", exist_ok=True)
         with open("lorebooks/default.json", "w", encoding="UTF-8") as f:
