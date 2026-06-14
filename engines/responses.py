@@ -522,6 +522,8 @@ def _unload_model_and_preload_main(unload_model: str, main_model: str):
         return
 
     local_url = get_setting("local_llm_url", "http://localhost:11434/v1")
+    if "11434" not in local_url:
+        return
     base_url = local_url.replace("/v1", "").rstrip("/")
     generate_url = f"{base_url}/api/generate"
 
@@ -1563,6 +1565,8 @@ def unload_all_models() -> None:
     Queries local Ollama for all running models and unloads them to free up VRAM immediately.
     """
     local_url = get_setting("local_llm_url", "http://localhost:11434/v1")
+    if "11434" not in local_url:
+        return
     base_url = local_url.replace("/v1", "").rstrip("/")
     ps_url = f"{base_url}/api/ps"
     generate_url = f"{base_url}/api/generate"

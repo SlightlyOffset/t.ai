@@ -6,6 +6,9 @@ import shutil
 from PIL import Image
 from colorama import Fore
 
+# Project root directory
+PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
 def _heal_and_load_json(text):
     """Attempts to parse JSON, healing unescaped quotes if needed."""
     try:
@@ -39,7 +42,7 @@ class CharacterImporter:
         """Gets the default LLM model to use for character refinement."""
         from engines.config import get_setting
         try:
-            config_path = os.path.join("plugins", "mcp_st_importer", "plugin.json")
+            config_path = os.path.join(PROJECT_ROOT, "plugins", "mcp_st_importer", "plugin.json")
             if os.path.exists(config_path):
                 with open(config_path, "r", encoding="utf-8") as f:
                     cfg = json.load(f)
@@ -359,7 +362,7 @@ class CharacterImporter:
             # Load num_ctx from plugin config, defaulting to 8192
             refine_num_ctx = 8192
             try:
-                config_path = os.path.join("plugins", "mcp_st_importer", "plugin.json")
+                config_path = os.path.join(PROJECT_ROOT, "plugins", "mcp_st_importer", "plugin.json")
                 if os.path.exists(config_path):
                     with open(config_path, "r", encoding="utf-8") as f:
                         cfg = json.load(f)
@@ -716,7 +719,7 @@ class CharacterImporter:
         # Load num_ctx from plugin config
         refine_num_ctx = 8192
         try:
-            config_path = os.path.join("plugins", "mcp_st_importer", "plugin.json")
+            config_path = os.path.join(PROJECT_ROOT, "plugins", "mcp_st_importer", "plugin.json")
             if os.path.exists(config_path):
                 with open(config_path, "r", encoding="utf-8") as f:
                     cfg = json.load(f)
