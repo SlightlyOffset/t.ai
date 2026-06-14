@@ -580,7 +580,7 @@ class CharacterImporter:
             return False
 
     @staticmethod
-    def generate_lorebook(profile, raw_st_data=None, model=None):
+    def generate_lorebook(profile, raw_st_data=None, model=None, lorebook_name=None):
         """
         Generates a lorebook for a character profile.
 
@@ -598,7 +598,7 @@ class CharacterImporter:
             return None
 
         char_name = profile.get("name", "Unknown")
-        safe_name = sanitize_profile_name(char_name)
+        safe_name = lorebook_name or sanitize_profile_name(char_name)
         lorebook_dir = os.path.abspath("lorebooks")
         os.makedirs(lorebook_dir, exist_ok=True)
         lorebook_path = os.path.join(lorebook_dir, f"{safe_name}.json")
@@ -804,8 +804,25 @@ class CharacterImporter:
             print(f"{Fore.YELLOW}[WARNING] AI lorebook extraction failed: {e}")
             return None
 
+def calculate_file_hash(filepath):
+    """Calculates a short MD5 hash of the source file to prevent naming collisions."""
+    import hashlib
+    try:
+        hasher = hashlib.md5()
+        with open(filepath, 'rb') as f:
+            buf = f.read(65536)
+            while len(buf) > 0:
+                hasher.update(buf)
+                buf = f.read(65536)
+        return hasher.hexdigest()[:8]
+    except Exception:
+        import time
+        return hashlib.md5(str(time.time()).encode()).hexdigest()[:8]
+
 def import_character(source_path, refine=False, lore=False, model=None):
     """Main entry point for importing a character with optional AI refinement and lore extraction."""
+    from engines.utilities import sanitize_profile_name
+    card_hash = calculate_file_hash(source_path)
     data = None
     avatar_path = "img/No_Image_Error.png"
 
@@ -816,7 +833,7 @@ def import_character(source_path, refine=False, lore=False, model=None):
             # Create a safe filename for the image
             safe_name = re.sub(r'[^\w\s-]', '', char_name).strip().replace(' ', '_')
             ext = os.path.splitext(source_path)[1]
-            dest_image = os.path.join("img", f"{safe_name}{ext}")
+            dest_image = os.path.join("img", f"{safe_name}_{card_hash}{ext}")
 
             os.makedirs("img", exist_ok=True)
             try:
@@ -844,7 +861,9 @@ def import_character(source_path, refine=False, lore=False, model=None):
     new_profile = CharacterImporter.convert_to_project_format(data, avatar_path=avatar_path)
     
     # 1. Save the basic rule-based profile first to ensure critical fields are saved
-    save_path = CharacterImporter.save_profile(new_profile)
+    safe_profile_name = sanitize_profile_name(new_profile["name"])
+    save_filename = f"{safe_profile_name}_{card_hash}.json"
+    save_path = CharacterImporter.save_profile(new_profile, filename=save_filename)
 
     if save_path:
         print(f"{Fore.GREEN}[SUCCESS] Character profile imported successfully.")
@@ -877,10 +896,13 @@ def import_character(source_path, refine=False, lore=False, model=None):
         except Exception:
             current_profile = new_profile
 
+        # Get profile basename (without .json extension)
+        profile_basename = os.path.splitext(os.path.basename(save_path))[0]
+
         lorebook_model = model or CharacterImporter.get_default_refine_model() if lore else None
         print(Fore.CYAN + "[SYSTEM] Generating lorebook...")
         lorebook_path = CharacterImporter.generate_lorebook(
-            current_profile, raw_st_data=data, model=lorebook_model
+            current_profile, raw_st_data=data, model=lorebook_model, lorebook_name=profile_basename
         )
 
         if lorebook_path:

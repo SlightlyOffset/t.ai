@@ -145,8 +145,11 @@ class ProfileSelect(Screen):
         if os.path.exists(self.PROFILES_DIR):
             profiles = [f for f in os.listdir(self.PROFILES_DIR) if f.endswith(".json")]
             profiles.sort()
+            import re
             for profile in profiles:
-                display_name = profile.replace(".json", "").replace("_", " ").title()
+                base_name = profile.replace(".json", "")
+                base_name = re.sub(r'_[a-f0-9]{8}$', '', base_name, flags=re.IGNORECASE)
+                display_name = base_name.replace("_", " ").title()
                 option_list.add_option(Option(display_name, id=profile))
         
         # Check option count safely to avoid TypeError with MagicMocks in unit tests
