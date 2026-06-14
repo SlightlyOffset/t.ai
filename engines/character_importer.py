@@ -252,11 +252,11 @@ class CharacterImporter:
             '  "appearance": "Short description of appearance, height, hair, clothing, eyes",\n'
             '  "likes": ["list of strings containing likes/hobbies, or empty list"],\n'
             '  "dislikes": ["list of strings containing dislikes/aversions, or empty list"],\n'
-            '  "rp_mannerisms": ["List of 3-5 specific conversational traits, e.g. \'frequently stutters when nervous\', \'speaks in a polite, formal tone\'"],\n'
+            '  "rp_mannerisms": ["List of 3-5 separate conversational traits/quirks (must be individual list items, NOT a single combined string)."],\n'
             '  "personality_type": "Concise 1-3 sentence summary of personality",\n'
             '  "backstory": "Clean, narrative biography summary of history and origin",\n'
             '  "other": "Refined description of the roleplay scenario or other setting details",\n'
-            '  "system_prompt": "A highly immersive, refined system prompt for the roleplay. Synthesize the raw backstory, personality, scenario, and examples into active, direct instructions for the AI on how to act, talk, and behave as this character. Write in the second person (e.g. \'You are [Name], a...\'). Do NOT copy the raw backstory or scenario verbatim. Outline their tone, speech pattern, mannerisms, and formatting instructions (e.g. asterisks for actions) in a clean, structured, and actionable format. Limit to 3-5 concise, high-impact paragraphs."\n'
+            '  "system_prompt": "A highly immersive, refined system prompt for the roleplay. Synthesize the raw backstory, personality, scenario, and examples into active, direct instructions for the AI on how to act, talk, and behave as this character. Write in the second person (e.g. \'You are [Name], a...\'). Do NOT duplicate specific details that are already captured in separate fields like backstory, personality, or rp_mannerisms. Focus on overall roleplay framing, formatting instructions (e.g., using asterisks for actions), relationship dynamics, and tone, keeping it highly concise to save tokens. Limit to 2-3 concise paragraphs."\n'
             "}"
         )
 
@@ -270,9 +270,10 @@ class CharacterImporter:
             "1. Extract only facts directly mentioned or clearly implied for the attributes (gender, age, appearance, likes, dislikes).\n"
             "2. If age or gender are not mentioned or cannot be inferred, use 'Unknown'.\n"
             "3. Do not invent backstory details. Keep it grounded.\n"
-            "4. For 'system_prompt', synthesize and write a highly refined, active roleplay instruction set in the second person ('You are...'). Do NOT copy the raw fields verbatim; construct a clean, cohesive, and immersive directive detailing the character's persona, attitude, tone, speech pattern, and mannerisms.\n"
+            "4. For 'system_prompt', write a highly refined, active roleplay instruction set in the second person ('You are...'). Focus on framing, formatting, and behavior without duplicating the specific backstory, personality, or mannerisms listed in other fields, to save token space.\n"
             "5. Translate any weird formatting syntax (such as W++ format, e.g. [Attribute(\"value\")] or [Attribute + value]) into clean, natural human prose for all textual fields.\n"
-            "6. Return ONLY valid JSON."
+            "6. Return ONLY valid JSON.\n"
+            "7. Ensure lists like 'rp_mannerisms', 'likes', and 'dislikes' contain distinct individual items as separate list strings, never combined into a single long string."
         )
 
         messages = [
@@ -319,7 +320,7 @@ class CharacterImporter:
                             "rp_mannerisms": {
                                 "type": "array",
                                 "items": {"type": "string"},
-                                "description": "List of 3-5 specific conversational traits, e.g. 'frequently stutters when nervous', 'speaks in a polite, formal tone'"
+                                "description": "List of 3-5 separate conversational traits/quirks. Must be individual list items, NOT a single combined string."
                             },
                             "personality_type": {
                                 "type": "string",
@@ -337,12 +338,11 @@ class CharacterImporter:
                                 "type": "string",
                                 "description": (
                                     "A highly immersive, refined system prompt for the roleplay. "
-                                    "Synthesize the raw backstory, personality, scenario, and examples into active, "
-                                    "direct instructions for the AI on how to act, talk, and behave as this character. "
-                                    "Write in the second person (e.g. 'You are [Name], a...'). Do NOT copy the raw "
-                                    "backstory or scenario verbatim. Outline their tone, speech pattern, mannerisms, "
-                                    "and formatting instructions (e.g. asterisks for actions) in a clean, structured, "
-                                    "and actionable format. Limit to 3-5 concise, high-impact paragraphs."
+                                    "Synthesize raw details into active, direct instructions. Write in the second person. "
+                                    "Do NOT duplicate specific details that are already captured in separate fields like backstory, "
+                                    "personality, or rp_mannerisms. Focus on overall roleplay framing, formatting instructions "
+                                    "(e.g., using asterisks for actions), relationship dynamics, and tone, keeping it highly "
+                                    "concise to save tokens. Limit to 2-3 concise paragraphs."
                                 )
                             }
                         },
@@ -464,14 +464,32 @@ class CharacterImporter:
                 print(f"{Fore.YELLOW}[WARNING] Failed to parse AI refinement (both tool calling and JSON parsing failed). Falling back to rule-based values.")
                 return profile
 
-            # Clean up any fields that were double-serialized as JSON strings (common on smaller models)
+            # Clean up and split any list fields that were double-serialized or formatted as a single combined string
             for list_field in ["likes", "dislikes", "rp_mannerisms"]:
                 val = refined_data.get(list_field)
-                if isinstance(val, str) and val.strip().startswith("["):
-                    try:
-                        refined_data[list_field] = json.loads(val)
-                    except Exception:
-                        pass
+                if isinstance(val, str):
+                    if val.strip().startswith("["):
+                        try:
+                            val = json.loads(val)
+                        except Exception:
+                            pass
+                    else:
+                        val = [p.strip() for p in re.split(r'[;\n]|\-\s+|\*\s+|\b\d+\.\s+', val) if p.strip()]
+                
+                if isinstance(val, list):
+                    cleaned_items = []
+                    for item in val:
+                        if isinstance(item, str):
+                            parts = [p.strip() for p in re.split(r'[;\n]|\-\s+|\*\s+|\b\d+\.\s+', item) if p.strip()]
+                            cleaned_items.extend(parts)
+                    
+                    seen = set()
+                    final_items = []
+                    for item in cleaned_items:
+                        if item.lower() not in seen:
+                            seen.add(item.lower())
+                            final_items.append(item)
+                    refined_data[list_field] = final_items
 
             # Merge refined fields into the profile
             if "alt_names" in refined_data and isinstance(refined_data["alt_names"], str):
