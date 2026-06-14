@@ -82,5 +82,109 @@ class TestSummarizer(unittest.TestCase):
             new_summary = update_rolling_summary(existing_core, new_messages, model="phi3")
             self.assertEqual(new_summary, '- updated info')
 
+    @patch("engines.responses.get_setting")
+    def test_get_current_main_model_no_profile(self, mock_get_setting):
+        from engines.responses import get_current_main_model
+        
+        # Test 1: No current character profile set
+        mock_get_setting.side_effect = lambda key, default=None: {
+            "current_character_profile": None,
+            "default_llm_model": "fallback-llama"
+        }.get(key, default)
+        
+        self.assertEqual(get_current_main_model(), "fallback-llama")
+
+    @patch("engines.responses.os.path.exists", return_value=True)
+    @patch("engines.responses.get_setting")
+    def test_get_current_main_model_with_profile(self, mock_get_setting, mock_exists):
+        from engines.responses import get_current_main_model
+        import json
+        
+        mock_get_setting.side_effect = lambda key, default=None: {
+            "current_character_profile": "TestChar.json",
+            "default_llm_model": "fallback-llama"
+        }.get(key, default)
+        
+        profile_content = json.dumps({"name": "Test", "llm_model": "custom-model"})
+        with patch("builtins.open", unittest.mock.mock_open(read_data=profile_content)):
+            self.assertEqual(get_current_main_model(), "custom-model")
+
+    @patch("engines.responses.requests.post")
+    @patch("engines.responses.get_setting")
+    def test_unload_model_and_preload_main_basic(self, mock_get_setting, mock_post):
+        from engines.responses import _unload_model_and_preload_main
+        
+        mock_get_setting.side_effect = lambda key, default=None: {
+            "local_llm_url": "http://localhost:11434/v1",
+            "remote_llm_url": None,
+            "local_llm_keep_alive": 300
+        }.get(key, default)
+        
+        # Unload gemma2:2b and preload llama3.2 (they are different)
+        _unload_model_and_preload_main("gemma2:2b", "llama3.2")
+        
+        self.assertEqual(mock_post.call_count, 2)
+        
+        first_call_args = mock_post.call_args_list[0]
+        self.assertEqual(first_call_args[0][0], "http://localhost:11434/api/generate")
+        self.assertEqual(first_call_args[1]["json"], {"model": "gemma2:2b", "keep_alive": 0})
+        
+        second_call_args = mock_post.call_args_list[1]
+        self.assertEqual(second_call_args[0][0], "http://localhost:11434/api/generate")
+        self.assertEqual(second_call_args[1]["json"], {"model": "llama3.2", "keep_alive": 300})
+
+    @patch("engines.responses.requests.post")
+    @patch("engines.responses.get_setting")
+    def test_unload_model_and_preload_main_same_model(self, mock_get_setting, mock_post):
+        from engines.responses import _unload_model_and_preload_main
+        
+        mock_get_setting.side_effect = lambda key, default=None: {
+            "local_llm_url": "http://localhost:11434/v1",
+            "remote_llm_url": None
+        }.get(key, default)
+        
+        # When unload_model == main_model and running locally, do nothing
+        _unload_model_and_preload_main("llama3.2", "llama3.2")
+        self.assertEqual(mock_post.call_count, 0)
+
+    @patch("engines.responses.requests.post")
+    @patch("engines.responses.requests.get")
+    @patch("engines.responses.get_setting")
+    def test_unload_all_models_success(self, mock_get_setting, mock_get, mock_post):
+        from engines.responses import unload_all_models
+        
+        mock_get_setting.return_value = "http://localhost:11434/v1"
+        
+        # Mock get request to /api/ps returning running models
+        mock_get_response = unittest.mock.Mock()
+        mock_get_response.status_code = 200
+        mock_get_response.json.return_value = {
+            "models": [
+                {"model": "gemma2:2b", "name": "gemma2:2b"},
+                {"model": "llama3:latest", "name": "llama3:latest"}
+            ]
+        }
+        mock_get.return_value = mock_get_response
+        
+        # Mock post requests for /api/generate
+        mock_post_response = unittest.mock.Mock()
+        mock_post_response.status_code = 200
+        mock_post.return_value = mock_post_response
+        
+        unload_all_models()
+        
+        # Verify /api/ps was called
+        mock_get.assert_called_once_with("http://localhost:11434/api/ps", timeout=3)
+        
+        # Verify /api/generate was called for both models with keep_alive: 0
+        self.assertEqual(mock_post.call_count, 2)
+        call1 = mock_post.call_args_list[0]
+        self.assertEqual(call1[0][0], "http://localhost:11434/api/generate")
+        self.assertEqual(call1[1]["json"], {"model": "gemma2:2b", "keep_alive": 0})
+        
+        call2 = mock_post.call_args_list[1]
+        self.assertEqual(call2[0][0], "http://localhost:11434/api/generate")
+        self.assertEqual(call2[1]["json"], {"model": "llama3:latest", "keep_alive": 0})
+
 if __name__ == '__main__':
     unittest.main()

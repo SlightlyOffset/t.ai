@@ -297,7 +297,7 @@ class TestAppCommands(unittest.TestCase):
     def test_import_card_success(self, mock_stdout, mock_exists, mock_import):
         result = app_commands("//import_card cards/dummy.png --refine")
         self.assertTrue(result)
-        mock_import.assert_called_once_with("cards/dummy.png", refine=True)
+        mock_import.assert_called_once_with("cards/dummy.png", refine=True, lore=False)
         self.assertIn("[SYSTEM] Successfully imported character card: dummy.png", strip_ansi(mock_stdout.getvalue()))
 
     @patch('engines.app_commands.import_character')
@@ -306,7 +306,25 @@ class TestAppCommands(unittest.TestCase):
     def test_import_card_success_short_flag(self, mock_stdout, mock_exists, mock_import):
         result = app_commands("//import_card cards/dummy.png -r")
         self.assertTrue(result)
-        mock_import.assert_called_once_with("cards/dummy.png", refine=True)
+        mock_import.assert_called_once_with("cards/dummy.png", refine=True, lore=False)
+        self.assertIn("[SYSTEM] Successfully imported character card: dummy.png", strip_ansi(mock_stdout.getvalue()))
+
+    @patch('engines.app_commands.import_character')
+    @patch('os.path.exists', return_value=True)
+    @patch('sys.stdout', new_callable=StringIO)
+    def test_import_card_success_lore_flag(self, mock_stdout, mock_exists, mock_import):
+        result = app_commands("//import_card cards/dummy.png -l")
+        self.assertTrue(result)
+        mock_import.assert_called_once_with("cards/dummy.png", refine=False, lore=True)
+        self.assertIn("[SYSTEM] Successfully imported character card: dummy.png", strip_ansi(mock_stdout.getvalue()))
+
+    @patch('engines.app_commands.import_character')
+    @patch('os.path.exists', return_value=True)
+    @patch('sys.stdout', new_callable=StringIO)
+    def test_import_card_success_both_flags(self, mock_stdout, mock_exists, mock_import):
+        result = app_commands("//import_card cards/dummy.png -r -l")
+        self.assertTrue(result)
+        mock_import.assert_called_once_with("cards/dummy.png", refine=True, lore=True)
         self.assertIn("[SYSTEM] Successfully imported character card: dummy.png", strip_ansi(mock_stdout.getvalue()))
 
 if __name__ == "__main__":

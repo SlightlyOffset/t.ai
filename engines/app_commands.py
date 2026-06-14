@@ -647,16 +647,19 @@ def app_commands(ops: str, suppress_output: bool = False):
     def _import_card(args):
         """Imports a character card (PNG or JSON) from SillyTavern format."""
         if not args:
-            _log("[ERROR] Usage: //import_card <path_to_card_png_or_json> [--refine|-r]", Fore.RED)
+            _log("[ERROR] Usage: //import_card <path_to_card_png_or_json> [--refine|-r] [--lore|-l]", Fore.RED)
             return
 
         # Parse options
         refine = False
+        lore = False
         parts = args.split()
         path_parts = []
         for part in parts:
             if part in ("--refine", "-r"):
                 refine = True
+            elif part in ("--lore", "-l"):
+                lore = True
             else:
                 path_parts.append(part)
         path = " ".join(path_parts).strip().strip('"').strip("'")
@@ -669,7 +672,7 @@ def app_commands(ops: str, suppress_output: bool = False):
         from contextlib import redirect_stdout
         f = io.StringIO()
         with redirect_stdout(f):
-            import_character(path, refine=refine)
+            import_character(path, refine=refine, lore=lore)
             
         captured_output = f.getvalue().strip()
         if captured_output:

@@ -183,11 +183,13 @@ def main():
     check_ollama_and_models()
 
     # 2. Plugin System Initialization
-    from engines.hooks import build_hook_context, execute_hooks
+    from engines.hooks import build_hook_context, execute_hooks, register_hook
     from engines.plugin_loader import discover_and_load_plugins
+    from engines.responses import unload_all_models
     
     context = build_hook_context()
     discover_and_load_plugins(context)
+    register_hook("on_shutdown", lambda ctx: unload_all_models(), plugin_name="core", priority=100)
     execute_hooks("on_startup", context)
 
     # 3. Launch the Application loop

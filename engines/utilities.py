@@ -147,8 +147,11 @@ def pick_profile() -> str:
         return None
 
     print(Fore.YELLOW + Style.BRIGHT + "\n--- Select Your Companion Profile ---")
+    import re
     for i, p in enumerate(profiles, 1):
-        display_name = p.replace(".json", "").replace("_", " ").title()
+        base_name = p.replace(".json", "")
+        base_name = re.sub(r'_[a-f0-9]{8}$', '', base_name, flags=re.IGNORECASE)
+        display_name = base_name.replace("_", " ").title()
         print(Fore.CYAN + f"  [{i}] {display_name}")
 
     while True:

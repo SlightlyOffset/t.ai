@@ -1,4 +1,5 @@
 {
     "enabled": true,
-    "refine_model": "llama3.1:8b"
+    "refine_model": "",
+    "num_ctx": 8192
 }

@@ -6,6 +6,9 @@ import shutil
 from PIL import Image
 from colorama import Fore
 
+# Project root directory
+PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
 def _heal_and_load_json(text):
     """Attempts to parse JSON, healing unescaped quotes if needed."""
     try:
@@ -33,6 +36,22 @@ class CharacterImporter:
     Handles importing and converting character profiles from external formats.
     Currently supports SillyTavern Chara Card V2 (PNG and JSON).
     """
+
+    @staticmethod
+    def get_default_refine_model():
+        """Gets the default LLM model to use for character refinement."""
+        from engines.config import get_setting
+        try:
+            config_path = os.path.join(PROJECT_ROOT, "plugins", "mcp_st_importer", "plugin.json")
+            if os.path.exists(config_path):
+                with open(config_path, "r", encoding="utf-8") as f:
+                    cfg = json.load(f)
+                    refine_model = cfg.get("refine_model")
+                    if refine_model:
+                        return refine_model
+        except Exception:
+            pass
+        return get_setting("default_llm_model", "llama3.2")
 
     @staticmethod
     def extract_from_png(image_path):
@@ -151,7 +170,12 @@ class CharacterImporter:
                 "other": replace_placeholders(g("scenario"))
             },
             "starter_messages": st_data.get("starter_messages") if isinstance(st_data.get("starter_messages"), list) else ([replace_placeholders(g("first_mes"))] if g("first_mes") else []),
-            "system_prompt": st_data.get("system_prompt") or f"Character: {char_name}\nPersonality: {replace_placeholders(g('personality'))}\nDescription: {replace_placeholders(g('description'))}\nScenario: {replace_placeholders(g('scenario'))}",
+            "system_prompt": st_data.get("system_prompt") or (
+                f"You are roleplaying as {char_name}.\n\n"
+                f"[Personality]\n{replace_placeholders(g('personality'))}\n\n"
+                f"[Backstory]\n{replace_placeholders(g('description'))}\n\n"
+                f"[Scenario]\n{replace_placeholders(g('scenario'))}"
+            ),
             "preferred_edge_voice": preferred_edge_voice,
             "tts_engine": tts_engine,
             "voice_clone_ref": voice_clone_ref,
@@ -195,18 +219,7 @@ class CharacterImporter:
         if not profile:
             return profile
 
-        refine_model = model
-        if not refine_model:
-            try:
-                config_path = os.path.join("plugins", "mcp_st_importer", "plugin.json")
-                if os.path.exists(config_path):
-                    with open(config_path, "r", encoding="utf-8") as f:
-                        cfg = json.load(f)
-                        refine_model = cfg.get("refine_model")
-            except Exception:
-                pass
-        if not refine_model:
-            refine_model = get_setting("default_llm_model", "llama3.2")
+        refine_model = model or CharacterImporter.get_default_refine_model()
         char_name = profile.get("name", "Unknown")
 
         # 1. Gather all raw context from raw_st_data or the profile
@@ -242,11 +255,11 @@ class CharacterImporter:
             '  "appearance": "Short description of appearance, height, hair, clothing, eyes",\n'
             '  "likes": ["list of strings containing likes/hobbies, or empty list"],\n'
             '  "dislikes": ["list of strings containing dislikes/aversions, or empty list"],\n'
-            '  "rp_mannerisms": ["List of 3-5 specific conversational traits, e.g. \'frequently stutters when nervous\', \'speaks in a polite, formal tone\'"],\n'
+            '  "rp_mannerisms": ["List of 3-5 separate conversational traits/quirks (must be individual list items, NOT a single combined string)."],\n'
             '  "personality_type": "Concise 1-3 sentence summary of personality",\n'
             '  "backstory": "Clean, narrative biography summary of history and origin",\n'
             '  "other": "Refined description of the roleplay scenario or other setting details",\n'
-            '  "system_prompt": "A highly immersive, detailed system prompt for the roleplay. It should write instructions on how the AI should roleplay as this character (e.g. \'You are [Name], a... Describe actions in asterisks... Use a stuttering tone...\'). Keep it in the second person (\'You are...\')."\n'
+            '  "system_prompt": "A highly immersive, refined system prompt for the roleplay. Synthesize the raw backstory, personality, scenario, and examples into active, direct instructions for the AI on how to act, talk, and behave as this character. Write in the second person (e.g. \'You are [Name], a...\'). Do NOT duplicate specific details that are already captured in separate fields like backstory, personality, or rp_mannerisms. Focus on overall roleplay framing, formatting instructions (e.g., using asterisks for actions), relationship dynamics, and tone, keeping it highly concise to save tokens. Limit to 2-3 concise paragraphs."\n'
             "}"
         )
 
@@ -257,10 +270,13 @@ class CharacterImporter:
             f"Raw Scenario/Other Details:\n{raw_scenario}\n\n"
             f"Raw Dialogue Examples:\n{raw_mes_example}\n\n"
             "Strict Instructions:\n"
-            "1. Extract only facts directly mentioned or clearly implied.\n"
+            "1. Extract only facts directly mentioned or clearly implied for the attributes (gender, age, appearance, likes, dislikes).\n"
             "2. If age or gender are not mentioned or cannot be inferred, use 'Unknown'.\n"
             "3. Do not invent backstory details. Keep it grounded.\n"
-            "4. Return ONLY valid JSON."
+            "4. For 'system_prompt', write a highly refined, active roleplay instruction set in the second person ('You are...'). Focus on framing, formatting, and behavior without duplicating the specific backstory, personality, or mannerisms listed in other fields, to save token space.\n"
+            "5. Translate any weird formatting syntax (such as W++ format, e.g. [Attribute(\"value\")] or [Attribute + value]) into clean, natural human prose for all textual fields.\n"
+            "6. Return ONLY valid JSON.\n"
+            "7. Ensure lists like 'rp_mannerisms', 'likes', and 'dislikes' contain distinct individual items as separate list strings, never combined into a single long string."
         )
 
         messages = [
@@ -307,7 +323,7 @@ class CharacterImporter:
                             "rp_mannerisms": {
                                 "type": "array",
                                 "items": {"type": "string"},
-                                "description": "List of 3-5 specific conversational traits, e.g. 'frequently stutters when nervous', 'speaks in a polite, formal tone'"
+                                "description": "List of 3-5 separate conversational traits/quirks. Must be individual list items, NOT a single combined string."
                             },
                             "personality_type": {
                                 "type": "string",
@@ -323,7 +339,14 @@ class CharacterImporter:
                             },
                             "system_prompt": {
                                 "type": "string",
-                                "description": "A highly immersive, detailed system prompt for the roleplay. It should write instructions on how the AI should roleplay as this character. Keep it in the second person ('You are...')."
+                                "description": (
+                                    "A highly immersive, refined system prompt for the roleplay. "
+                                    "Synthesize raw details into active, direct instructions. Write in the second person. "
+                                    "Do NOT duplicate specific details that are already captured in separate fields like backstory, "
+                                    "personality, or rp_mannerisms. Focus on overall roleplay framing, formatting instructions "
+                                    "(e.g., using asterisks for actions), relationship dynamics, and tone, keeping it highly "
+                                    "concise to save tokens. Limit to 2-3 concise paragraphs."
+                                )
                             }
                         },
                         "required": [
@@ -336,13 +359,25 @@ class CharacterImporter:
         ]
 
         try:
-            # Call compat function with tools
+            # Load num_ctx from plugin config, defaulting to 8192
+            refine_num_ctx = 8192
+            try:
+                config_path = os.path.join(PROJECT_ROOT, "plugins", "mcp_st_importer", "plugin.json")
+                if os.path.exists(config_path):
+                    with open(config_path, "r", encoding="utf-8") as f:
+                        cfg = json.load(f)
+                        refine_num_ctx = int(cfg.get("num_ctx", 8192))
+            except Exception:
+                pass
+
+            # Call compat function with tools and JSON formatting format='json'
             result = _ollama_chat_compat(
                 model=refine_model,
                 messages=messages,
                 stream=False,
+                format="json",
                 think=False,
-                options={"temperature": 0.1},
+                options={"temperature": 0.1, "num_ctx": refine_num_ctx},
                 tools=tools
             )
 
@@ -432,14 +467,32 @@ class CharacterImporter:
                 print(f"{Fore.YELLOW}[WARNING] Failed to parse AI refinement (both tool calling and JSON parsing failed). Falling back to rule-based values.")
                 return profile
 
-            # Clean up any fields that were double-serialized as JSON strings (common on smaller models)
+            # Clean up and split any list fields that were double-serialized or formatted as a single combined string
             for list_field in ["likes", "dislikes", "rp_mannerisms"]:
                 val = refined_data.get(list_field)
-                if isinstance(val, str) and val.strip().startswith("["):
-                    try:
-                        refined_data[list_field] = json.loads(val)
-                    except Exception:
-                        pass
+                if isinstance(val, str):
+                    if val.strip().startswith("["):
+                        try:
+                            val = json.loads(val)
+                        except Exception:
+                            pass
+                    else:
+                        val = [p.strip() for p in re.split(r'[;\n]|\-\s+|\*\s+|\b\d+\.\s+', val) if p.strip()]
+                
+                if isinstance(val, list):
+                    cleaned_items = []
+                    for item in val:
+                        if isinstance(item, str):
+                            parts = [p.strip() for p in re.split(r'[;\n]|\-\s+|\*\s+|\b\d+\.\s+', item) if p.strip()]
+                            cleaned_items.extend(parts)
+                    
+                    seen = set()
+                    final_items = []
+                    for item in cleaned_items:
+                        if item.lower() not in seen:
+                            seen.add(item.lower())
+                            final_items.append(item)
+                    refined_data[list_field] = final_items
 
             # Merge refined fields into the profile
             if "alt_names" in refined_data and isinstance(refined_data["alt_names"], str):
@@ -529,8 +582,250 @@ class CharacterImporter:
             print(f"{Fore.RED}[ERROR] Failed to save profile: {e}")
             return False
 
-def import_character(source_path, refine=False, model=None):
-    """Main entry point for importing a character with optional AI refinement."""
+    @staticmethod
+    def generate_lorebook(profile, raw_st_data=None, model=None, lorebook_name=None):
+        """
+        Generates a lorebook for a character profile.
+
+        Two strategies:
+        1. Rule-based: If raw_st_data contains an embedded 'character_book', convert
+           its entries directly into the project's lorebook format.
+        2. AI-based: If no embedded lorebook exists and a model is provided, use the
+           LLM to extract lore entries from the raw card data.
+
+        Returns the path to the saved lorebook file, or None on failure.
+        """
+        from engines.utilities import sanitize_profile_name
+
+        if not profile or not profile.get("name"):
+            return None
+
+        char_name = profile.get("name", "Unknown")
+        safe_name = lorebook_name or sanitize_profile_name(char_name)
+        lorebook_dir = os.path.abspath("lorebooks")
+        os.makedirs(lorebook_dir, exist_ok=True)
+        lorebook_path = os.path.join(lorebook_dir, f"{safe_name}.json")
+
+        # Security check
+        if not os.path.normcase(lorebook_path).startswith(os.path.normcase(lorebook_dir)):
+            print(f"{Fore.RED}[ERROR] Path traversal attempt detected.")
+            return None
+
+        # ── Strategy 1: Parse embedded SillyTavern character_book ──
+        embedded_book = None
+        if raw_st_data and isinstance(raw_st_data, dict):
+            embedded_book = raw_st_data.get("character_book")
+
+        if embedded_book and isinstance(embedded_book, dict):
+            st_entries = embedded_book.get("entries", [])
+            if st_entries:
+                converted_entries = []
+                for i, entry in enumerate(st_entries):
+                    keys = entry.get("keys", [])
+                    # Some cards store keys as a comma-separated string
+                    if isinstance(keys, str):
+                        keys = [k.strip() for k in keys.split(",") if k.strip()]
+                    content = entry.get("content", "").strip()
+                    if not keys or not content:
+                        continue
+
+                    # Replace {{char}} placeholder in content
+                    content = content.replace("{{char}}", char_name)
+
+                    converted_entries.append({
+                        "id": str(i + 1),
+                        "keys": keys,
+                        "content": content,
+                        "enabled": entry.get("enabled", True),
+                        "insertion_order": entry.get("insertion_order", 100)
+                    })
+
+                if converted_entries:
+                    lorebook_data = {"entries": converted_entries}
+                    try:
+                        with open(lorebook_path, "w", encoding="utf-8") as f:
+                            json.dump(lorebook_data, f, indent=4, ensure_ascii=False)
+                        print(f"{Fore.GREEN}[SUCCESS] Extracted {len(converted_entries)} embedded lorebook entries.")
+                        return lorebook_path
+                    except Exception as e:
+                        print(f"{Fore.RED}[ERROR] Failed to save lorebook: {e}")
+                        return None
+
+        # ── Strategy 2: AI-based lorebook extraction ──
+        if not model:
+            return None
+
+        from engines.responses import _ollama_chat_compat
+
+        raw_description = ""
+        raw_scenario = ""
+        raw_personality = ""
+        raw_mes_example = ""
+
+        if raw_st_data:
+            raw_description = raw_st_data.get("description", "")
+            raw_scenario = raw_st_data.get("scenario", "")
+            raw_personality = raw_st_data.get("personality", "")
+            raw_mes_example = raw_st_data.get("mes_example", "")
+
+        if not raw_description and not raw_scenario:
+            raw_description = profile.get("backstory", "")
+            raw_scenario = profile.get("character_info", {}).get("other", "")
+
+        # Skip if there's not enough text to extract from
+        combined_text = f"{raw_description} {raw_scenario} {raw_personality} {raw_mes_example}".strip()
+        if len(combined_text) < 50:
+            return None
+
+        system_prompt = (
+            "You are an expert lorebook extraction assistant for roleplay characters.\n"
+            "Analyze the provided raw character information and extract structured lorebook entries.\n"
+            "Each entry should capture a distinct piece of world info: secondary characters/NPCs, "
+            "key locations, organizations, important items, world rules, or relationship dynamics.\n\n"
+            "Respond ONLY with a valid JSON object matching this schema:\n"
+            "{\n"
+            '  "entries": [\n'
+            '    {\n'
+            '      "keys": ["keyword1", "keyword2"],\n'
+            '      "content": "Factual description of this lore element. Keep concise but informative.",\n'
+            '      "insertion_order": 50\n'
+            '    }\n'
+            '  ]\n'
+            "}\n\n"
+            "Rules:\n"
+            "- Extract 3-10 entries depending on richness of the source material.\n"
+            "- Each entry MUST have 1-4 trigger keywords that would naturally appear in conversation.\n"
+            "- Keywords should be specific nouns (names, places, items) not generic words.\n"
+            "- Content should be 1-3 sentences of factual information.\n"
+            "- Do NOT include the main character as a lorebook entry.\n"
+            "- Do NOT invent details not present in the source material.\n"
+            "- Set insertion_order: 1-30 for critical lore, 31-70 for important, 71-100 for supplementary."
+        )
+
+        user_content = (
+            f"Character Name: {char_name}\n"
+            f"Raw Description/Backstory:\n{raw_description}\n\n"
+            f"Raw Scenario:\n{raw_scenario}\n\n"
+            f"Raw Personality:\n{raw_personality}\n\n"
+            f"Raw Dialogue Examples:\n{raw_mes_example}\n\n"
+            "Extract lorebook entries from the above. Return ONLY valid JSON."
+        )
+
+        messages = [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": user_content}
+        ]
+
+        # Load num_ctx from plugin config
+        refine_num_ctx = 8192
+        try:
+            config_path = os.path.join(PROJECT_ROOT, "plugins", "mcp_st_importer", "plugin.json")
+            if os.path.exists(config_path):
+                with open(config_path, "r", encoding="utf-8") as f:
+                    cfg = json.load(f)
+                    refine_num_ctx = int(cfg.get("num_ctx", 8192))
+        except Exception:
+            pass
+
+        try:
+            result = _ollama_chat_compat(
+                model=model,
+                messages=messages,
+                stream=False,
+                format="json",
+                think=False,
+                options={"temperature": 0.1, "num_ctx": refine_num_ctx}
+            )
+
+            response_content = result.get("message", {}).get("content", "").strip()
+            if not response_content:
+                print(f"{Fore.YELLOW}[WARNING] AI lorebook extraction returned empty response.")
+                return None
+
+            # Parse response JSON
+            lorebook_data = None
+            try:
+                lorebook_data = _heal_and_load_json(response_content)
+            except Exception:
+                # Try extracting JSON from markdown code blocks
+                match = re.search(r'```(?:json)?\s*(\{.*?\})\s*```', response_content, re.DOTALL)
+                if match:
+                    try:
+                        lorebook_data = _heal_and_load_json(match.group(1))
+                    except Exception:
+                        pass
+
+                # Try bracket extraction
+                if not lorebook_data:
+                    start = response_content.find('{')
+                    end = response_content.rfind('}')
+                    if start != -1 and end > start:
+                        try:
+                            lorebook_data = _heal_and_load_json(response_content[start:end+1])
+                        except Exception:
+                            pass
+
+            if not lorebook_data or not isinstance(lorebook_data, dict):
+                print(f"{Fore.YELLOW}[WARNING] Failed to parse AI lorebook extraction response.")
+                return None
+
+            # Normalize entries
+            entries = lorebook_data.get("entries", [])
+            if not isinstance(entries, list) or not entries:
+                print(f"{Fore.YELLOW}[WARNING] AI lorebook extraction produced no entries.")
+                return None
+
+            cleaned_entries = []
+            for i, entry in enumerate(entries):
+                keys = entry.get("keys", [])
+                if isinstance(keys, str):
+                    keys = [k.strip() for k in keys.split(",") if k.strip()]
+                content = entry.get("content", "").strip()
+                if not keys or not content:
+                    continue
+
+                cleaned_entries.append({
+                    "id": str(i + 1),
+                    "keys": keys,
+                    "content": content,
+                    "enabled": True,
+                    "insertion_order": entry.get("insertion_order", 100)
+                })
+
+            if not cleaned_entries:
+                print(f"{Fore.YELLOW}[WARNING] AI lorebook extraction produced no valid entries.")
+                return None
+
+            lorebook_data = {"entries": cleaned_entries}
+            with open(lorebook_path, "w", encoding="utf-8") as f:
+                json.dump(lorebook_data, f, indent=4, ensure_ascii=False)
+
+            print(f"{Fore.GREEN}[SUCCESS] AI extracted {len(cleaned_entries)} lorebook entries.")
+            return lorebook_path
+
+        except Exception as e:
+            print(f"{Fore.YELLOW}[WARNING] AI lorebook extraction failed: {e}")
+            return None
+
+def calculate_file_hash(filepath):
+    """Calculates a short MD5 hash of the source file to prevent naming collisions."""
+    import hashlib
+    try:
+        hasher = hashlib.md5()
+        with open(filepath, 'rb') as f:
+            buf = f.read(65536)
+            while len(buf) > 0:
+                hasher.update(buf)
+                buf = f.read(65536)
+        return hasher.hexdigest()[:8]
+    except Exception:
+        import time
+        return hashlib.md5(str(time.time()).encode()).hexdigest()[:8]
+
+def import_character(source_path, refine=False, lore=False, model=None):
+    """Main entry point for importing a character with optional AI refinement and lore extraction."""
+    from engines.utilities import sanitize_profile_name
+    card_hash = calculate_file_hash(source_path)
     data = None
     avatar_path = "img/No_Image_Error.png"
 
@@ -541,7 +836,7 @@ def import_character(source_path, refine=False, model=None):
             # Create a safe filename for the image
             safe_name = re.sub(r'[^\w\s-]', '', char_name).strip().replace(' ', '_')
             ext = os.path.splitext(source_path)[1]
-            dest_image = os.path.join("img", f"{safe_name}{ext}")
+            dest_image = os.path.join("img", f"{safe_name}_{card_hash}{ext}")
 
             os.makedirs("img", exist_ok=True)
             try:
@@ -569,7 +864,9 @@ def import_character(source_path, refine=False, model=None):
     new_profile = CharacterImporter.convert_to_project_format(data, avatar_path=avatar_path)
     
     # 1. Save the basic rule-based profile first to ensure critical fields are saved
-    save_path = CharacterImporter.save_profile(new_profile)
+    safe_profile_name = sanitize_profile_name(new_profile["name"])
+    save_filename = f"{safe_profile_name}_{card_hash}.json"
+    save_path = CharacterImporter.save_profile(new_profile, filename=save_filename)
 
     if save_path:
         print(f"{Fore.GREEN}[SUCCESS] Character profile imported successfully.")
@@ -578,18 +875,7 @@ def import_character(source_path, refine=False, model=None):
              
         # 2. Run AI refinement on top of the saved profile if requested
         if refine:
-            refine_model = model
-            if not refine_model:
-                try:
-                    config_path = os.path.join("plugins", "mcp_st_importer", "plugin.json")
-                    if os.path.exists(config_path):
-                        with open(config_path, "r", encoding="utf-8") as f:
-                            cfg = json.load(f)
-                            refine_model = cfg.get("refine_model")
-                except Exception:
-                    pass
-            if not refine_model:
-                refine_model = get_setting("default_llm_model", "llama3.2")
+            refine_model = model or CharacterImporter.get_default_refine_model()
             print(Fore.CYAN + f"[SYSTEM] Running AI profile refinement using local model '{refine_model}'...")
             
             try:
@@ -605,6 +891,35 @@ def import_character(source_path, refine=False, model=None):
                 print(f"{Fore.YELLOW}[WARNING] AI refinement failed: {e}. Keeping the baseline rule-based profile.")
         else:
             print(f"{Fore.YELLOW}[INFO] Conversion may be imperfect. It is recommended to run AI refinement or review the profile.")
+
+        # AI lore extraction is run if lore is True. Rule-based extraction always runs if embedded book exists.
+        try:
+            with open(save_path, "r", encoding="utf-8") as f:
+                current_profile = json.load(f)
+        except Exception:
+            current_profile = new_profile
+
+        # Get profile basename (without .json extension)
+        profile_basename = os.path.splitext(os.path.basename(save_path))[0]
+
+        lorebook_model = model or CharacterImporter.get_default_refine_model() if lore else None
+        print(Fore.CYAN + "[SYSTEM] Generating lorebook...")
+        lorebook_path = CharacterImporter.generate_lorebook(
+            current_profile, raw_st_data=data, model=lorebook_model, lorebook_name=profile_basename
+        )
+
+        if lorebook_path:
+            # Write lorebook_path back to the profile
+            try:
+                with open(save_path, "r", encoding="utf-8") as f:
+                    final_profile = json.load(f)
+                final_profile["lorebook_path"] = lorebook_path.replace("\\", "/")
+                CharacterImporter.save_profile(final_profile, filename=os.path.basename(save_path))
+                print(f"{Fore.GREEN}[SUCCESS] Lorebook generated and linked to profile.")
+            except Exception as e:
+                print(f"{Fore.YELLOW}[WARNING] Lorebook generated but failed to link to profile: {e}")
+        else:
+            print(f"{Fore.YELLOW}[INFO] No lorebook generated (no embedded data or AI extraction skipped).")
             
         return save_path
     return None

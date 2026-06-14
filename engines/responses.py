@@ -81,6 +81,7 @@ def _is_duplicate_reply(candidate: str, previous_replies: list[str]) -> bool:
 def _extract_remote_message_content(response: requests.Response) -> str:
     """Parse common remote LLM response envelopes, with plain-text fallback."""
     response.raise_for_status()
+    response.encoding = 'utf-8'
 
     result = None
     try:
@@ -122,6 +123,7 @@ def parse_sse_stream(response: requests.Response):
     Parses a Server-Sent Events (SSE) stream from an OpenAI-compatible endpoint.
     Yields text chunks as they arrive.
     """
+    response.encoding = 'utf-8'
     for line in response.iter_lines(decode_unicode=True):
         if not line:
             continue
@@ -178,15 +180,16 @@ def _ollama_chat_compat(model: str, messages: list, stream: bool = False, format
     if tools and model_supports_tools:
         payload["tools"] = tools
     elif tools and not model_supports_tools:
-        steering_msg = (
-            "System Note: The tool-calling interface is unsupported by your current model configuration. "
-            "If the user's request requires a tool action (such as importing a card), politely inform them that "
-            "you attempted to call a tool to handle their request but could not do so because the current model "
-            "configuration does not support tool-calling. Let them know they can execute the action directly "
-            "using the appropriate command (e.g., '//import_card <path_to_card>'). Otherwise, if the user's "
-            "message is a normal conversation, respond normally without mentioning tools."
-        )
-        payload["messages"] = payload["messages"] + [{"role": "system", "content": steering_msg}]
+        if format != "json":
+            steering_msg = (
+                "System Note: The tool-calling interface is unsupported by your current model configuration. "
+                "If the user's request requires a tool action (such as importing a card), politely inform them that "
+                "you attempted to call a tool to handle their request but could not do so because the current model "
+                "configuration does not support tool-calling. Let them know they can execute the action directly "
+                "using the appropriate command (e.g., '//import_card <path_to_card>'). Otherwise, if the user's "
+                "message is a normal conversation, respond normally without mentioning tools."
+            )
+            payload["messages"] = payload["messages"] + [{"role": "system", "content": steering_msg}]
 
     if options:
         if "temperature" in options:
@@ -200,10 +203,14 @@ def _ollama_chat_compat(model: str, messages: list, stream: bool = False, format
         if max_tok is not None:
             payload["max_tokens"] = max_tok
 
+        num_ctx = options.get("num_ctx")
+        if num_ctx is not None:
+            payload["num_ctx"] = num_ctx
+
     if format == "json":
         payload["response_format"] = {"type": "json_object"}
 
-    for sampler in ["top_p", "top_k", "mirostat", "presence_penalty", "frequency_penalty"]:
+    for sampler in ["top_p", "top_k", "mirostat", "presence_penalty", "frequency_penalty", "num_ctx"]:
         val = get_setting(sampler)
         if val is not None:
             payload[sampler] = val
@@ -220,15 +227,18 @@ def _ollama_chat_compat(model: str, messages: list, stream: bool = False, format
                 _MODEL_TOOL_SUPPORT_CACHE[model] = False
                 payload = payload.copy()
                 payload.pop("tools", None)
-                steering_msg = (
-                    "System Note: The tool-calling interface is unsupported by your current model configuration. "
-                    "If the user's request requires a tool action (such as importing a card), politely inform them that "
-                    "you attempted to call a tool to handle their request but could not do so because the current model "
-                    "configuration does not support tool-calling. Let them know they can execute the action directly "
-                    "using the appropriate command (e.g., '//import_card <path_to_card>'). Otherwise, if the user's "
-                    "message is a normal conversation, respond normally without mentioning tools."
-                )
-                payload["messages"] = payload["messages"] + [{"role": "system", "content": steering_msg}]
+                if format == "json":
+                    payload["response_format"] = {"type": "json_object"}
+                else:
+                    steering_msg = (
+                        "System Note: The tool-calling interface is unsupported by your current model configuration. "
+                        "If the user's request requires a tool action (such as importing a card), politely inform them that "
+                        "you attempted to call a tool to handle their request but could not do so because the current model "
+                        "configuration does not support tool-calling. Let them know they can execute the action directly "
+                        "using the appropriate command (e.g., '//import_card <path_to_card>'). Otherwise, if the user's "
+                        "message is a normal conversation, respond normally without mentioning tools."
+                    )
+                    payload["messages"] = payload["messages"] + [{"role": "system", "content": steering_msg}]
                 response = requests.post(full_url, json=payload, headers=headers, stream=True, timeout=60)
                 response.raise_for_status()
             else:
@@ -248,6 +258,7 @@ def _ollama_chat_compat(model: str, messages: list, stream: bool = False, format
         try:
             response = requests.post(full_url, json=payload, timeout=timeout)
             response.raise_for_status()
+            response.encoding = 'utf-8'
         except requests.exceptions.HTTPError as e:
             if response.status_code == 400 and payload.get("tools"):
                 if get_setting("debug_mode", False):
@@ -255,17 +266,21 @@ def _ollama_chat_compat(model: str, messages: list, stream: bool = False, format
                 _MODEL_TOOL_SUPPORT_CACHE[model] = False
                 payload = payload.copy()
                 payload.pop("tools", None)
-                steering_msg = (
-                    "System Note: The tool-calling interface is unsupported by your current model configuration. "
-                    "If the user's request requires a tool action (such as importing a card), politely inform them that "
-                    "you attempted to call a tool to handle their request but could not do so because the current model "
-                    "configuration does not support tool-calling. Let them know they can execute the action directly "
-                    "using the appropriate command (e.g., '//import_card <path_to_card>'). Otherwise, if the user's "
-                    "message is a normal conversation, respond normally without mentioning tools."
-                )
-                payload["messages"] = payload["messages"] + [{"role": "system", "content": steering_msg}]
+                if format == "json":
+                    payload["response_format"] = {"type": "json_object"}
+                else:
+                    steering_msg = (
+                        "System Note: The tool-calling interface is unsupported by your current model configuration. "
+                        "If the user's request requires a tool action (such as importing a card), politely inform them that "
+                        "you attempted to call a tool to handle their request but could not do so because the current model "
+                        "configuration does not support tool-calling. Let them know they can execute the action directly "
+                        "using the appropriate command (e.g., '//import_card <path_to_card>'). Otherwise, if the user's "
+                        "message is a normal conversation, respond normally without mentioning tools."
+                    )
+                    payload["messages"] = payload["messages"] + [{"role": "system", "content": steering_msg}]
                 response = requests.post(full_url, json=payload, timeout=timeout)
                 response.raise_for_status()
+                response.encoding = 'utf-8'
             else:
                 raise
         res_data = response.json()
@@ -475,6 +490,73 @@ def extract_scene_from_starter(starter_text: str, model: str = None) -> str | No
     return None
 
 
+def get_current_main_model() -> str:
+    """
+    Resolves the main chat model for the active session character,
+    falling back to the default local model.
+    """
+    char_profile_name = get_setting("current_character_profile")
+    if char_profile_name:
+        profile_path = os.path.join("profiles", char_profile_name)
+        if os.path.exists(profile_path):
+            try:
+                with open(profile_path, "r", encoding="utf-8") as f:
+                    profile = json.load(f)
+                    main_model = profile.get("llm_model")
+                    if main_model:
+                        return main_model
+            except Exception:
+                pass
+    return get_setting("default_llm_model", "llama3")
+
+
+def _unload_model_and_preload_main(unload_model: str, main_model: str):
+    """
+    Unloads the summarizer model from local Ollama and preloads the main model.
+    """
+    if not unload_model:
+        return
+
+    # Do not unload if the main model is the same as the summarizer model and running locally
+    if main_model == unload_model and not get_setting("remote_llm_url"):
+        return
+
+    local_url = get_setting("local_llm_url", "http://localhost:11434/v1")
+    if "11434" not in local_url:
+        return
+    base_url = local_url.replace("/v1", "").rstrip("/")
+    generate_url = f"{base_url}/api/generate"
+
+    # 1. Unload the summarizer model
+    try:
+        log_debug("MODEL_UNLOAD_START", {"model": unload_model})
+        requests.post(generate_url, json={"model": unload_model, "keep_alive": 0}, timeout=5)
+        log_debug("MODEL_UNLOAD_SUCCESS", {"model": unload_model})
+    except Exception as e:
+        log_debug("MODEL_UNLOAD_ERROR", {"model": unload_model, "error": str(e)})
+
+    # 2. Preload the main model if different
+    if main_model and not get_setting("remote_llm_url") and main_model != unload_model:
+        try:
+            log_debug("MODEL_PRELOAD_START", {"model": main_model})
+            payload = {"model": main_model}
+            
+            keep_alive_setting = get_setting("local_llm_keep_alive")
+            if keep_alive_setting is not None:
+                try:
+                    if isinstance(keep_alive_setting, str) and keep_alive_setting.isdigit():
+                        payload["keep_alive"] = int(keep_alive_setting)
+                    else:
+                        payload["keep_alive"] = keep_alive_setting
+                except (TypeError, ValueError):
+                    pass
+            
+            requests.post(generate_url, json=payload, timeout=15)
+            log_debug("MODEL_PRELOAD_SUCCESS", {"model": main_model})
+        except Exception as e:
+            log_debug("MODEL_PRELOAD_ERROR", {"model": main_model, "error": str(e)})
+
+
 def generate_summary(messages: list, model: str, remote_url: str = None, user_name: str = "User", char_name: str = "Assistant") -> str:
     """
     Generates a concise summary of the provided conversation history.
@@ -514,6 +596,7 @@ def generate_summary(messages: list, model: str, remote_url: str = None, user_na
         {"role": "user", "content": f"[HISTORY]\n{formatted_history}\n[/HISTORY]"}
     ]
 
+    summarizer_model = None
     try:
         # Hybrid Offloading: Summarization is always local, but respects caller-provided model
         summarizer_model = model or get_setting("summarizer_model", get_setting("local_utility_model", "llama3.2"))
@@ -531,6 +614,10 @@ def generate_summary(messages: list, model: str, remote_url: str = None, user_na
     except Exception as e:
         log_debug("SUMMARY_ERROR", {"error": str(e), "traceback": traceback.format_exc()})
         return f"Error generating summary: {str(e)}"
+    finally:
+        if summarizer_model:
+            _unload_model_and_preload_main(summarizer_model, get_current_main_model())
+
 
 def update_rolling_summary(existing_core: str, new_messages: list, model: str,
                            remote_url: str = None, user_name: str = "User",
@@ -566,6 +653,7 @@ def update_rolling_summary(existing_core: str, new_messages: list, model: str,
         {"role": "user", "content": input_content}
     ]
 
+    summarizer_model = None
     try:
         # Hybrid Offloading: Summarization is always local, but respects caller-provided model
         summarizer_model = model or get_setting("summarizer_model", get_setting("local_utility_model", "llama3.2"))
@@ -583,6 +671,9 @@ def update_rolling_summary(existing_core: str, new_messages: list, model: str,
     except Exception as e:
         log_debug("ROLLING_SUMMARY_ERROR", {"error": str(e), "traceback": traceback.format_exc()})
         return f"Error updating rolling summary: {str(e)}"
+    finally:
+        if summarizer_model:
+            _unload_model_and_preload_main(summarizer_model, get_current_main_model())
 
 
 
@@ -657,6 +748,7 @@ def _generate_candidate_replies(messages: list, model: str, remote_url: str | No
             }
             response = requests.post(full_url, json=payload, stream=False, timeout=120)
             response.raise_for_status()
+            response.encoding = 'utf-8'
             data = response.json()
             if isinstance(data, dict) and "candidates" in data:
                 candidates = data["candidates"]
@@ -1266,6 +1358,7 @@ def get_respond_stream(user_input: str, profile: dict, profile_path: str = None,
                 }
                 response = requests.post(full_url, json=payload, stream=True, timeout=60)
                 response.raise_for_status()
+                response.encoding = 'utf-8'
                 stream = response.iter_content(chunk_size=None, decode_unicode=True)
             # Handle Local Ollama Request
             else:
@@ -1465,3 +1558,42 @@ def get_respond(user_input: str, profile: dict, profile_path: str = None, is_reg
     for chunk in get_respond_stream(user_input, profile, profile_path, is_regeneration=is_regeneration):
         full_response += chunk
     return full_response
+
+
+def unload_all_models() -> None:
+    """
+    Queries local Ollama for all running models and unloads them to free up VRAM immediately.
+    """
+    local_url = get_setting("local_llm_url", "http://localhost:11434/v1")
+    if "11434" not in local_url:
+        return
+    base_url = local_url.replace("/v1", "").rstrip("/")
+    ps_url = f"{base_url}/api/ps"
+    generate_url = f"{base_url}/api/generate"
+    
+    try:
+        log_debug("UNLOAD_ALL_MODELS_START", {"url": ps_url})
+        # Short timeout to prevent blocking application exit if Ollama is unreachable
+        response = requests.get(ps_url, timeout=3)
+        if response.status_code != 200:
+            return
+            
+        data = response.json()
+        running_models = data.get("models", [])
+        if not running_models:
+            log_debug("UNLOAD_ALL_MODELS_NONE")
+            return
+            
+        for m in running_models:
+            model_name = m.get("model") or m.get("name")
+            if model_name:
+                try:
+                    log_debug("MODEL_UNLOAD_SHUTDOWN", {"model": model_name})
+                    requests.post(generate_url, json={"model": model_name, "keep_alive": 0}, timeout=3)
+                except Exception as e:
+                    log_debug("MODEL_UNLOAD_SHUTDOWN_ERROR", {"model": model_name, "error": str(e)})
+                    
+        log_debug("UNLOAD_ALL_MODELS_SUCCESS")
+    except Exception as e:
+        log_debug("UNLOAD_ALL_MODELS_ERROR", {"error": str(e)})
+
