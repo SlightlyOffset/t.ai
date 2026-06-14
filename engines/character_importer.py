@@ -912,7 +912,7 @@ def import_character(source_path, refine=False, lore=False, model=None):
                     final_profile = json.load(f)
                 final_profile["lorebook_path"] = lorebook_path.replace("\\", "/")
                 CharacterImporter.save_profile(final_profile, filename=os.path.basename(save_path))
-                print(f"{Fore.GREEN}[SUCCESS] Lorebook linked to profile: {lorebook_path}")
+                print(f"{Fore.GREEN}[SUCCESS] Lorebook generated and linked to profile.")
             except Exception as e:
                 print(f"{Fore.YELLOW}[WARNING] Lorebook generated but failed to link to profile: {e}")
         else:
