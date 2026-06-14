@@ -561,6 +561,231 @@ class CharacterImporter:
             print(f"{Fore.RED}[ERROR] Failed to save profile: {e}")
             return False
 
+    @staticmethod
+    def generate_lorebook(profile, raw_st_data=None, model=None):
+        """
+        Generates a lorebook for a character profile.
+
+        Two strategies:
+        1. Rule-based: If raw_st_data contains an embedded 'character_book', convert
+           its entries directly into the project's lorebook format.
+        2. AI-based: If no embedded lorebook exists and a model is provided, use the
+           LLM to extract lore entries from the raw card data.
+
+        Returns the path to the saved lorebook file, or None on failure.
+        """
+        from engines.utilities import sanitize_profile_name
+
+        if not profile or not profile.get("name"):
+            return None
+
+        char_name = profile.get("name", "Unknown")
+        safe_name = sanitize_profile_name(char_name)
+        lorebook_dir = os.path.abspath("lorebooks")
+        os.makedirs(lorebook_dir, exist_ok=True)
+        lorebook_path = os.path.join(lorebook_dir, f"{safe_name}.json")
+
+        # Security check
+        if not os.path.normcase(lorebook_path).startswith(os.path.normcase(lorebook_dir)):
+            print(f"{Fore.RED}[ERROR] Path traversal attempt detected.")
+            return None
+
+        # ── Strategy 1: Parse embedded SillyTavern character_book ──
+        embedded_book = None
+        if raw_st_data and isinstance(raw_st_data, dict):
+            embedded_book = raw_st_data.get("character_book")
+
+        if embedded_book and isinstance(embedded_book, dict):
+            st_entries = embedded_book.get("entries", [])
+            if st_entries:
+                converted_entries = []
+                for i, entry in enumerate(st_entries):
+                    keys = entry.get("keys", [])
+                    # Some cards store keys as a comma-separated string
+                    if isinstance(keys, str):
+                        keys = [k.strip() for k in keys.split(",") if k.strip()]
+                    content = entry.get("content", "").strip()
+                    if not keys or not content:
+                        continue
+
+                    # Replace {{char}} placeholder in content
+                    content = content.replace("{{char}}", char_name)
+
+                    converted_entries.append({
+                        "id": str(i + 1),
+                        "keys": keys,
+                        "content": content,
+                        "enabled": entry.get("enabled", True),
+                        "insertion_order": entry.get("insertion_order", 100)
+                    })
+
+                if converted_entries:
+                    lorebook_data = {"entries": converted_entries}
+                    try:
+                        with open(lorebook_path, "w", encoding="utf-8") as f:
+                            json.dump(lorebook_data, f, indent=4, ensure_ascii=False)
+                        print(f"{Fore.GREEN}[SUCCESS] Extracted {len(converted_entries)} embedded lorebook entries.")
+                        return lorebook_path
+                    except Exception as e:
+                        print(f"{Fore.RED}[ERROR] Failed to save lorebook: {e}")
+                        return None
+
+        # ── Strategy 2: AI-based lorebook extraction ──
+        if not model:
+            return None
+
+        from engines.responses import _ollama_chat_compat
+
+        raw_description = ""
+        raw_scenario = ""
+        raw_personality = ""
+        raw_mes_example = ""
+
+        if raw_st_data:
+            raw_description = raw_st_data.get("description", "")
+            raw_scenario = raw_st_data.get("scenario", "")
+            raw_personality = raw_st_data.get("personality", "")
+            raw_mes_example = raw_st_data.get("mes_example", "")
+
+        if not raw_description and not raw_scenario:
+            raw_description = profile.get("backstory", "")
+            raw_scenario = profile.get("character_info", {}).get("other", "")
+
+        # Skip if there's not enough text to extract from
+        combined_text = f"{raw_description} {raw_scenario} {raw_personality} {raw_mes_example}".strip()
+        if len(combined_text) < 50:
+            return None
+
+        system_prompt = (
+            "You are an expert lorebook extraction assistant for roleplay characters.\n"
+            "Analyze the provided raw character information and extract structured lorebook entries.\n"
+            "Each entry should capture a distinct piece of world info: secondary characters/NPCs, "
+            "key locations, organizations, important items, world rules, or relationship dynamics.\n\n"
+            "Respond ONLY with a valid JSON object matching this schema:\n"
+            "{\n"
+            '  "entries": [\n'
+            '    {\n'
+            '      "keys": ["keyword1", "keyword2"],\n'
+            '      "content": "Factual description of this lore element. Keep concise but informative.",\n'
+            '      "insertion_order": 50\n'
+            '    }\n'
+            '  ]\n'
+            "}\n\n"
+            "Rules:\n"
+            "- Extract 3-10 entries depending on richness of the source material.\n"
+            "- Each entry MUST have 1-4 trigger keywords that would naturally appear in conversation.\n"
+            "- Keywords should be specific nouns (names, places, items) not generic words.\n"
+            "- Content should be 1-3 sentences of factual information.\n"
+            "- Do NOT include the main character as a lorebook entry.\n"
+            "- Do NOT invent details not present in the source material.\n"
+            "- Set insertion_order: 1-30 for critical lore, 31-70 for important, 71-100 for supplementary."
+        )
+
+        user_content = (
+            f"Character Name: {char_name}\n"
+            f"Raw Description/Backstory:\n{raw_description}\n\n"
+            f"Raw Scenario:\n{raw_scenario}\n\n"
+            f"Raw Personality:\n{raw_personality}\n\n"
+            f"Raw Dialogue Examples:\n{raw_mes_example}\n\n"
+            "Extract lorebook entries from the above. Return ONLY valid JSON."
+        )
+
+        messages = [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": user_content}
+        ]
+
+        # Load num_ctx from plugin config
+        refine_num_ctx = 8192
+        try:
+            config_path = os.path.join("plugins", "mcp_st_importer", "plugin.json")
+            if os.path.exists(config_path):
+                with open(config_path, "r", encoding="utf-8") as f:
+                    cfg = json.load(f)
+                    refine_num_ctx = int(cfg.get("num_ctx", 8192))
+        except Exception:
+            pass
+
+        try:
+            result = _ollama_chat_compat(
+                model=model,
+                messages=messages,
+                stream=False,
+                format="json",
+                think=False,
+                options={"temperature": 0.1, "num_ctx": refine_num_ctx}
+            )
+
+            response_content = result.get("message", {}).get("content", "").strip()
+            if not response_content:
+                print(f"{Fore.YELLOW}[WARNING] AI lorebook extraction returned empty response.")
+                return None
+
+            # Parse response JSON
+            lorebook_data = None
+            try:
+                lorebook_data = _heal_and_load_json(response_content)
+            except Exception:
+                # Try extracting JSON from markdown code blocks
+                match = re.search(r'```(?:json)?\s*(\{.*?\})\s*```', response_content, re.DOTALL)
+                if match:
+                    try:
+                        lorebook_data = _heal_and_load_json(match.group(1))
+                    except Exception:
+                        pass
+
+                # Try bracket extraction
+                if not lorebook_data:
+                    start = response_content.find('{')
+                    end = response_content.rfind('}')
+                    if start != -1 and end > start:
+                        try:
+                            lorebook_data = _heal_and_load_json(response_content[start:end+1])
+                        except Exception:
+                            pass
+
+            if not lorebook_data or not isinstance(lorebook_data, dict):
+                print(f"{Fore.YELLOW}[WARNING] Failed to parse AI lorebook extraction response.")
+                return None
+
+            # Normalize entries
+            entries = lorebook_data.get("entries", [])
+            if not isinstance(entries, list) or not entries:
+                print(f"{Fore.YELLOW}[WARNING] AI lorebook extraction produced no entries.")
+                return None
+
+            cleaned_entries = []
+            for i, entry in enumerate(entries):
+                keys = entry.get("keys", [])
+                if isinstance(keys, str):
+                    keys = [k.strip() for k in keys.split(",") if k.strip()]
+                content = entry.get("content", "").strip()
+                if not keys or not content:
+                    continue
+
+                cleaned_entries.append({
+                    "id": str(i + 1),
+                    "keys": keys,
+                    "content": content,
+                    "enabled": True,
+                    "insertion_order": entry.get("insertion_order", 100)
+                })
+
+            if not cleaned_entries:
+                print(f"{Fore.YELLOW}[WARNING] AI lorebook extraction produced no valid entries.")
+                return None
+
+            lorebook_data = {"entries": cleaned_entries}
+            with open(lorebook_path, "w", encoding="utf-8") as f:
+                json.dump(lorebook_data, f, indent=4, ensure_ascii=False)
+
+            print(f"{Fore.GREEN}[SUCCESS] AI extracted {len(cleaned_entries)} lorebook entries.")
+            return lorebook_path
+
+        except Exception as e:
+            print(f"{Fore.YELLOW}[WARNING] AI lorebook extraction failed: {e}")
+            return None
+
 def import_character(source_path, refine=False, model=None):
     """Main entry point for importing a character with optional AI refinement."""
     data = None
@@ -626,6 +851,32 @@ def import_character(source_path, refine=False, model=None):
                 print(f"{Fore.YELLOW}[WARNING] AI refinement failed: {e}. Keeping the baseline rule-based profile.")
         else:
             print(f"{Fore.YELLOW}[INFO] Conversion may be imperfect. It is recommended to run AI refinement or review the profile.")
+
+        # 3. Generate lorebook from embedded character_book or AI extraction
+        try:
+            with open(save_path, "r", encoding="utf-8") as f:
+                current_profile = json.load(f)
+        except Exception:
+            current_profile = new_profile
+
+        lorebook_model = model or CharacterImporter.get_default_refine_model() if refine else None
+        print(Fore.CYAN + "[SYSTEM] Generating lorebook...")
+        lorebook_path = CharacterImporter.generate_lorebook(
+            current_profile, raw_st_data=data, model=lorebook_model
+        )
+
+        if lorebook_path:
+            # Write lorebook_path back to the profile
+            try:
+                with open(save_path, "r", encoding="utf-8") as f:
+                    final_profile = json.load(f)
+                final_profile["lorebook_path"] = lorebook_path.replace("\\", "/")
+                CharacterImporter.save_profile(final_profile, filename=os.path.basename(save_path))
+                print(f"{Fore.GREEN}[SUCCESS] Lorebook linked to profile: {lorebook_path}")
+            except Exception as e:
+                print(f"{Fore.YELLOW}[WARNING] Lorebook generated but failed to link to profile: {e}")
+        else:
+            print(f"{Fore.YELLOW}[INFO] No lorebook generated (no embedded data or AI extraction skipped).")
             
         return save_path
     return None

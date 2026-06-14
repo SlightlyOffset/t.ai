@@ -71,6 +71,77 @@ def import_st_card(filepath: str, overwrite: bool = False, refine: bool = True) 
     except Exception as e:
         return f"Error importing card: {str(e)}"
 
+
+@mcp.tool()
+def generate_character_lorebook(profile_name: str, source_card_path: str = "") -> str:
+    """
+    Generates a lorebook for an existing character profile.
+
+    Extracts world info, NPCs, locations, and lore into a lorebook JSON file.
+    If a source SillyTavern card is provided, embedded character_book entries are
+    extracted first (rule-based). Otherwise, or if no embedded book exists, it falls
+    back to AI-based extraction from the profile's own data.
+
+    Args:
+        profile_name: The name of the character profile (e.g. "Lily" or "Lily.json").
+        source_card_path: Optional path to the original SillyTavern card file to extract embedded character_book data from.
+    """
+    if not profile_name.endswith(".json"):
+        profile_name += ".json"
+
+    profiles_dir = os.path.abspath("profiles")
+    profile_path = os.path.join(profiles_dir, os.path.basename(profile_name))
+
+    if not os.path.exists(profile_path):
+        return f"Error: Profile not found at {profile_path}"
+
+    try:
+        with open(profile_path, "r", encoding="utf-8") as f:
+            profile = json.load(f)
+    except Exception as e:
+        return f"Error loading profile: {str(e)}"
+
+    # Load raw ST data from source card if provided
+    raw_st_data = None
+    if source_card_path and os.path.exists(source_card_path):
+        if source_card_path.lower().endswith((".png", ".webp")):
+            raw_st_data = CharacterImporter.extract_from_png(source_card_path)
+        elif source_card_path.lower().endswith(".json"):
+            try:
+                with open(source_card_path, "r", encoding="utf-8") as f:
+                    raw_json = json.load(f)
+                    raw_st_data = raw_json.get("data") if "data" in raw_json else raw_json
+            except Exception:
+                pass
+
+    # Read plugin configuration for model
+    config_path = os.path.join(project_root, "plugins", "mcp_st_importer", "plugin.json")
+    refine_model = None
+    if os.path.exists(config_path):
+        try:
+            with open(config_path, "r", encoding="utf-8") as f:
+                cfg = json.load(f)
+                refine_model = cfg.get("refine_model")
+        except Exception:
+            pass
+
+    lorebook_path = CharacterImporter.generate_lorebook(
+        profile, raw_st_data=raw_st_data, model=refine_model
+    )
+
+    if lorebook_path:
+        # Link lorebook back to profile
+        try:
+            profile["lorebook_path"] = lorebook_path.replace("\\", "/")
+            with open(profile_path, "w", encoding="utf-8") as f:
+                json.dump(profile, f, indent=4, ensure_ascii=False)
+        except Exception:
+            pass
+        return f"Successfully generated lorebook at {lorebook_path} and linked to profile."
+    else:
+        return "No lorebook generated. The profile may lack sufficient data for extraction."
+
+
 def initialize(context):
     """Initializes the MCP SillyTavern Card Importer plugin."""
     pass
