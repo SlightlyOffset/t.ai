@@ -35,6 +35,22 @@ class CharacterImporter:
     """
 
     @staticmethod
+    def get_default_refine_model():
+        """Gets the default LLM model to use for character refinement."""
+        from engines.config import get_setting
+        try:
+            config_path = os.path.join("plugins", "mcp_st_importer", "plugin.json")
+            if os.path.exists(config_path):
+                with open(config_path, "r", encoding="utf-8") as f:
+                    cfg = json.load(f)
+                    refine_model = cfg.get("refine_model")
+                    if refine_model:
+                        return refine_model
+        except Exception:
+            pass
+        return get_setting("default_llm_model", "llama3.2")
+
+    @staticmethod
     def extract_from_png(image_path):
         """Extracts character metadata from a SillyTavern PNG card."""
         try:
@@ -200,18 +216,7 @@ class CharacterImporter:
         if not profile:
             return profile
 
-        refine_model = model
-        if not refine_model:
-            try:
-                config_path = os.path.join("plugins", "mcp_st_importer", "plugin.json")
-                if os.path.exists(config_path):
-                    with open(config_path, "r", encoding="utf-8") as f:
-                        cfg = json.load(f)
-                        refine_model = cfg.get("refine_model")
-            except Exception:
-                pass
-        if not refine_model:
-            refine_model = get_setting("default_llm_model", "llama3.2")
+        refine_model = model or CharacterImporter.get_default_refine_model()
         char_name = profile.get("name", "Unknown")
 
         # 1. Gather all raw context from raw_st_data or the profile
@@ -594,18 +599,7 @@ def import_character(source_path, refine=False, model=None):
              
         # 2. Run AI refinement on top of the saved profile if requested
         if refine:
-            refine_model = model
-            if not refine_model:
-                try:
-                    config_path = os.path.join("plugins", "mcp_st_importer", "plugin.json")
-                    if os.path.exists(config_path):
-                        with open(config_path, "r", encoding="utf-8") as f:
-                            cfg = json.load(f)
-                            refine_model = cfg.get("refine_model")
-                except Exception:
-                    pass
-            if not refine_model:
-                refine_model = get_setting("default_llm_model", "llama3.2")
+            refine_model = model or CharacterImporter.get_default_refine_model()
             print(Fore.CYAN + f"[SYSTEM] Running AI profile refinement using local model '{refine_model}'...")
             
             try:
