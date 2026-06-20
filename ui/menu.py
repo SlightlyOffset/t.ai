@@ -1466,7 +1466,7 @@ class TaiMenu(App):
         # Watch scroll_y to trigger lazy loading of chat history
         try:
             chat_list = self.query_one("#chat_list", ScrollableContainer)
-            chat_list.watch(self, "scroll_y", self.on_chat_list_scroll, init=False)
+            self.watch(chat_list, "scroll_y", self.on_chat_list_scroll, init=False)
         except Exception:
             pass
 

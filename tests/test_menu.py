@@ -865,5 +865,50 @@ class TestMenu(unittest.TestCase):
         mock_mcp_manager.load_server_configs.assert_not_called()
         mock_mcp_manager.connect_all.assert_not_called()
 
+    def test_on_chat_list_scroll(self):
+        """Test that scrolling to 0 triggers lazy loading."""
+        app = MagicMock(spec=TaiMenu)
+        app.trigger_history_lazy_load = MagicMock()
+        
+        # Test scroll to non-zero does not trigger
+        TaiMenu.on_chat_list_scroll(app, 10.0, 5.0)
+        app.trigger_history_lazy_load.assert_not_called()
+        
+        # Test scroll to zero triggers
+        TaiMenu.on_chat_list_scroll(app, 5.0, 0)
+        app.trigger_history_lazy_load.assert_called_once()
+
+    @patch('ui.menu.memory_manager')
+    @patch('ui.menu.get_setting')
+    def test_trigger_history_lazy_load(self, mock_get_setting, mock_memory_manager):
+        """Test trigger_history_lazy_load calls memory_manager and prepends slice."""
+        app = MagicMock(spec=TaiMenu)
+        app.history_profile_name = "test_profile"
+        app._loading_history = False
+        app.call_from_thread = MagicMock()
+        app.prepend_history_slice = MagicMock()
+        
+        # Mock get_top_message_info to return index 10 and ID 15
+        app.get_top_message_info.return_value = (10, 15)
+        mock_get_setting.return_value = 5  # limit = 5
+        
+        # Mock memory_manager.load_history_slice
+        mock_slice = [{"id": 11, "content": "hello"}, {"id": 12, "content": "world"}]
+        mock_memory_manager.load_history_slice.return_value = mock_slice
+        
+        underlying = TaiMenu.trigger_history_lazy_load.__wrapped__
+        underlying(app)
+        
+        mock_memory_manager.load_history_slice.assert_called_once_with(
+            "test_profile",
+            limit=5,
+            before_id=15
+        )
+        app.call_from_thread.assert_called_once_with(
+            app.prepend_history_slice,
+            mock_slice,
+            8 # slice_start_idx = 10 - 2
+        )
+
 if __name__ == "__main__":
     unittest.main()
