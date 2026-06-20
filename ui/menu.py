@@ -459,7 +459,7 @@ class ExitSavingScreen(ModalScreen):
 class ChatBubble(Vertical):
     editing = reactive(False)
 
-    def __init__(self, header: str, raw_content: str, role: str, message_number: int | None = None, msg_data: dict | None = None, history_index: int | None = None, **kwargs):
+    def __init__(self, header: str, raw_content: str, role: str, message_number: int | None = None, msg_data: dict | None = None, history_index: int | None = None, is_old: bool = False, **kwargs):
         super().__init__(**kwargs)
         self.header = header
         self.raw_content = raw_content
@@ -472,6 +472,8 @@ class ChatBubble(Vertical):
         bubble_class = "user_bubble" if role == "user" else "ai_bubble"
         self.add_class("message")
         self.add_class(bubble_class)
+        if is_old:
+            self.add_class("old_bubble")
 
     def compose(self) -> ComposeResult:
         normal_widgets = []
@@ -1461,6 +1463,13 @@ class TaiMenu(App):
         self.start_tts_worker()
         self.load_initial_state()
 
+        # Watch scroll_y to trigger lazy loading of chat history
+        try:
+            chat_list = self.query_one("#chat_list", ScrollableContainer)
+            chat_list.watch(self, "scroll_y", self.on_chat_list_scroll)
+        except Exception:
+            pass
+
         # Initialize header title and subtitle based on resource monitor setting
         if not getattr(self, "show_resource_monitor", True):
             self.title = "t.ai"
@@ -2119,6 +2128,9 @@ class TaiMenu(App):
         # Run a history recap on startup only when enabled and prior history exists.
         if get_setting("auto_recap_on_start", False) and has_history:
             self.run_recap()
+        elif get_setting("auto_chat_load", True) and has_history:
+            limit = get_setting("auto_chat_load_limit", 20)
+            self.load_initial_history(limit)
 
 
         # Print tip message
@@ -2190,7 +2202,7 @@ class TaiMenu(App):
         else:
             self.remote_status = ""
 
-    def add_message(self, text, role="user", msg_data=None, message_number: int | None = None, raw_text: str | None = None, history_index: int | None = None):
+    def add_message(self, text, role="user", msg_data=None, message_number: int | None = None, raw_text: str | None = None, history_index: int | None = None, before=None):
         if role == "user" and not text:
             # Skip empty user messages to keep UI clean of empty bubble boxes
             return
@@ -2207,7 +2219,7 @@ class TaiMenu(App):
         container = self.query_one("#chat_list")
         if role == "system":
             widget = Static(text, markup=True, classes="system_msg")
-            container.mount(widget)
+            container.mount(widget, before=before)
             def safe_remove_sys():
                 try:
                     widget.remove()
@@ -2216,7 +2228,7 @@ class TaiMenu(App):
             self.set_timer(5.0, safe_remove_sys)
         elif role == "command":
             widget = Static(text, markup=True, classes="command_msg")
-            container.mount(widget)
+            container.mount(widget, before=before)
             # Only pop out status messages; keep reference outputs like help menu and errors visible
             if "[AVAILABLE COMMANDS]" not in text and "[ERROR]" not in text:
                 def safe_remove_cmd():
@@ -2226,10 +2238,10 @@ class TaiMenu(App):
                         pass
                 self.set_timer(10.0, safe_remove_cmd)
         elif role == "summary":
-            container.mount(Static(text, markup=True, classes="summary_msg"))
+            container.mount(Static(text, markup=True, classes="summary_msg"), before=before)
         elif role == "tip_message":
             widget = Static(text, markup=True, classes="tip_msg")
-            container.mount(widget)
+            container.mount(widget, before=before)
             def safe_remove_tip():
                 try:
                     widget.remove()
@@ -2246,13 +2258,17 @@ class TaiMenu(App):
             if not raw_content:
                 raw_content = raw_text or text
 
+            last_idx = memory_manager.get_last_summarized_index(self.history_profile_name)
+            is_old = history_index is not None and last_idx is not None and history_index < last_idx
+
             bubble = ChatBubble(
                 header=header,
                 raw_content=raw_content,
                 role=role,
                 message_number=message_number,
                 msg_data=msg_data,
-                history_index=history_index
+                history_index=history_index,
+                is_old=is_old
             )
             if role == "user":
                 bubble.raw_text = raw_content
@@ -2262,7 +2278,7 @@ class TaiMenu(App):
                 self._visible_message_count = max(self._visible_message_count, message_number)
 
             row = Horizontal(bubble, classes=f"message_row {row_class}")
-            container.mount(row)
+            container.mount(row, before=before)
 
             # Mount separate ImageBubble rows for each image in the message
             image_chunks = [c for c in parse_message_content(raw_content) if c["type"] == "image"]
@@ -2275,9 +2291,10 @@ class TaiMenu(App):
                         role=role,
                     )
                     img_row = Horizontal(img_bubble, classes=f"message_row {row_class}")
-                    container.mount(img_row)
+                    container.mount(img_row, before=before)
 
-        container.scroll_end(animate=False)
+        if before is None:
+            container.scroll_end(animate=False)
 
     def reload_chat_from_history(self) -> None:
         """Rebuilds the visible chat list from persisted history."""
@@ -2299,6 +2316,143 @@ class TaiMenu(App):
                     message_number = visible_count
             self.add_message(content, role=role, msg_data=msg_data, message_number=message_number, history_index=idx)
         self._visible_message_count = visible_count
+
+    def load_initial_history(self, limit: int) -> None:
+        """Loads and displays the initial slice of chat history on startup."""
+        container = self.query_one("#chat_list", ScrollableContainer)
+        for child in list(container.children):
+            child.remove()
+
+        history = memory_manager.load_history(self.history_profile_name, limit=limit)
+        if not history:
+            return
+
+        full_history = memory_manager.load_history(self.history_profile_name)
+        slice_start_idx = len(full_history) - len(history)
+
+        visible_count = 0
+        for msg in full_history[:slice_start_idx]:
+            r = msg.get("role", "assistant")
+            c = msg.get("content", "")
+            if r in ("user", "assistant"):
+                if not (r == "user" and not c):
+                    visible_count += 1
+
+        for idx, msg_data in enumerate(history):
+            role = msg_data.get("role", "assistant")
+            content = msg_data.get("content", "")
+            if role != "system":
+                content = self.format_rp(content, role=role)
+            message_number = None
+            if role in ("user", "assistant"):
+                if not (role == "user" and not content):
+                    visible_count += 1
+                    message_number = visible_count
+            self.add_message(content, role=role, msg_data=msg_data, message_number=message_number, history_index=slice_start_idx + idx)
+        self._visible_message_count = visible_count
+        container.scroll_end(animate=False)
+
+    def on_chat_list_scroll(self, scroll_y: float) -> None:
+        """Fires when the scroll position of the chat list changes."""
+        if scroll_y == 0:
+            self.trigger_history_lazy_load()
+
+    def get_top_message_info(self) -> tuple[int | None, int | None]:
+        """Scans the current chat list and returns the first loaded message info (index, absolute ID)."""
+        container = self.query_one("#chat_list", ScrollableContainer)
+        for child in container.children:
+            bubble = child.query("ChatBubble").first() if hasattr(child, "query") else None
+            if bubble and bubble.history_index is not None:
+                first_id = bubble.msg_data.get("id") if bubble.msg_data else None
+                return bubble.history_index, first_id
+        return None, None
+
+    @work(thread=True)
+    def trigger_history_lazy_load(self) -> None:
+        """Background thread worker to lazy load history."""
+        if getattr(self, "_loading_history", False):
+            return
+        self._loading_history = True
+
+        try:
+            first_index, first_id = self.get_top_message_info()
+            if first_index is None or first_index == 0 or (first_id is not None and first_id <= 1):
+                # Already at the top/beginning of history
+                self._loading_history = False
+                return
+
+            limit = get_setting("scroll_load_limit", 10)
+            before_id = first_id if first_id is not None else (first_index + 1)
+
+            older_slice = memory_manager.load_history_slice(
+                self.history_profile_name,
+                limit=limit,
+                before_id=before_id
+            )
+
+            if not older_slice:
+                self._loading_history = False
+                return
+
+            slice_start_idx = max(0, first_index - len(older_slice))
+            self.call_from_thread(self.prepend_history_slice, older_slice, slice_start_idx)
+        except Exception as e:
+            if get_setting("debug_mode", False):
+                print(f"Lazy load history error: {e}")
+        finally:
+            self._loading_history = False
+
+    def prepend_history_slice(self, older_slice: list, slice_start_idx: int) -> None:
+        """Mounts a slice of history prependingly in TUI and corrects scroll position."""
+        container = self.query_one("#chat_list", ScrollableContainer)
+        
+        # Identify the current first child widget to insert before
+        first_child = None
+        for child in container.children:
+            first_child = child
+            break
+
+        if not first_child:
+            return
+
+        # Calculate message numbers up to start of slice
+        full_history = memory_manager.load_history(self.history_profile_name)
+        visible_count = 0
+        for msg in full_history[:slice_start_idx]:
+            r = msg.get("role", "assistant")
+            c = msg.get("content", "")
+            if r in ("user", "assistant"):
+                if not (r == "user" and not c):
+                    visible_count += 1
+
+        # Prepend the older messages chronologically before first_child
+        for idx, msg_data in enumerate(older_slice):
+            role = msg_data.get("role", "assistant")
+            content = msg_data.get("content", "")
+            if role != "system":
+                content = self.format_rp(content, role=role)
+            message_number = None
+            if role in ("user", "assistant"):
+                if not (role == "user" and not content):
+                    visible_count += 1
+                    message_number = visible_count
+            self.add_message(content, role=role, msg_data=msg_data, message_number=message_number, history_index=slice_start_idx + idx, before=first_child)
+
+        # If the first_child is the recap summary, mount a visual divider just before it
+        if "summary_msg" in getattr(first_child, "classes", []):
+            divider = Static("--- History Prior to Recap ---", classes="history_divider")
+            container.mount(divider, before=first_child)
+
+        newly_loaded_visible_count = 0
+        for msg in older_slice:
+            r = msg.get("role", "assistant")
+            c = msg.get("content", "")
+            if r in ("user", "assistant") and not (r == "user" and not c):
+                newly_loaded_visible_count += 1
+        self._visible_message_count += newly_loaded_visible_count
+
+        # Correct scroll anchoring to prevent viewport jumping
+        self.call_after_refresh(container.scroll_to_widget, first_child, animate=False, top=True)
 
     async def on_chat_input_submitted(self, event: ChatInput.Submitted) -> None:
         """Handles user input submission from ChatInput."""
@@ -2383,6 +2537,18 @@ class TaiMenu(App):
                             self.print_starter_message()
 
                 self.update_sidebar()
+                return
+
+            if command_action["type"] == "load_history":
+                count = command_action["count"]
+                if count == "full":
+                    self.reload_chat_from_history()
+                else:
+                    try:
+                        n = int(count)
+                        self.load_initial_history(n)
+                    except ValueError:
+                        pass
                 return
 
             if command_action["type"] == "regenerate":

@@ -278,3 +278,17 @@ ToolApproval Checkbox {
     width: 100%;
     height: auto;
 }
+
+.old_bubble {
+    color: $text-muted;
+    border: round $text-disabled;
+}
+
+.history_divider {
+    color: $text-disabled;
+    margin: 1 0;
+    width: 100%;
+    text-align: center;
+    padding: 0 1;
+    text-style: bold;
+}

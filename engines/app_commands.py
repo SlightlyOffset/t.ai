@@ -20,7 +20,6 @@ from engines.config import (
     get_active_session,
     set_active_session,
 )
-from engines.utilities import pick_history
 from engines.utilities import pick_profile
 from engines.utilities import (
     pick_user_profile,
@@ -47,6 +46,15 @@ SENSITIVE_KEYS = [
     "openai_api_key",
     "github_token",
 ]
+
+
+class LoadHistoryRequested(Exception):
+    """Exception raised to signal the TUI to load/rebuild history with a count."""
+
+    def __init__(self, count: str, force: bool = False):
+        super().__init__(f"Load history requested: count={count}, force={force}")
+        self.count = count
+        self.force = force
 
 
 class RestartRequested(Exception):
@@ -400,19 +408,8 @@ def app_commands(ops: str, suppress_output: bool = False):
                     )
                     return
                 else:
-                    history_path = pick_history()
-                    if history_path:
-                        rel = os.path.relpath(history_path, HISTORY_PATH)
-                        parts = rel.split(os.sep)
-                        if len(parts) >= 2:
-                            profile_name = parts[0]
-                            session_name = parts[1].replace("_history.json", "")
-                        else:
-                            profile_name = parts[0].replace("_history.json", "")
-                            session_name = "default"
-                    else:
-                        _log("[SYSTEM] No history selected.", Fore.RED)
-                        return
+                    _log("[SYSTEM] No active profile to reset. Specify a profile name: //reset [profile]", Fore.RED)
+                    return
 
         if profile_name:
             memory_manager.save_history(profile_name, [], session_name=session_name)
@@ -477,68 +474,30 @@ def app_commands(ops: str, suppress_output: bool = False):
                 Fore.RED,
             )
 
-    def _history(args=None):
-        """Displays the recent conversation history (CLI only)."""
-        limit = 15
-        if args and isinstance(args, str) and args.strip():
-            try:
-                limit = int(args.strip())
-            except ValueError:
-                pass
-
-        if suppress_output:
-            _log("[SYSTEM] History recap is already visible in TUI.", Fore.YELLOW)
+    def _load(args=None):
+        """Loads a specific number of historical turns or all turns in the chat window. Usage: //load [n | full] [--force | -f]"""
+        if not args or not args.strip():
+            _log("[SYSTEM] Usage: //load [n | full] [--force | -f]", Fore.YELLOW)
             return
 
-        current_profile_setting = get_setting("current_character_profile")
-        if not current_profile_setting:
-            _log(
-                "[SYSTEM] No character profile active. Cannot display history.",
-                Fore.RED,
-            )
-            return
+        parts = args.strip().split()
+        target = parts[0].lower()
+        force = False
+        if len(parts) > 1:
+            force_arg = parts[1].lower()
+            if force_arg in ("--force", "-f"):
+                force = True
 
-        profile_name = os.path.basename(current_profile_setting).replace(".json", "")
-        ch_name = "Assistant"
-        user_name = "User"
-        char_color = None
-
-        try:
-            with open(
-                os.path.join("profiles", current_profile_setting), "r", encoding="UTF-8"
-            ) as f:
-                profile_data = json.load(f)
-                ch_name = profile_data.get("name", "Assistant")
-                colors = profile_data.get("colors", {})
-                char_color = getattr(
-                    Fore, colors.get("text", "WHITE").upper(), Fore.WHITE
-                )
-
-            user_profile_filename = get_setting("current_user_profile")
-            if user_profile_filename:
-                with open(
-                    os.path.join("user_profiles", user_profile_filename),
-                    "r",
-                    encoding="UTF-8",
-                ) as f:
-                    user_name = json.load(f).get("name", "User")
-        except:
-            pass
-
-        recap_messages = memory_manager.load_history(profile_name, limit=limit)
-        if recap_messages:
-            _log("\n=== Past Conversation ===", Fore.WHITE)
-            for msg in recap_messages:
-                render_historical_message(
-                    msg.get("role"),
-                    msg.get("content", ""),
-                    user_name=user_name,
-                    char_name=ch_name,
-                    char_color=char_color,
-                )
-            _log("=========================", Fore.WHITE)
+        if target == "full":
+            raise LoadHistoryRequested("full", force=force)
         else:
-            _log("[SYSTEM] No history found for the current profile.", Fore.YELLOW)
+            try:
+                n = int(target)
+                if n <= 0:
+                    raise ValueError
+                raise LoadHistoryRequested(str(n), force=force)
+            except ValueError:
+                _log("[ERROR] Please specify a positive number of turns or 'full'.", Fore.RED)
 
     def _clear_cache():
         """Clears the local TTS audio cache."""
@@ -1033,8 +992,7 @@ def app_commands(ops: str, suppress_output: bool = False):
         "//reset": _reset,
         "//toggle": _toggle,
         "//show_settings": _show_settings,
-        "//history": _history,
-        "//recap": _history,
+        "//load": _load,
         "//clear_cache": _clear_cache,
         "//regen": _regen,
         "//regenerate": _regen,
@@ -1067,6 +1025,11 @@ def app_commands(ops: str, suppress_output: bool = False):
 
             if suppress_output:
                 return True, output_buffer
+            return True
+        except LoadHistoryRequested:
+            if suppress_output:
+                raise
+            _log("[SYSTEM] History loading is only supported in TUI mode.", Fore.RED)
             return True
         except RestartRequested:
             raise
