@@ -281,7 +281,7 @@ ToolApproval Checkbox {
 
 .old_bubble {
     color: $text-muted;
-    border: round $text-disabled;
+    border: round #777777;
 }
 
 .history_divider {
