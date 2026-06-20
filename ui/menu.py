@@ -1466,7 +1466,7 @@ class TaiMenu(App):
         # Watch scroll_y to trigger lazy loading of chat history
         try:
             chat_list = self.query_one("#chat_list", ScrollableContainer)
-            chat_list.watch(self, "scroll_y", self.on_chat_list_scroll)
+            chat_list.watch(self, "scroll_y", self.on_chat_list_scroll, init=False)
         except Exception:
             pass
 
@@ -2352,9 +2352,9 @@ class TaiMenu(App):
         self._visible_message_count = visible_count
         container.scroll_end(animate=False)
 
-    def on_chat_list_scroll(self, scroll_y: float) -> None:
+    def on_chat_list_scroll(self, old_value: float, new_value: float) -> None:
         """Fires when the scroll position of the chat list changes."""
-        if scroll_y == 0:
+        if new_value == 0:
             self.trigger_history_lazy_load()
 
     def get_top_message_info(self) -> tuple[int | None, int | None]:
