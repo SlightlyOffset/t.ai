@@ -31,6 +31,13 @@ class HistoryManager:
         if not os.path.exists(self.history_dir):
             os.makedirs(self.history_dir)
 
+    def _get_char_dir(self, safe_char: str) -> str:
+        """Resolves the session directory path. Supports unified profile subdirectories."""
+        char_profile_dir = os.path.join("profiles", safe_char)
+        if os.path.isdir(char_profile_dir):
+            return os.path.join(char_profile_dir, "sessions")
+        return os.path.join(self.history_dir, safe_char)
+
     def _get_filename(self, profile_name: str, session_name: str = None) -> str:
         """Generates a safe filename for the history JSON file in the character's subfolder."""
         if session_name is None:
@@ -41,7 +48,7 @@ class HistoryManager:
             # Fall back to default session if target session does not exist
             safe_char = sanitize_profile_name(profile_name) or "session"
             safe_session = sanitize_profile_name(session_name) or "default"
-            char_dir = os.path.join(self.history_dir, safe_char)
+            char_dir = self._get_char_dir(safe_char)
             temp_path = os.path.join(char_dir, f"{safe_session}_history.json")
             if safe_session != "default" and not os.path.exists(temp_path):
                 session_name = "default"
@@ -52,7 +59,7 @@ class HistoryManager:
         safe_char = sanitize_profile_name(profile_name) or "session"
         safe_session = sanitize_profile_name(session_name) or "default"
 
-        char_dir = os.path.join(self.history_dir, safe_char)
+        char_dir = self._get_char_dir(safe_char)
         new_path = os.path.join(char_dir, f"{safe_session}_history.json")
 
         # Ensure directory exists

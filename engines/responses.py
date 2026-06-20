@@ -29,7 +29,7 @@ from engines.narrative_pipeline import (
 )
 from engines.prompts import build_system_prompt
 from engines.lorebook import load_lorebook, scan_for_lore
-from engines.utilities import redact_pii, log_debug
+from engines.utilities import redact_pii, log_debug, get_character_name_from_path
 from engines.hooks import execute_pipeline
 
 MAX_CANDIDATE_WORKERS = 4
@@ -994,7 +994,7 @@ def get_respond_stream(user_input: str, profile: dict, profile_path: str = None,
 
     if not history_profile_name:
         if profile_path:
-            history_profile_name = os.path.splitext(os.path.basename(profile_path))[0]
+            history_profile_name = get_character_name_from_path(profile_path)
         else:
             history_profile_name = char_name # Fallback to display name
 

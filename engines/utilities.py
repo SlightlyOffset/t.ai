@@ -51,6 +51,20 @@ def sanitize_profile_name(profile_name: str) -> str:
     safe_name = (profile_name or "").replace(" ", "_")
     return "".join(char for char in safe_name if char.isalnum() or char in ("_", "-", "(", ")")).rstrip()
 
+def get_character_name_from_path(char_path: str | None) -> str:
+    """
+    Extracts the unique character name from the profile filepath.
+    Supports both legacy flat profiles (profiles/aiko.json -> aiko)
+    and unified character directories (profiles/aiko/profile.json -> aiko).
+    """
+    if not char_path:
+        return ""
+    base = os.path.basename(char_path)
+    if base.lower() == "profile.json" or base.lower() == "profile":
+        # It's the unified subdirectory format, use parent folder name
+        return os.path.basename(os.path.dirname(char_path))
+    return os.path.splitext(base)[0]
+
 def hide_file(file_path):
     """Hides a file on Windows by setting its file attributes."""
     import os

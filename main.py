@@ -179,6 +179,11 @@ def main():
     # 1. Environment and Dependency Checks
     check_python_version()
     ensure_directories()
+    try:
+        from engines.migration_v3 import MigrationManager
+        MigrationManager.run_migration()
+    except Exception as e:
+        print(f"[ERROR] Migration failed: {e}")
     check_dependencies()
     check_ollama_and_models()
 

@@ -20,7 +20,7 @@ from engines.config import (
     get_active_session,
     set_active_session,
 )
-from engines.utilities import pick_profile
+from engines.utilities import pick_profile, get_character_name_from_path
 from engines.utilities import (
     pick_user_profile,
     render_historical_message,
@@ -321,7 +321,7 @@ def app_commands(ops: str, suppress_output: bool = False):
 
             if profile_path and os.path.exists(profile_path):
                 try:
-                    profile_name = os.path.basename(profile_path).replace(".json", "")
+                    profile_name = get_character_name_from_path(profile_path)
                     full_data = memory_manager.get_full_data(profile_name)
 
                     memory_manager.save_history(
@@ -397,9 +397,7 @@ def app_commands(ops: str, suppress_output: bool = False):
         else:
             current_profile_setting = get_setting("current_character_profile")
             if current_profile_setting:
-                profile_name = os.path.basename(current_profile_setting).replace(
-                    ".json", ""
-                )
+                profile_name = get_character_name_from_path(current_profile_setting)
             else:
                 if suppress_output:
                     _log(
@@ -560,7 +558,7 @@ def app_commands(ops: str, suppress_output: bool = False):
             )
             return
 
-        profile_name = os.path.basename(current_profile_setting).replace(".json", "")
+        profile_name = get_character_name_from_path(current_profile_setting)
         full_data = memory_manager.get_full_data(profile_name)
         history = full_data.get("history", [])
 
@@ -740,8 +738,13 @@ def app_commands(ops: str, suppress_output: bool = False):
             )
             return
 
-        character_name = os.path.basename(char_profile_setting).replace(".json", "")
-        char_dir = os.path.join(HISTORY_PATH, sanitize_profile_name(character_name))
+        character_name = get_character_name_from_path(char_profile_setting)
+        safe_char = sanitize_profile_name(character_name)
+        char_profile_dir = os.path.join("profiles", safe_char)
+        if os.path.isdir(char_profile_dir):
+            char_dir = os.path.join(char_profile_dir, "sessions")
+        else:
+            char_dir = os.path.join(HISTORY_PATH, safe_char)
 
         if not args or not args.strip():
             _log(

@@ -34,6 +34,41 @@ class TestProfileState(unittest.TestCase):
         self.assertIn("Friendly", state["status_label"])
         self.assertEqual(state["rel_progress"], 112)
 
+    def test_get_character_name_from_path(self):
+        from engines.utilities import get_character_name_from_path
+        self.assertEqual(get_character_name_from_path("profiles/aiko/profile.json"), "aiko")
+        self.assertEqual(get_character_name_from_path("profiles/aiko/profile"), "aiko")
+        self.assertEqual(get_character_name_from_path("profiles/aiko.json"), "aiko")
+        self.assertEqual(get_character_name_from_path("aiko"), "aiko")
+        self.assertEqual(get_character_name_from_path(""), "")
+        self.assertEqual(get_character_name_from_path(None), "")
+
+    @patch("engines.profile_state.os.path.exists")
+    def test_resolve_profile_assets(self, mock_exists):
+        from engines.profile_state import resolve_profile_assets
+        mock_exists.side_effect = lambda path: path.startswith("profiles/") or path.endswith("custom_rules.md")
+        profile = {
+            "avatar_path": "avatar.png",
+            "lorebook_path": "lorebook.json"
+        }
+        resolve_profile_assets(profile, "profiles/aiko/profile.json")
+        self.assertEqual(profile["avatar_path"], "profiles/aiko/avatar.png")
+        self.assertEqual(profile["lorebook_path"], "profiles/aiko/lorebook.json")
+        self.assertEqual(profile["custom_rules_path"], "profiles/aiko/custom_rules.md")
+
+    @patch("engines.prompts.os.path.exists", return_value=True)
+    @patch("engines.prompts.load_user_profile", return_value=None)
+    def test_custom_rules_override(self, mock_load_user, mock_exists):
+        from unittest.mock import mock_open
+        from engines.prompts import build_system_prompt
+        profile = {
+            "name": "aiko",
+            "custom_rules_path": "profiles/aiko/custom_rules.md"
+        }
+        with patch("builtins.open", mock_open(read_data="custom rules content")):
+            prompt = build_system_prompt(profile, 0, mode="rp")
+        self.assertIn("custom rules content", prompt)
+
 
 if __name__ == "__main__":
     unittest.main()

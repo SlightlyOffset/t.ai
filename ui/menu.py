@@ -2094,7 +2094,8 @@ class TaiMenu(App):
         self.user_name_lbl_color = session_state["user_name_lbl_color"]
         self.history_profile_name = session_state["history_profile_name"]
         memory_manager.clear_pending_user_message(self.history_profile_name)
-        update_setting("current_character_profile", os.path.basename(self.char_path))
+        rel_char_path = os.path.relpath(self.char_path, "profiles").replace("\\", "/")
+        update_setting("current_character_profile", rel_char_path)
 
         if self.user_path:
             update_setting("current_user_profile", os.path.basename(self.user_path))

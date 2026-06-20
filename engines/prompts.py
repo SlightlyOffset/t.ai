@@ -141,7 +141,12 @@ Mode: {mode.upper()}
 """
 
     # 4. Global Behavioral Rules
-    rule_path = RP_RULES_PATH if mode == "rp" else CASUAL_RULES_PATH
+    custom_rules_path = profile.get("custom_rules_path")
+    if custom_rules_path and os.path.exists(custom_rules_path):
+        rule_path = custom_rules_path
+    else:
+        rule_path = RP_RULES_PATH if mode == "rp" else CASUAL_RULES_PATH
+
     try:
         with open(rule_path, "r", encoding="UTF-8") as f:
             rule = f.read()
