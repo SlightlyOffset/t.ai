@@ -74,6 +74,7 @@ from engines.profile_state import (
     build_sidebar_state,
     get_initial_avatar_paths,
     load_profile_session,
+    resolve_profile_assets,
     resolve_selected_paths,
 )
 from engines.recap_service import (
@@ -2825,6 +2826,7 @@ class TaiMenu(App):
         profile_path = os.path.join("profiles", get_setting("current_character_profile"))
         with open(profile_path, "r", encoding="utf-8") as f:
             self.character_profile = json.load(f)
+        resolve_profile_assets(self.character_profile, profile_path)
         if self.history_profile_name and memory_manager.has_history(self.history_profile_name):
             full_data = memory_manager.get_full_data(self.history_profile_name)
             self.character_profile["relationship_score"] = full_data.get("metadata", {}).get("relationship_score", self.character_profile.get("relationship_score", 0))
