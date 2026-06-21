@@ -29,7 +29,7 @@ class DashboardScreen(Screen):
         text-align: center;
         color: $accent;
         text-style: bold;
-        margin-bottom: 1;
+        margin-bottom: 2;
     }
 
     #dashboard_tagline {
@@ -41,9 +41,9 @@ class DashboardScreen(Screen):
     }
 
     #dashboard_menu {
+        width: 100%;
         align: center middle;
         layout: vertical;
-        width: auto;
         height: auto;
     }
 
@@ -51,12 +51,9 @@ class DashboardScreen(Screen):
         background: transparent;
         border: none;
         color: $text;
-        text-align: left;
-        width: 32;
-        height: 1;
-        margin: 0 0 1 0;
-        padding: 0;
-        min-width: 8;
+        width: 40;
+        height: 3;
+        margin: 0;
     }
 
     .dashboard_btn:hover {
