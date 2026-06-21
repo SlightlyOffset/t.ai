@@ -519,6 +519,71 @@ class TestTUIStartup(unittest.TestCase):
         called_screen = mock_push.call_args[0][0]
         self.assertIsInstance(called_screen, DashboardScreen)
 
+    @patch('os.path.isdir')
+    @patch('os.path.exists')
+    @patch('os.scandir')
+    @patch('builtins.open', new_callable=unittest.mock.mock_open)
+    @patch('os.path.getmtime')
+    def test_get_all_recent_sessions_detects_unified_and_legacy_profiles(self, mock_getmtime, mock_open, mock_scandir, mock_exists, mock_isdir):
+        """Test that get_all_recent_sessions detects both legacy flat JSON and unified character directories."""
+        from ui.RecentSessionsScreen import get_all_recent_sessions
+        from collections import namedtuple
+        
+        DirEntry = namedtuple('DirEntry', ['name', 'is_file', 'is_dir', 'path'])
+        
+        def norm(p):
+            return os.path.normpath(p).replace('\\', '/')
+        
+        # Configure profiles_dir contents
+        mock_scandir.side_effect = lambda path: {
+            "profiles": [
+                DirEntry("settings.json", lambda: True, lambda: False, "profiles/settings.json"),
+                DirEntry("legacy_profile.json", lambda: True, lambda: False, "profiles/legacy_profile.json"),
+                DirEntry("aiko_unified", lambda: False, lambda: True, "profiles/aiko_unified"),
+                DirEntry("non_profile_dir", lambda: False, lambda: True, "profiles/non_profile_dir")
+            ],
+            "history/legacy_profile": [
+                DirEntry("session1_history.json", lambda: True, lambda: False, "history/legacy_profile/session1_history.json")
+            ],
+            "profiles/aiko_unified/sessions": [
+                DirEntry("session2_history.json", lambda: True, lambda: False, "profiles/aiko_unified/sessions/session2_history.json")
+            ]
+        }.get(norm(path), [])
+        
+        # Configure mock_exists
+        mock_exists.side_effect = lambda path: norm(path) in [
+            "profiles",
+            "profiles/aiko_unified/profile.json",
+            "history/legacy_profile",
+            "profiles/aiko_unified/sessions",
+            "history/legacy_profile/session1_history.json",
+            "profiles/aiko_unified/sessions/session2_history.json"
+        ]
+        
+        # Configure mock_isdir
+        mock_isdir.side_effect = lambda path: norm(path) in [
+            "profiles",
+            "history/legacy_profile",
+            "profiles/aiko_unified/sessions"
+        ]
+        
+        # Mock file content reads for history files (metadata last_interaction)
+        mock_open.return_value.read.side_effect = [
+            '{"metadata": {"last_interaction": "2026-06-21 | 12:00:00"}}',
+            '{"metadata": {"last_interaction": "2026-06-21 | 14:00:00"}}'
+        ]
+        
+        sessions = get_all_recent_sessions()
+        
+        self.assertEqual(len(sessions), 2)
+        self.assertEqual(sessions[0]["profile_name"], "Aiko Unified")
+        self.assertEqual(sessions[0]["session_name"], "session2")
+        self.assertEqual(sessions[0]["profile_file"], "aiko_unified/profile.json")
+        
+        self.assertEqual(sessions[1]["profile_name"], "Legacy Profile")
+        self.assertEqual(sessions[1]["session_name"], "session1")
+        self.assertEqual(sessions[1]["profile_file"], "legacy_profile.json")
+
 if __name__ == '__main__':
     unittest.main()
 

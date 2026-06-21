@@ -16,6 +16,8 @@ def get_all_recent_sessions() -> list[dict]:
     if not os.path.exists(profiles_dir):
         return []
         
+    profile_targets = []
+    
     for entry in os.scandir(profiles_dir):
         if entry.is_file() and entry.name.endswith(".json") and entry.name != "settings.json":
             profile_file = entry.name
@@ -27,36 +29,51 @@ def get_all_recent_sessions() -> list[dict]:
                 sessions_dir = os.path.join(char_profile_dir, "sessions")
             else:
                 sessions_dir = os.path.join(history_dir, profile_name)
+            profile_targets.append((profile_name, profile_file, sessions_dir))
+            
+        elif entry.is_dir():
+            profile_json = os.path.join(entry.path, "profile.json")
+            if os.path.exists(profile_json):
+                profile_file = f"{entry.name}/profile.json"
+                profile_name = entry.name
+                sessions_dir = os.path.join(entry.path, "sessions")
+                profile_targets.append((profile_name, profile_file, sessions_dir))
                 
-            if os.path.exists(sessions_dir) and os.path.isdir(sessions_dir):
-                for f_entry in os.scandir(sessions_dir):
-                    if f_entry.is_file() and f_entry.name.endswith("_history.json"):
-                        session_name = f_entry.name.replace("_history.json", "")
+    for profile_name, profile_file, sessions_dir in profile_targets:
+        if os.path.exists(sessions_dir) and os.path.isdir(sessions_dir):
+            for f_entry in os.scandir(sessions_dir):
+                if f_entry.is_file() and f_entry.name.endswith("_history.json"):
+                    session_name = f_entry.name.replace("_history.json", "")
+                    
+                    # Load last_interaction metadata from file
+                    last_interaction = None
+                    try:
+                        with open(f_entry.path, "r", encoding="utf-8") as f:
+                            data = json.load(f)
+                            time_str = data.get("metadata", {}).get("last_interaction")
+                            if time_str:
+                                last_interaction = datetime.strptime(time_str, "%Y-%m-%d | %H:%M:%S")
+                    except Exception:
+                        pass
                         
-                        # Load last_interaction metadata from file
-                        last_interaction = None
+                    # Fallback to file modification time if parsing failed or metadata not present
+                    if not last_interaction:
                         try:
-                            with open(f_entry.path, "r", encoding="utf-8") as f:
-                                data = json.load(f)
-                                time_str = data.get("metadata", {}).get("last_interaction")
-                                if time_str:
-                                    last_interaction = datetime.strptime(time_str, "%Y-%m-%d | %H:%M:%S")
+                            last_interaction = datetime.fromtimestamp(os.path.getmtime(f_entry.path))
                         except Exception:
-                            pass
+                            last_interaction = datetime.min
                             
-                        # Fallback to file modification time if parsing failed or metadata not present
-                        if not last_interaction:
-                            try:
-                                last_interaction = datetime.fromtimestamp(os.path.getmtime(f_entry.path))
-                            except Exception:
-                                last_interaction = datetime.min
-                                
-                        sessions.append({
-                            "profile_name": profile_name,
-                            "session_name": session_name,
-                            "last_interaction": last_interaction,
-                            "profile_file": profile_file
-                        })
+                    # Clean up profile name for display
+                    import re
+                    display_name = re.sub(r'_[a-f0-9]{8}$', '', profile_name, flags=re.IGNORECASE)
+                    display_name = display_name.replace("_", " ").title()
+                    
+                    sessions.append({
+                        "profile_name": display_name,
+                        "session_name": session_name,
+                        "last_interaction": last_interaction,
+                        "profile_file": profile_file
+                    })
                         
     # Sort sessions by last_interaction descending
     sessions.sort(key=lambda x: x["last_interaction"], reverse=True)
