@@ -94,6 +94,14 @@ class DashboardScreen(Screen):
         text-align: center;
         color: $text-disabled;
         margin-top: 1;
+        margin-bottom: 0;
+    }
+
+    #resources_label {
+        width: 100%;
+        text-align: center;
+        color: $text-disabled;
+        margin-top: 0;
         margin-bottom: 1;
     }
 
@@ -179,6 +187,7 @@ class DashboardScreen(Screen):
             # Separator, Stats Panel and Tip of the Day
             yield Label("─" * 40, classes="dashboard_separator")
             yield Label("Loading system and LLM status...", id="stats_label")
+            yield Label("Loading system resources...", id="resources_label")
             tip_text = f"Tip: {random.choice(self.TIPS)}"
             yield Label(tip_text, id="dashboard_tip")
 
@@ -204,12 +213,21 @@ class DashboardScreen(Screen):
         comp_count = self.get_companions_count()
         sess_count = len(get_all_recent_sessions())
 
-        # CPU/RAM Metrics
-        try:
-            cpu, ram = self.app._get_local_metrics()
-            metrics_str = f"CPU: {cpu:.0f}% | RAM: {ram:.0f}%"
-        except Exception:
-            metrics_str = "CPU: --% | RAM: --%"
+        # CPU/RAM/GPU Metrics
+        def get_system_metrics():
+            try:
+                cpu, ram = self.app._get_local_metrics()
+                gpu = self.app._get_local_gpu_metrics()
+                metrics_str = f"CPU: {cpu:.0f}% | RAM: {ram:.0f}%"
+                if gpu:
+                    # Clean up leading pipe/spaces from gpu metrics
+                    gpu_str = gpu.strip()
+                    if gpu_str.startswith("|"):
+                        gpu_str = gpu_str.lstrip("|").strip()
+                    metrics_str += f" | {gpu_str}"
+                return metrics_str
+            except Exception:
+                return "CPU: --% | RAM: --%"
 
         # Local LLM Server Check
         llm_url = get_setting("local_llm_url", "http://localhost:11434/v1")
@@ -228,11 +246,15 @@ class DashboardScreen(Screen):
             return "Offline"
 
         loop = asyncio.get_event_loop()
-        llm_status = await loop.run_in_executor(None, check_connection)
+        llm_status, resources_text = await asyncio.gather(
+            loop.run_in_executor(None, check_connection),
+            loop.run_in_executor(None, get_system_metrics)
+        )
 
-        stats_text = f"Companions: {comp_count} | Sessions: {sess_count} | {metrics_str} | LLM: {llm_status}"
+        stats_text = f"Companions: {comp_count} | Sessions: {sess_count} | LLM: {llm_status}"
         try:
             self.query_one("#stats_label", Label).update(stats_text)
+            self.query_one("#resources_label", Label).update(resources_text)
         except Exception:
             pass
 
