@@ -3087,27 +3087,35 @@ class TaiMenu(App):
 
     def _get_local_gpu_metrics(self) -> str:
         """Fetch local NVIDIA GPU memory and utilization using nvidia-smi if available."""
-        import shutil
-        import subprocess
-        
-        has_nvidia_smi = shutil.which("nvidia-smi") is not None
-        
-        if not has_nvidia_smi:
+        if not getattr(self, "_gpu_checker_initialized", False):
+            import shutil
+            self._has_nvidia_smi = shutil.which("nvidia-smi") is not None
+            self._has_torch_cuda = False
+            if not self._has_nvidia_smi:
+                try:
+                    import torch
+                    self._has_torch_cuda = torch.cuda.is_available()
+                except Exception:
+                    pass
+            self._gpu_checker_initialized = True
+            
+        if not self._has_nvidia_smi:
             # Check PyTorch fallback if loaded
-            try:
-                import torch
-                if torch.cuda.is_available():
+            if self._has_torch_cuda:
+                try:
+                    import torch
                     try:
                         allocated = torch.cuda.memory_allocated() / (1024 ** 3)
                         total = torch.cuda.get_device_properties(0).total_memory / (1024 ** 3)
                         return f" | GPU VRAM: {allocated:4.1f}/{total:4.1f} GB"
                     except Exception:
                         return " | GPU VRAM:  --.-/ --.- GB"
-            except Exception:
-                pass
+                except Exception:
+                    pass
             return ""
             
         try:
+            import subprocess
             result = subprocess.run(
                 ["nvidia-smi", "--query-gpu=utilization.gpu,memory.used,memory.total", "--format=csv,noheader,nounits"],
                 stdout=subprocess.PIPE,
@@ -3141,29 +3149,36 @@ class TaiMenu(App):
         cpu, ram = self._get_local_metrics()
         gpu_info = self._get_local_gpu_metrics()
 
-        # Check remote bridge status
+        # Check remote bridge status (throttled to 10s intervals)
         remote_url = get_setting("remote_llm_url")
         vram_info = ""
         if remote_url:
-            import requests
-            try:
-                resp = requests.get(f"{remote_url.rstrip('/')}/health", timeout=1.5)
-                if resp.status_code == 200:
-                    data = resp.json()
-                    gpus = data.get("gpus", [])
-                    if gpus:
-                        if len(gpus) > 1:
-                            vram_strings = [f"GPU{g['id']}: {g['allocated_gib']:4.1f}/{g['total_gib']:4.1f} GB" for g in gpus]
-                            vram_info = " | Bridge VRAM: " + " | ".join(vram_strings)
+            import time
+            now = time.time()
+            if (now - getattr(self, "_last_bridge_check_time", 0.0)) >= 10.0:
+                import requests
+                try:
+                    resp = requests.get(f"{remote_url.rstrip('/')}/health", timeout=1.5)
+                    if resp.status_code == 200:
+                        data = resp.json()
+                        gpus = data.get("gpus", [])
+                        if gpus:
+                            if len(gpus) > 1:
+                                vram_strings = [f"GPU{g['id']}: {g['allocated_gib']:4.1f}/{g['total_gib']:4.1f} GB" for g in gpus]
+                                vram_info = " | Bridge VRAM: " + " | ".join(vram_strings)
+                            else:
+                                g = gpus[0]
+                                vram_info = f" | Bridge VRAM: {g['allocated_gib']:4.1f}/{g['total_gib']:4.1f} GB"
                         else:
-                            g = gpus[0]
-                            vram_info = f" | Bridge VRAM: {g['allocated_gib']:4.1f}/{g['total_gib']:4.1f} GB"
+                            vram_info = " | Bridge: Online"
                     else:
-                        vram_info = " | Bridge: Online"
-                else:
-                    vram_info = " | Bridge: Error"
-            except Exception:
-                vram_info = " | Bridge: Offline"
+                        vram_info = " | Bridge: Error"
+                except Exception:
+                    vram_info = " | Bridge: Offline"
+                self._last_bridge_vram_info = vram_info
+                self._last_bridge_check_time = now
+            else:
+                vram_info = getattr(self, "_last_bridge_vram_info", " | Bridge: Offline")
 
         metric_str = f"CPU: {cpu:3.0f}% | RAM: {ram:3.0f}%{gpu_info}{vram_info}"
 

@@ -192,6 +192,8 @@ class DashboardScreen(Screen):
             yield Label(tip_text, id="dashboard_tip")
 
     def on_mount(self) -> None:
+        self._last_llm_status = "Offline"
+        self._last_llm_check_time = 0.0
         self.update_stats_async()
         self.set_interval(2.0, self.update_stats_async)
 
@@ -229,7 +231,10 @@ class DashboardScreen(Screen):
             except Exception:
                 return "CPU:  --% | RAM:  --%"
 
-        # Local LLM Server Check
+        # Local LLM Server Check (throttled to 10s intervals)
+        import time
+        now = time.time()
+        should_check_llm = (now - getattr(self, "_last_llm_check_time", 0.0)) >= 10.0
         llm_url = get_setting("local_llm_url", "http://localhost:11434/v1")
         
         def check_connection():
@@ -246,10 +251,18 @@ class DashboardScreen(Screen):
             return "Offline"
 
         loop = asyncio.get_event_loop()
-        llm_status, resources_text = await asyncio.gather(
-            loop.run_in_executor(None, check_connection),
-            loop.run_in_executor(None, get_system_metrics)
-        )
+        tasks = [loop.run_in_executor(None, get_system_metrics)]
+        if should_check_llm:
+            tasks.append(loop.run_in_executor(None, check_connection))
+
+        results = await asyncio.gather(*tasks)
+        resources_text = results[0]
+        if should_check_llm:
+            llm_status = results[1]
+            self._last_llm_status = llm_status
+            self._last_llm_check_time = now
+        else:
+            llm_status = getattr(self, "_last_llm_status", "Offline")
 
         stats_text = f"Companions: {comp_count} | Sessions: {sess_count} | LLM: {llm_status}"
         try:
