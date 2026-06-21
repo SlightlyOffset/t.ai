@@ -47,25 +47,25 @@ class DashboardScreen(Screen):
         height: auto;
     }
 
-    .dashboard_btn {
+    .dashboard_btn,
+    .dashboard_btn:hover,
+    .dashboard_btn:focus,
+    .dashboard_btn:active {
         background: transparent;
         border: none;
-        color: $text;
         width: 40;
         height: 3;
         margin: 0;
     }
 
-    .dashboard_btn:hover {
-        color: $accent;
-        text-style: bold;
-        background: transparent;
+    .dashboard_btn {
+        color: $text;
     }
 
+    .dashboard_btn:hover,
     .dashboard_btn:focus {
         color: $accent;
         text-style: bold;
-        background: transparent;
     }
     """
 
