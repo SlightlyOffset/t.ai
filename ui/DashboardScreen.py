@@ -102,14 +102,14 @@ class DashboardScreen(Screen):
             tagline = random.choice(self.TAGLINES)
             yield Label(tagline, id="dashboard_tagline")
             with Vertical(id="dashboard_menu"):
-                yield Button("[c] Choose Companion", id="btn_choose_companion", classes="dashboard_btn")
+                yield Button(r"\[c] Choose Companion", id="btn_choose_companion", classes="dashboard_btn")
                 
                 # Show recent sessions button if any exist in the system
                 if len(get_all_recent_sessions()) > 0:
-                    yield Button("[s] Recent Sessions", id="btn_recent_sessions", classes="dashboard_btn")
+                    yield Button(r"\[s] Recent Sessions", id="btn_recent_sessions", classes="dashboard_btn")
                     
-                yield Button("[p] Settings", id="btn_settings", classes="dashboard_btn")
-                yield Button("[q] Quit", id="btn_quit", classes="dashboard_btn")
+                yield Button(r"\[p] Settings", id="btn_settings", classes="dashboard_btn")
+                yield Button(r"\[q] Quit", id="btn_quit", classes="dashboard_btn")
 
     def action_choose_companion(self) -> None:
         from ui.ProfileSelectScreen import ProfileSelect
