@@ -61,7 +61,7 @@ class PrivacyScreen(Screen):
             Label("🔒", id="privacy_lock_icon"),
             Label("Session Locked", id="privacy_title"),
             Label("This session was locked due to inactivity.", id="privacy_message"),
-            Label("Press [Enter] to resume chat", id="privacy_hint"),
+            Label("Press \\[Enter] to resume chat", id="privacy_hint"),
             id="privacy_container"
         )
 
