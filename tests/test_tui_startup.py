@@ -584,6 +584,37 @@ class TestTUIStartup(unittest.TestCase):
         self.assertEqual(sessions[1]["session_name"], "session1")
         self.assertEqual(sessions[1]["profile_file"], "legacy_profile.json")
 
+    @patch('ui.DashboardScreen.get_all_recent_sessions')
+    def test_dashboard_load_recent_sessions(self, mock_get_sessions):
+        """Test that action_load_recent_1, 2, 3 dismisses the screen with the correct session config."""
+        from ui.DashboardScreen import DashboardScreen
+        from datetime import datetime
+        
+        mock_get_sessions.return_value = [
+            {"profile_name": "Aiko", "session_name": "default", "last_interaction": datetime.now(), "profile_file": "Aiko.json"},
+            {"profile_name": "Akari", "session_name": "session_1", "last_interaction": datetime.now(), "profile_file": "Akari.json"},
+            {"profile_name": "Ako", "session_name": "default", "last_interaction": datetime.now(), "profile_file": "Ako.json"}
+        ]
+        
+        screen = DashboardScreen()
+        dismissed_result = None
+        def mock_dismiss(result):
+            nonlocal dismissed_result
+            dismissed_result = result
+        screen.dismiss = mock_dismiss
+        
+        # Test loading recent session 1
+        screen.action_load_recent_1()
+        self.assertEqual(dismissed_result, {"character": "Aiko.json", "session_name": "default"})
+        
+        # Test loading recent session 2
+        screen.action_load_recent_2()
+        self.assertEqual(dismissed_result, {"character": "Akari.json", "session_name": "session_1"})
+        
+        # Test loading recent session 3
+        screen.action_load_recent_3()
+        self.assertEqual(dismissed_result, {"character": "Ako.json", "session_name": "default"})
+
 if __name__ == '__main__':
     unittest.main()
 
