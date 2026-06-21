@@ -114,17 +114,17 @@ class DashboardScreen(Screen):
 
     def action_choose_companion(self) -> None:
         from ui.ProfileSelectScreen import ProfileSelect
-        self.push_screen(ProfileSelect(), callback=self.on_profile_selected)
+        self.app.push_screen(ProfileSelect(), callback=self.on_profile_selected)
 
     def action_recent_sessions(self) -> None:
         if len(get_all_recent_sessions()) == 0:
             self.notify("No recent sessions found.", severity="error")
             return
-        self.push_screen(RecentSessionsScreen(), callback=self.on_session_selected)
+        self.app.push_screen(RecentSessionsScreen(), callback=self.on_session_selected)
 
     def action_open_settings(self) -> None:
         from ui.SettingsScreen import SettingsScreen
-        self.push_screen(SettingsScreen(), callback=self.on_settings_saved)
+        self.app.push_screen(SettingsScreen(), callback=self.on_settings_saved)
 
     def action_quit_app(self) -> None:
         self.app.action_quit()
