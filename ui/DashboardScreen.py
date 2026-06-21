@@ -2,18 +2,18 @@ import os
 import random
 from textual.app import ComposeResult
 from textual.containers import Container, Vertical
-from textual.screen import Screen
-from textual.widgets import Header, Label, Footer, Button
+from textual.screen import ModalScreen
+from textual.widgets import Label, Button
 from ui.RecentSessionsScreen import get_all_recent_sessions, RecentSessionsScreen
 
 
-class DashboardScreen(Screen):
+class DashboardScreen(ModalScreen):
     """A keyboard-centric startup dashboard splash screen inspired by alpha-nvim."""
 
     DEFAULT_CSS = """
     DashboardScreen {
         align: center middle;
-        background: $surface;
+        background: rgba(0, 0, 0, 0.7);
     }
 
     #dashboard_container {
@@ -103,7 +103,6 @@ class DashboardScreen(Screen):
     ]
 
     def compose(self) -> ComposeResult:
-        yield Header(show_clock=False)
         with Container(id="dashboard_container"):
             yield Label(self.ASCII_ART, id="dashboard_ascii")
             tagline = random.choice(self.TAGLINES)
@@ -117,7 +116,6 @@ class DashboardScreen(Screen):
                     
                 yield Button("[p] Settings", id="btn_settings", classes="dashboard_btn")
                 yield Button("[q] Quit", id="btn_quit", classes="dashboard_btn")
-        yield Footer()
 
     def action_choose_companion(self) -> None:
         from ui.ProfileSelectScreen import ProfileSelect
