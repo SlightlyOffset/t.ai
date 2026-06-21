@@ -218,9 +218,6 @@ def main():
             from engines.config import get_setting
             from engines.utilities import set_terminal_appearance
 
-            if get_setting("clear_on_start", True):
-                print("\033[H\033[J", end="")
-
             print(f"Running on: {platform.system()} {platform.release()}")
             set_terminal_appearance(title="t.ai")
 

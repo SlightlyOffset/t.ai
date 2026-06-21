@@ -36,7 +36,6 @@ class TestSettingsScreen(unittest.TestCase):
             "#tts_rate": MagicMock(value="170"),
             "#overhaul_candidate_count": MagicMock(value="2"),
             "#interaction_mode": MagicMock(value="rp"),
-            "#clear_on_start": MagicMock(value=False),
             "#auto_recap_on_start": MagicMock(value=False),
             "#auto_chat_load": MagicMock(value=True),
             "#auto_chat_load_limit": MagicMock(value="20"),

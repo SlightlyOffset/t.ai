@@ -108,7 +108,6 @@ class SettingsScreen(ModalScreen):
 
         # Extract values or defaults
         interaction_mode = settings.get("interaction_mode", "rp")
-        clear_on_start = settings.get("clear_on_start", False)
         auto_recap_on_start = settings.get("auto_recap_on_start", False)
         auto_chat_load = settings.get("auto_chat_load", True)
         auto_chat_load_limit = str(settings.get("auto_chat_load_limit", 20))
@@ -174,9 +173,6 @@ class SettingsScreen(ModalScreen):
                                 id="interaction_mode",
                                 classes="settings_widget"
                             )
-                        with Horizontal(classes="settings_row"):
-                            yield Label("Clear Terminal on Start:", classes="settings_label")
-                            yield Switch(value=clear_on_start, id="clear_on_start", classes="settings_widget")
                         with Horizontal(classes="settings_row"):
                             yield Label("Auto Recap on Start:", classes="settings_label")
                             yield Switch(value=auto_recap_on_start, id="auto_recap_on_start", classes="settings_widget")
@@ -496,7 +492,6 @@ class SettingsScreen(ModalScreen):
         # 2. Build updated settings dict
         updated_settings = {
             "interaction_mode": self.query_one("#interaction_mode", Select).value,
-            "clear_on_start": self.query_one("#clear_on_start", Switch).value,
             "auto_recap_on_start": self.query_one("#auto_recap_on_start", Switch).value,
             "auto_chat_load": self.query_one("#auto_chat_load", Switch).value,
             "auto_chat_load_limit": auto_chat_load_limit,

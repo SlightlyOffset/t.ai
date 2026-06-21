@@ -233,12 +233,6 @@ def app_commands(ops: str, suppress_output: bool = False):
                 "[SYSTEM] Command execution disabled.",
                 False,
             ),
-            "clear": (
-                "clear_on_start",
-                "[SYSTEM] Console will now clear at startup.",
-                "[SYSTEM] Console will no longer clear at startup.",
-                True,
-            ),
             "recap": (
                 "auto_recap_on_start",
                 "[SYSTEM] Auto recap at startup is now enabled.",
