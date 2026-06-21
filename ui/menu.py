@@ -1177,8 +1177,9 @@ class TaiMenu(App):
     def action_open_dashboard(self) -> None:
         """Open the startup/navigation dashboard screen."""
         from ui.DashboardScreen import DashboardScreen
+        from ui.PrivacyScreen import PrivacyScreen
         try:
-            if isinstance(self.screen, DashboardScreen):
+            if isinstance(self.screen, (DashboardScreen, PrivacyScreen)):
                 return
         except Exception:
             pass
@@ -1588,6 +1589,10 @@ class TaiMenu(App):
         if timeout_minutes <= 0:
             return
 
+        # Guard: do not push a second privacy screen if one is already being shown
+        if getattr(self, "_privacy_screen_active", False):
+            return
+
         from ui.DashboardScreen import DashboardScreen
         from ui.PrivacyScreen import PrivacyScreen
         try:
@@ -1598,10 +1603,12 @@ class TaiMenu(App):
 
         idle_time = time.time() - getattr(self, "_last_user_activity", time.time())
         if idle_time > (timeout_minutes * 60):
+            self._privacy_screen_active = True
             self.push_screen(PrivacyScreen(), callback=self.on_privacy_screen_dismissed)
 
     def on_privacy_screen_dismissed(self, result: bool | None) -> None:
         """Callback when the privacy screen is unlocked."""
+        self._privacy_screen_active = False
         self._last_user_activity = time.time()
 
     def on_unmount(self) -> None:

@@ -124,5 +124,49 @@ class TestPrivacyScreen(unittest.TestCase):
         screen.action_unlock()
         self.assertTrue(dismiss_result)
 
+    @patch('ui.menu.TaiMenu.start_tts_worker')
+    @patch('ui.menu.TaiMenu.push_screen')
+    @patch('ui.menu.get_setting')
+    def test_check_inactivity_lock_no_double_push(self, mock_get_setting, mock_push, mock_tts):
+        """Test that a second PrivacyScreen is not pushed when _privacy_screen_active flag is set."""
+        from ui.menu import TaiMenu
+
+        mock_get_setting.return_value = 3
+        app = TaiMenu(char_path="profiles/Astgenne.json", user_path="user_profiles/Zenith.json")
+        app._last_user_activity = time.time() - 1000
+        app._privacy_screen_active = True  # Flag already set (screen is active)
+
+        with patch('ui.menu.TaiMenu.screen', new_callable=PropertyMock) as mock_screen:
+            mock_screen.return_value = MagicMock()
+            app.check_inactivity_lock()
+
+        self.assertFalse(mock_push.called, "Should not push a second PrivacyScreen when flag is set")
+
+    @patch('ui.menu.TaiMenu.start_tts_worker')
+    @patch('ui.menu.TaiMenu.push_screen')
+    def test_action_open_dashboard_blocked_on_privacy_screen(self, mock_push, mock_tts):
+        """Test that ctrl+g does not open Dashboard while PrivacyScreen is active."""
+        from ui.menu import TaiMenu
+        from ui.PrivacyScreen import PrivacyScreen
+
+        app = TaiMenu(char_path="profiles/Astgenne.json", user_path="user_profiles/Zenith.json")
+
+        with patch('ui.menu.TaiMenu.screen', new_callable=PropertyMock) as mock_screen:
+            mock_screen.return_value = PrivacyScreen()
+            app.action_open_dashboard()
+
+        self.assertFalse(mock_push.called, "Dashboard should not open while PrivacyScreen is showing")
+
+    def test_on_privacy_screen_dismissed_clears_flag(self):
+        """Test that dismissing the privacy screen clears the _privacy_screen_active flag."""
+        from ui.menu import TaiMenu
+
+        app = TaiMenu(char_path="profiles/Astgenne.json", user_path="user_profiles/Zenith.json")
+        app._privacy_screen_active = True
+        app.on_privacy_screen_dismissed(True)
+
+        self.assertFalse(app._privacy_screen_active, "_privacy_screen_active should be False after dismissal")
+        self.assertNotEqual(app._last_user_activity, 0.0, "Activity timer should be reset on dismissal")
+
 if __name__ == '__main__':
     unittest.main()
