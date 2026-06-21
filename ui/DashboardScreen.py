@@ -45,7 +45,7 @@ class DashboardScreen(Screen):
         margin-bottom: 2;
     }
 
-    #dashboard_menu {
+    #dashboard_menu, #dashboard_recent_menu {
         width: 100%;
         align: center middle;
         layout: vertical;
@@ -169,11 +169,12 @@ class DashboardScreen(Screen):
             if recent_sessions:
                 yield Label("─" * 40, classes="dashboard_separator")
                 yield Label("Resume Recent Conversations:", id="dashboard_recent_title")
-                for idx, s in enumerate(recent_sessions):
-                    profile = s["profile_name"]
-                    session = s["session_name"]
-                    label = f"\\[{idx + 1}] {profile}/{session}"
-                    yield Button(label, id=f"btn_recent_{idx + 1}", classes="dashboard_btn")
+                with Vertical(id="dashboard_recent_menu"):
+                    for idx, s in enumerate(recent_sessions):
+                        profile = s["profile_name"]
+                        session = s["session_name"]
+                        label = f"\\[{idx + 1}] {profile}/{session}"
+                        yield Button(label, id=f"btn_recent_{idx + 1}", classes="dashboard_btn")
 
             # Separator, Stats Panel and Tip of the Day
             yield Label("─" * 40, classes="dashboard_separator")
@@ -183,6 +184,7 @@ class DashboardScreen(Screen):
 
     def on_mount(self) -> None:
         self.update_stats_async()
+        self.set_interval(2.0, self.update_stats_async)
 
     def get_companions_count(self) -> int:
         profiles_dir = "profiles"
