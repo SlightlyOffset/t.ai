@@ -218,7 +218,7 @@ class DashboardScreen(Screen):
             try:
                 cpu, ram = self.app._get_local_metrics()
                 gpu = self.app._get_local_gpu_metrics()
-                metrics_str = f"CPU: {cpu:.0f}% | RAM: {ram:.0f}%"
+                metrics_str = f"CPU: {cpu:3.0f}% | RAM: {ram:3.0f}%"
                 if gpu:
                     # Clean up leading pipe/spaces from gpu metrics
                     gpu_str = gpu.strip()
@@ -227,7 +227,7 @@ class DashboardScreen(Screen):
                     metrics_str += f" | {gpu_str}"
                 return metrics_str
             except Exception:
-                return "CPU: --% | RAM: --%"
+                return "CPU:  --% | RAM:  --%"
 
         # Local LLM Server Check
         llm_url = get_setting("local_llm_url", "http://localhost:11434/v1")

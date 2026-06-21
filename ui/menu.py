@@ -3090,14 +3090,19 @@ class TaiMenu(App):
         import shutil
         import subprocess
         
-        if not shutil.which("nvidia-smi"):
+        has_nvidia_smi = shutil.which("nvidia-smi") is not None
+        
+        if not has_nvidia_smi:
             # Check PyTorch fallback if loaded
             try:
                 import torch
                 if torch.cuda.is_available():
-                    allocated = torch.cuda.memory_allocated() / (1024 ** 3)
-                    total = torch.cuda.get_device_properties(0).total_memory / (1024 ** 3)
-                    return f" | GPU VRAM: {allocated:.1f}/{total:.1f} GB"
+                    try:
+                        allocated = torch.cuda.memory_allocated() / (1024 ** 3)
+                        total = torch.cuda.get_device_properties(0).total_memory / (1024 ** 3)
+                        return f" | GPU VRAM: {allocated:4.1f}/{total:4.1f} GB"
+                    except Exception:
+                        return " | GPU VRAM:  --.-/ --.- GB"
             except Exception:
                 pass
             return ""
@@ -3122,10 +3127,10 @@ class TaiMenu(App):
                     used_gb = used_mib / 1024.0
                     total_gb = total_mib / 1024.0
                     
-                    return f" | GPU: {gpu_util:.0f}% (VRAM: {used_gb:.1f}/{total_gb:.1f} GB)"
+                    return f" | GPU: {gpu_util:3.0f}% (VRAM: {used_gb:4.1f}/{total_gb:4.1f} GB)"
         except Exception:
             pass
-        return ""
+        return " | GPU:  --% (VRAM:  --.-/ --.- GB)"
 
     @work(exclusive=True, thread=True)
     def update_usage_metrics(self) -> None:
@@ -3148,11 +3153,11 @@ class TaiMenu(App):
                     gpus = data.get("gpus", [])
                     if gpus:
                         if len(gpus) > 1:
-                            vram_strings = [f"GPU{g['id']}: {g['allocated_gib']:.1f}/{g['total_gib']:.1f} GB" for g in gpus]
+                            vram_strings = [f"GPU{g['id']}: {g['allocated_gib']:4.1f}/{g['total_gib']:4.1f} GB" for g in gpus]
                             vram_info = " | Bridge VRAM: " + " | ".join(vram_strings)
                         else:
                             g = gpus[0]
-                            vram_info = f" | Bridge VRAM: {g['allocated_gib']:.1f}/{g['total_gib']:.1f} GB"
+                            vram_info = f" | Bridge VRAM: {g['allocated_gib']:4.1f}/{g['total_gib']:4.1f} GB"
                     else:
                         vram_info = " | Bridge: Online"
                 else:
@@ -3160,7 +3165,7 @@ class TaiMenu(App):
             except Exception:
                 vram_info = " | Bridge: Offline"
 
-        metric_str = f"CPU: {cpu:.0f}% | RAM: {ram:.0f}%{gpu_info}{vram_info}"
+        metric_str = f"CPU: {cpu:3.0f}% | RAM: {ram:3.0f}%{gpu_info}{vram_info}"
 
         def apply_update():
             # Update the title bar of the terminal dynamically
