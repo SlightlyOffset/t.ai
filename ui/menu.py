@@ -1177,6 +1177,11 @@ class TaiMenu(App):
     def action_open_dashboard(self) -> None:
         """Open the startup/navigation dashboard screen."""
         from ui.DashboardScreen import DashboardScreen
+        try:
+            if isinstance(self.screen, DashboardScreen):
+                return
+        except Exception:
+            pass
         self.push_screen(DashboardScreen(), callback=self.on_dashboard_finished)
 
     def action_open_session_select(self) -> None:

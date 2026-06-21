@@ -519,6 +519,19 @@ class TestTUIStartup(unittest.TestCase):
         called_screen = mock_push.call_args[0][0]
         self.assertIsInstance(called_screen, DashboardScreen)
 
+    @patch('ui.menu.TaiMenu.start_tts_worker')
+    @patch('ui.menu.TaiMenu.push_screen')
+    def test_action_open_dashboard_does_not_push_if_already_active(self, mock_push, mock_tts):
+        """Test that action_open_dashboard does not push DashboardScreen if it is already active."""
+        from ui.menu import TaiMenu
+        from ui.DashboardScreen import DashboardScreen
+        from unittest.mock import PropertyMock
+        app = TaiMenu(char_path="profiles/Astgenne.json", user_path="user_profiles/Zenith.json")
+        with patch('ui.menu.TaiMenu.screen', new_callable=PropertyMock) as mock_screen:
+            mock_screen.return_value = DashboardScreen()
+            app.action_open_dashboard()
+            self.assertFalse(mock_push.called)
+
     @patch('os.path.isdir')
     @patch('os.path.exists')
     @patch('os.scandir')
