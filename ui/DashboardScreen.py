@@ -2,28 +2,26 @@ import os
 import random
 from textual.app import ComposeResult
 from textual.containers import Container, Vertical
-from textual.screen import ModalScreen
+from textual.screen import Screen
 from textual.widgets import Label, Button
 from ui.RecentSessionsScreen import get_all_recent_sessions, RecentSessionsScreen
 
 
-class DashboardScreen(ModalScreen):
+class DashboardScreen(Screen):
     """A keyboard-centric startup dashboard splash screen inspired by alpha-nvim."""
 
     DEFAULT_CSS = """
     DashboardScreen {
         align: center middle;
-        background: rgba(0, 0, 0, 0.7);
+        background: $surface;
     }
 
     #dashboard_container {
         align: center middle;
         layout: vertical;
-        width: 80;
-        height: auto;
-        border: thick $primary;
-        background: $panel;
-        padding: 2;
+        width: 100%;
+        height: 100%;
+        background: $surface;
     }
 
     #dashboard_ascii {
