@@ -13,12 +13,12 @@ class SettingsScreen(ModalScreen):
     DEFAULT_CSS = """
     SettingsScreen {
         align: center middle;
-        background: rgba(0, 0, 0, 0.65);
+        background: rgba(0, 0, 0, 0.7);
     }
 
     #settings_container {
         width: 80;
-        height: 38;
+        height: 32;
         border: thick $primary;
         background: $panel;
         padding: 1;
