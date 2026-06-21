@@ -274,7 +274,8 @@ class DashboardScreen(Screen):
             s = sessions[index]
             self.dismiss({
                 "character": s["profile_file"],
-                "session_name": s["session_name"]
+                "session_name": s["session_name"],
+                "user": s.get("user_profile")
             })
 
     def on_button_pressed(self, event: Button.Pressed) -> None:

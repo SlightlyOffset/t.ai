@@ -45,14 +45,17 @@ def get_all_recent_sessions() -> list[dict]:
                 if f_entry.is_file() and f_entry.name.endswith("_history.json"):
                     session_name = f_entry.name.replace("_history.json", "")
                     
-                    # Load last_interaction metadata from file
+                    # Load last_interaction and user_profile metadata from file
                     last_interaction = None
+                    user_profile = None
                     try:
                         with open(f_entry.path, "r", encoding="utf-8") as f:
                             data = json.load(f)
-                            time_str = data.get("metadata", {}).get("last_interaction")
+                            metadata = data.get("metadata", {})
+                            time_str = metadata.get("last_interaction")
                             if time_str:
                                 last_interaction = datetime.strptime(time_str, "%Y-%m-%d | %H:%M:%S")
+                            user_profile = metadata.get("user_profile")
                     except Exception:
                         pass
                         
@@ -72,7 +75,8 @@ def get_all_recent_sessions() -> list[dict]:
                         "profile_name": display_name,
                         "session_name": session_name,
                         "last_interaction": last_interaction,
-                        "profile_file": profile_file
+                        "profile_file": profile_file,
+                        "user_profile": user_profile
                     })
                         
     # Sort sessions by last_interaction descending
@@ -214,8 +218,9 @@ class RecentSessionsScreen(ModalScreen):
         selected_idx = int(selected_idx_str)
         s = self.sessions[selected_idx]
         
-        # Return character file name and session_name
+        # Return character file name, session_name and user profile
         self.dismiss({
             "character": s["profile_file"],
-            "session_name": s["session_name"]
+            "session_name": s["session_name"],
+            "user": s.get("user_profile")
         })

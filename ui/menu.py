@@ -853,6 +853,11 @@ class TaiMenu(App):
         optimized_path = get_or_create_optimized_image(image_path, max_dim=500)
         
         def update_ui():
+            # Check if this update is still relevant (the active avatar path has not changed)
+            current_path = self._current_char_avatar_path if widget_id == "avatar_portrait_character" else self._current_user_avatar_path
+            if not current_path or not image_path or os.path.normpath(current_path) != os.path.normpath(image_path):
+                return  # Stale avatar optimization thread, ignore it
+
             path_to_use = optimized_path if optimized_path and os.path.exists(optimized_path) else None
             try:
                 avatar_widget = self.query_one(f"#{widget_id}")

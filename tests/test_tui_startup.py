@@ -567,10 +567,10 @@ class TestTUIStartup(unittest.TestCase):
             "profiles/aiko_unified/sessions"
         ]
         
-        # Mock file content reads for history files (metadata last_interaction)
+        # Mock file content reads for history files (metadata last_interaction and user_profile)
         mock_open.return_value.read.side_effect = [
-            '{"metadata": {"last_interaction": "2026-06-21 | 12:00:00"}}',
-            '{"metadata": {"last_interaction": "2026-06-21 | 14:00:00"}}'
+            '{"metadata": {"last_interaction": "2026-06-21 | 12:00:00", "user_profile": "Manganese.json"}}',
+            '{"metadata": {"last_interaction": "2026-06-21 | 14:00:00", "user_profile": "Zenith.json"}}'
         ]
         
         sessions = get_all_recent_sessions()
@@ -579,10 +579,12 @@ class TestTUIStartup(unittest.TestCase):
         self.assertEqual(sessions[0]["profile_name"], "Aiko Unified")
         self.assertEqual(sessions[0]["session_name"], "session2")
         self.assertEqual(sessions[0]["profile_file"], "aiko_unified/profile.json")
+        self.assertEqual(sessions[0]["user_profile"], "Zenith.json")
         
         self.assertEqual(sessions[1]["profile_name"], "Legacy Profile")
         self.assertEqual(sessions[1]["session_name"], "session1")
         self.assertEqual(sessions[1]["profile_file"], "legacy_profile.json")
+        self.assertEqual(sessions[1]["user_profile"], "Manganese.json")
 
     @patch('ui.DashboardScreen.get_all_recent_sessions')
     def test_dashboard_load_recent_sessions(self, mock_get_sessions):
@@ -591,9 +593,9 @@ class TestTUIStartup(unittest.TestCase):
         from datetime import datetime
         
         mock_get_sessions.return_value = [
-            {"profile_name": "Aiko", "session_name": "default", "last_interaction": datetime.now(), "profile_file": "Aiko.json"},
-            {"profile_name": "Akari", "session_name": "session_1", "last_interaction": datetime.now(), "profile_file": "Akari.json"},
-            {"profile_name": "Ako", "session_name": "default", "last_interaction": datetime.now(), "profile_file": "Ako.json"}
+            {"profile_name": "Aiko", "session_name": "default", "last_interaction": datetime.now(), "profile_file": "Aiko.json", "user_profile": "Zenith.json"},
+            {"profile_name": "Akari", "session_name": "session_1", "last_interaction": datetime.now(), "profile_file": "Akari.json", "user_profile": "Manganese.json"},
+            {"profile_name": "Ako", "session_name": "default", "last_interaction": datetime.now(), "profile_file": "Ako.json", "user_profile": "Zenith.json"}
         ]
         
         screen = DashboardScreen()
@@ -605,15 +607,15 @@ class TestTUIStartup(unittest.TestCase):
         
         # Test loading recent session 1
         screen.action_load_recent_1()
-        self.assertEqual(dismissed_result, {"character": "Aiko.json", "session_name": "default"})
+        self.assertEqual(dismissed_result, {"character": "Aiko.json", "session_name": "default", "user": "Zenith.json"})
         
         # Test loading recent session 2
         screen.action_load_recent_2()
-        self.assertEqual(dismissed_result, {"character": "Akari.json", "session_name": "session_1"})
+        self.assertEqual(dismissed_result, {"character": "Akari.json", "session_name": "session_1", "user": "Manganese.json"})
         
         # Test loading recent session 3
         screen.action_load_recent_3()
-        self.assertEqual(dismissed_result, {"character": "Ako.json", "session_name": "default"})
+        self.assertEqual(dismissed_result, {"character": "Ako.json", "session_name": "default", "user": "Zenith.json"})
 
 if __name__ == '__main__':
     unittest.main()
