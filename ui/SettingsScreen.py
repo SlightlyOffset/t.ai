@@ -1,7 +1,7 @@
 from textual.app import ComposeResult
 from textual.containers import Container, Horizontal, VerticalScroll
 from textual.screen import ModalScreen
-from textual.widgets import Header, Label, Footer, TabbedContent, TabPane, Switch, Input, Select, Button
+from textual.widgets import Label, TabbedContent, TabPane, Switch, Input, Select, Button
 
 class SettingsScreen(ModalScreen):
     """Dedicated settings screen with categorized tabs for configuration."""
@@ -160,7 +160,6 @@ class SettingsScreen(ModalScreen):
         
         disabled_plugins = settings.get("disabled_plugins", [])
 
-        yield Header(show_clock=False)
         with Container(id="settings_container"):
             yield Label("t.ai Global Settings Configuration", id="settings_title")
             yield Label("", id="settings_error")
@@ -388,8 +387,6 @@ class SettingsScreen(ModalScreen):
             with Horizontal(id="settings_actions"):
                 yield Button("Cancel", id="btn_cancel", variant="error")
                 yield Button("Save Settings", id="btn_save", variant="primary")
-
-        yield Footer()
 
     def action_cancel(self) -> None:
         """Dismiss settings screen without saving."""
