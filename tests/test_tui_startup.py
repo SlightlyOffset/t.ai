@@ -87,9 +87,9 @@ class TestTUIStartup(unittest.TestCase):
     @patch('ui.menu.TaiMenu.query_one')
     @patch('ui.menu.TaiMenu.add_message')
     @patch('ui.menu.TaiMenu.push_screen')
-    def test_push_profile_select_if_loading_fails(self, mock_push, mock_msg, mock_query, mock_sidebar, mock_tts, mock_get_setting_menu, mock_get_setting_profile):
+    def test_push_dashboard_if_loading_fails(self, mock_push, mock_msg, mock_query, mock_sidebar, mock_tts, mock_get_setting_menu, mock_get_setting_profile):
         """
-        Test that push_screen(ProfileSelect()) is called if load_initial_state fails to find paths.
+        Test that push_screen(DashboardScreen()) is called if load_initial_state fails to find paths.
         """
         from ui.menu import TaiMenu
         
@@ -103,6 +103,9 @@ class TestTUIStartup(unittest.TestCase):
         
         # We expect push_screen to be called once
         self.assertTrue(mock_push.called)
+        from ui.DashboardScreen import DashboardScreen
+        called_screen = mock_push.call_args[0][0]
+        self.assertIsInstance(called_screen, DashboardScreen)
 
     @patch('ui.menu.TaiMenu.load_initial_state')
     @patch('ui.menu.TaiMenu.populate_models')
@@ -419,6 +422,90 @@ class TestTUIStartup(unittest.TestCase):
             mock_set_active_session.assert_not_called()
             mock_save_history.assert_not_called()
             mock_add_message.assert_not_called()
+
+    @patch('engines.profile_state.get_setting')
+    @patch('ui.menu.get_setting')
+    @patch('ui.menu.memory_manager.get_last_timestamp')
+    @patch('ui.menu.TaiMenu.start_tts_worker')
+    @patch('ui.menu.TaiMenu.update_sidebar')
+    @patch('ui.menu.TaiMenu.query_one')
+    @patch('ui.menu.TaiMenu.add_message')
+    @patch('ui.menu.TaiMenu.push_screen')
+    def test_push_dashboard_on_inactivity_timeout(self, mock_push, mock_msg, mock_query, mock_sidebar, mock_tts, mock_get_last_timestamp, mock_get_setting_menu, mock_get_setting_profile):
+        """Test that DashboardScreen is pushed when inactivity timeout has been exceeded."""
+        from ui.menu import TaiMenu
+        from datetime import datetime, timedelta
+        
+        # Configure settings: inactivity timeout is 12 hours
+        mock_get_setting_menu.side_effect = lambda key, default=None: {
+            "inactivity_dashboard_timeout": 12,
+            "current_character_profile": "Astgenne.json"
+        }.get(key, default)
+        mock_get_setting_profile.side_effect = lambda key, default=None: {
+            "inactivity_dashboard_timeout": 12,
+            "current_character_profile": "Astgenne.json"
+        }.get(key, default)
+        
+        # Set last interaction to 15 hours ago (exceeding 12 hours)
+        mock_get_last_timestamp.return_value = datetime.now() - timedelta(hours=15)
+        
+        with patch('os.path.exists', return_value=True):
+            with patch('builtins.open', unittest.mock.mock_open(read_data='{"name": "Astgenne"}')):
+                app = TaiMenu(char_path="profiles/Astgenne.json", user_path="user_profiles/Zenith.json")
+                app.history_profile_name = "Astgenne"
+                
+                # Mock methods that on_mount runs
+                app.watch = lambda *args, **kwargs: None
+                app.on_mount()
+                
+        self.assertTrue(mock_push.called)
+        from ui.DashboardScreen import DashboardScreen
+        called_screen = mock_push.call_args[0][0]
+        self.assertIsInstance(called_screen, DashboardScreen)
+
+    @patch('engines.profile_state.get_setting')
+    @patch('ui.menu.get_setting')
+    @patch('ui.menu.memory_manager.get_last_timestamp')
+    @patch('ui.menu.TaiMenu.start_tts_worker')
+    @patch('ui.menu.TaiMenu.update_sidebar')
+    @patch('ui.menu.TaiMenu.query_one')
+    @patch('ui.menu.TaiMenu.add_message')
+    @patch('ui.menu.TaiMenu.push_screen')
+    @patch('ui.menu.TaiMenu.populate_models')
+    @patch('ui.menu.TaiMenu.populate_voices')
+    @patch('ui.menu.TaiMenu.populate_tts_engines')
+    @patch('ui.menu.TaiMenu.populate_image_protocols')
+    @patch('ui.menu.TaiMenu.populate_interaction_modes')
+    @patch('ui.menu.TaiMenu.load_initial_history')
+    def test_no_dashboard_if_recent_interaction(self, mock_load_hist, mock_im, mock_ip, mock_tts_eng, mock_vc, mock_md, mock_push, mock_msg, mock_query, mock_sidebar, mock_tts, mock_get_last_timestamp, mock_get_setting_menu, mock_get_setting_profile):
+        """Test that DashboardScreen is not pushed when last interaction is recent."""
+        from ui.menu import TaiMenu
+        from datetime import datetime, timedelta
+        
+        # Configure settings: inactivity timeout is 12 hours
+        mock_get_setting_menu.side_effect = lambda key, default=None: {
+            "inactivity_dashboard_timeout": 12,
+            "current_character_profile": "Astgenne.json"
+        }.get(key, default)
+        mock_get_setting_profile.side_effect = lambda key, default=None: {
+            "inactivity_dashboard_timeout": 12,
+            "current_character_profile": "Astgenne.json"
+        }.get(key, default)
+        
+        # Set last interaction to 5 hours ago (within 12 hours)
+        mock_get_last_timestamp.return_value = datetime.now() - timedelta(hours=5)
+        
+        with patch('os.path.exists', return_value=True):
+            with patch('builtins.open', unittest.mock.mock_open(read_data='{"name": "Astgenne"}')):
+                app = TaiMenu(char_path="profiles/Astgenne.json", user_path="user_profiles/Zenith.json")
+                app.history_profile_name = "Astgenne"
+                
+                # Mock methods
+                app.watch = lambda *args, **kwargs: None
+                app.set_interval = lambda *args, **kwargs: None
+                app.on_mount()
+                
+        self.assertFalse(mock_push.called)
 
 if __name__ == '__main__':
     unittest.main()

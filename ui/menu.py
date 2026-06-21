@@ -1476,9 +1476,22 @@ class TaiMenu(App):
             self.title = "t.ai"
             self.sub_title = ""
 
+        show_dashboard = False
         if not self.char_path:
-            from ui.ProfileSelectScreen import ProfileSelect
-            self.push_screen(ProfileSelect(), callback=self.on_profile_selected)
+            show_dashboard = True
+        else:
+            timeout_hours = get_setting("inactivity_dashboard_timeout", 12)
+            if timeout_hours > 0 and self.history_profile_name:
+                last_time = memory_manager.get_last_timestamp(self.history_profile_name)
+                if last_time:
+                    from datetime import datetime
+                    diff = datetime.now() - last_time
+                    if (diff.total_seconds() / 3600) > timeout_hours:
+                        show_dashboard = True
+
+        if show_dashboard:
+            from ui.DashboardScreen import DashboardScreen
+            self.push_screen(DashboardScreen(), callback=self.on_dashboard_finished)
             return
 
         self.populate_models()
@@ -1493,6 +1506,47 @@ class TaiMenu(App):
         # Trigger UI Ready hook
         from engines.hooks import execute_hooks
         execute_hooks("on_ui_ready", {"app": self})
+
+    def on_dashboard_finished(self, result: dict | None) -> None:
+        """Callback when the startup dashboard is finished/dismissed."""
+        if result:
+            char_name = result.get("character")
+            user_name = result.get("user")
+            session_name = result.get("session_name")
+
+            char_path = os.path.join("profiles", char_name) if char_name else None
+            user_path = os.path.join("user_profiles", user_name) if user_name else None
+
+            # Reset the app state and load selected profile
+            self.switch_profile(char_path, user_path)
+
+            if session_name:
+                from engines.config import set_active_session
+                set_active_session(self.history_profile_name, session_name)
+                if self.check_and_switch_session_user(session_name):
+                    pass
+                else:
+                    self.reload_chat_list_for_session(session_name)
+                    self.add_message(f"Switched to session: [bold]{session_name}[/bold]", role="system")
+
+            # Start usage metrics update loop and run ready hooks
+            self.set_interval(2.0, self.update_usage_metrics)
+            
+            from engines.hooks import execute_hooks
+            execute_hooks("on_ui_ready", {"app": self})
+        else:
+            # Fallback if dashboard dismissed/cancelled with valid char_path
+            if self.char_path:
+                self.populate_models()
+                self.populate_voices()
+                self.populate_tts_engines()
+                self.populate_image_protocols()
+                self.populate_interaction_modes()
+                self.set_interval(2.0, self.update_usage_metrics)
+                from engines.hooks import execute_hooks
+                execute_hooks("on_ui_ready", {"app": self})
+            else:
+                self.exit()
 
     def on_unmount(self) -> None:
         """Wait for any active background post-processing threads to finish saving history before exiting."""
