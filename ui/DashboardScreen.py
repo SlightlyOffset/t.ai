@@ -79,6 +79,7 @@ class DashboardScreen(Screen):
         ("s", "recent_sessions", "Recent Sessions"),
         ("p", "open_settings", "Settings"),
         ("q", "quit_app", "Quit"),
+        ("escape", "cancel", "Cancel"),
     ]
 
     ASCII_ART = (
@@ -134,6 +135,12 @@ class DashboardScreen(Screen):
 
     def action_quit_app(self) -> None:
         self.app.action_quit()
+
+    def action_cancel(self) -> None:
+        if self.app.char_path:
+            self.dismiss(None)
+        else:
+            self.notify("No active profile loaded. Please choose a companion first.", severity="error")
 
     def on_button_pressed(self, event: Button.Pressed) -> None:
         button_id = event.button.id

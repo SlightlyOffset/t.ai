@@ -507,6 +507,18 @@ class TestTUIStartup(unittest.TestCase):
                 
         self.assertFalse(mock_push.called)
 
+    @patch('ui.menu.TaiMenu.start_tts_worker')
+    @patch('ui.menu.TaiMenu.push_screen')
+    def test_action_open_dashboard_calls_push_screen(self, mock_push, mock_tts):
+        """Test that action_open_dashboard pushes DashboardScreen."""
+        from ui.menu import TaiMenu
+        app = TaiMenu(char_path="profiles/Astgenne.json", user_path="user_profiles/Zenith.json")
+        app.action_open_dashboard()
+        self.assertTrue(mock_push.called)
+        from ui.DashboardScreen import DashboardScreen
+        called_screen = mock_push.call_args[0][0]
+        self.assertIsInstance(called_screen, DashboardScreen)
+
 if __name__ == '__main__':
     unittest.main()
 

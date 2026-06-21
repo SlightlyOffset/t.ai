@@ -750,6 +750,7 @@ class TaiMenu(App):
         ("ctrl+s", "open_settings", "Settings"),
         ("ctrl+q", "quit", "Quit"),
         ("ctrl+r", "toggle_resource_monitor", "Toggle Metrics"),
+        ("ctrl+d", "open_dashboard", "Dashboard"),
         ("alt+left", "previous_response", "Prev Resp"),
         ("alt+right", "next_or_regenerate_response", "Next/Regen"),
     ]
@@ -807,6 +808,7 @@ class TaiMenu(App):
         self._current_user_avatar_path = None
         self._visible_message_count = 0
         self.show_resource_monitor = get_setting("show_resource_monitor", True)
+        self._metrics_loop_started = False
 
     def _resolve_image_widget_type(self) -> type[Image] | None:
         protocol = get_setting("image_protocol", "auto")
@@ -1167,6 +1169,11 @@ class TaiMenu(App):
         from ui.ProfileSelectScreen import ProfileSelect
         self.push_screen(ProfileSelect(), callback=self.on_profile_selected)
 
+    def action_open_dashboard(self) -> None:
+        """Open the startup/navigation dashboard screen."""
+        from ui.DashboardScreen import DashboardScreen
+        self.push_screen(DashboardScreen(), callback=self.on_dashboard_finished)
+
     def action_open_session_select(self) -> None:
         """Open the session selection modal screen."""
         if not self.history_profile_name:
@@ -1501,7 +1508,9 @@ class TaiMenu(App):
         self.populate_interaction_modes()
 
         # Start usage metrics update loop
-        self.set_interval(2.0, self.update_usage_metrics)
+        if not getattr(self, "_metrics_loop_started", False):
+            self.set_interval(2.0, self.update_usage_metrics)
+            self._metrics_loop_started = True
         
         # Trigger UI Ready hook
         from engines.hooks import execute_hooks
@@ -1530,7 +1539,9 @@ class TaiMenu(App):
                     self.add_message(f"Switched to session: [bold]{session_name}[/bold]", role="system")
 
             # Start usage metrics update loop and run ready hooks
-            self.set_interval(2.0, self.update_usage_metrics)
+            if not getattr(self, "_metrics_loop_started", False):
+                self.set_interval(2.0, self.update_usage_metrics)
+                self._metrics_loop_started = True
             
             from engines.hooks import execute_hooks
             execute_hooks("on_ui_ready", {"app": self})
@@ -1542,7 +1553,9 @@ class TaiMenu(App):
                 self.populate_tts_engines()
                 self.populate_image_protocols()
                 self.populate_interaction_modes()
-                self.set_interval(2.0, self.update_usage_metrics)
+                if not getattr(self, "_metrics_loop_started", False):
+                    self.set_interval(2.0, self.update_usage_metrics)
+                    self._metrics_loop_started = True
                 from engines.hooks import execute_hooks
                 execute_hooks("on_ui_ready", {"app": self})
             else:
