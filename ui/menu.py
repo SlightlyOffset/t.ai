@@ -750,7 +750,7 @@ class TaiMenu(App):
         ("ctrl+s", "open_settings", "Settings"),
         ("ctrl+q", "quit", "Quit"),
         ("ctrl+r", "toggle_resource_monitor", "Toggle Metrics"),
-        ("ctrl+d", "open_dashboard", "Dashboard"),
+        ("ctrl+g", "open_dashboard", "Dashboard"),
         ("alt+left", "previous_response", "Prev Resp"),
         ("alt+right", "next_or_regenerate_response", "Next/Regen"),
     ]
