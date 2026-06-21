@@ -36,6 +36,9 @@ class ProfileSelect(Screen):
         border-right: tall $accent;
         padding: 1;
     }
+    #profile_list {
+        height: 1fr;
+    }
     #preview_panel {
         width: 1fr;
         height: 100%;
