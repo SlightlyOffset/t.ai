@@ -8,15 +8,27 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 class TestProfileSelectScreen(unittest.TestCase):
     @patch('os.path.exists')
-    @patch('os.listdir')
-    def test_load_character_profiles(self, mock_listdir, mock_exists):
+    @patch('os.scandir')
+    def test_load_character_profiles(self, mock_scandir, mock_exists):
         """
         Test that character profiles are loaded into OptionList.
         """
         from ui.ProfileSelectScreen import ProfileSelect
         
         mock_exists.return_value = True
-        mock_listdir.return_value = ["Eira.json", "Astgenne.json"]
+        
+        # Create mock DirEntry objects
+        entry1 = MagicMock()
+        entry1.is_file.return_value = True
+        entry1.is_dir.return_value = False
+        entry1.name = "Eira.json"
+        
+        entry2 = MagicMock()
+        entry2.is_file.return_value = True
+        entry2.is_dir.return_value = False
+        entry2.name = "Astgenne.json"
+        
+        mock_scandir.return_value = [entry1, entry2]
         
         screen = ProfileSelect()
         mock_option_list = MagicMock()

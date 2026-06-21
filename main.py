@@ -179,6 +179,11 @@ def main():
     # 1. Environment and Dependency Checks
     check_python_version()
     ensure_directories()
+    try:
+        from engines.migration_v3 import MigrationManager
+        MigrationManager.run_migration()
+    except Exception as e:
+        print(f"[ERROR] Migration failed: {e}")
     check_dependencies()
     check_ollama_and_models()
 
@@ -212,9 +217,6 @@ def main():
             from engines.app_commands import RestartRequested
             from engines.config import get_setting
             from engines.utilities import set_terminal_appearance
-
-            if get_setting("clear_on_start", True):
-                print("\033[H\033[J", end="")
 
             print(f"Running on: {platform.system()} {platform.release()}")
             set_terminal_appearance(title="t.ai")

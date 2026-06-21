@@ -47,60 +47,31 @@ class TestAppCommands(unittest.TestCase):
         self.patcher_get_setting.stop()
 
 
-    @patch('sys.stdout', new_callable=StringIO)
-    def test_history_no_profile_active(self, mock_stdout):
-        self.mock_get_setting.return_value = None # Mock current_character_profile to be None
-        
-        result = app_commands("//history")
-        self.assertTrue(result) # Command was handled
-        self.assertIn("[SYSTEM] No character profile active. Cannot display history.", strip_ansi(mock_stdout.getvalue()))
+    def test_load_command_raises_load_history_requested(self):
+        from engines.app_commands import LoadHistoryRequested
+        for cmd, expected_count, expected_force in [
+            ("//load 10", "10", False),
+            ("//load full", "full", False),
+            ("//load 50 --force", "50", True),
+            ("//load full -f", "full", True),
+        ]:
+            with self.subTest(cmd=cmd):
+                with self.assertRaises(LoadHistoryRequested) as context:
+                    app_commands(cmd, suppress_output=True)
+                self.assertEqual(context.exception.count, expected_count)
+                self.assertEqual(context.exception.force, expected_force)
 
     @patch('sys.stdout', new_callable=StringIO)
-    def test_history_no_history_found(self, mock_stdout):
-        self.mock_get_setting.return_value = "TestProfile.json" # Mock current_character_profile
-        self.mock_memory_manager.load_history.return_value = []
-
-        result = app_commands("//history")
+    def test_load_command_cli_output(self, mock_stdout):
+        result = app_commands("//load 10", suppress_output=False)
         self.assertTrue(result)
-        self.assertIn("[SYSTEM] No history found for the current profile.", strip_ansi(mock_stdout.getvalue()))
-        self.mock_memory_manager.load_history.assert_called_with("TestProfile", limit=15)
-
-    @patch('sys.stdout', new_callable=StringIO)
-    def test_history_with_history_found(self, mock_stdout):
-        self.mock_get_setting.return_value = "TestProfile.json" # Mock current_character_profile
-        self.mock_memory_manager.load_history.return_value = [
-            {"role": "user", "content": "Hello there!"},
-            {"role": "assistant", "content": "Hi, how can I help?"}
-        ]
-
-        result = app_commands("//history")
-        self.assertTrue(result)
-        self.mock_memory_manager.load_history.assert_called_with("TestProfile", limit=15)
-        
-        output = strip_ansi(mock_stdout.getvalue())
-        self.assertIn("=== Past Conversation ===", output)
-        self.assertIn("User: Hello there!", output)
-        self.assertIn("Assistant: Hi, how can I help?", output)
-        self.assertIn("=========================", output)
+        self.assertIn("[SYSTEM] History loading is only supported in TUI mode.", strip_ansi(mock_stdout.getvalue()))
 
     @patch('sys.stdout', new_callable=StringIO)
     def test_change_char_in_cli_raises_restart(self, mock_stdout):
         """Verify that //change char raises RestartRequested in CLI mode."""
         with self.assertRaises(RestartRequested):
             app_commands("//change char")
-
-    @patch('sys.stdout', new_callable=StringIO)
-    def test_recap_alias_works(self, mock_stdout):
-        self.mock_get_setting.return_value = "TestProfile.json" # Mock current_character_profile
-        self.mock_memory_manager.load_history.return_value = [
-            {"role": "user", "content": "Hello there!"}
-        ]
-        
-        result = app_commands("//recap")
-        self.assertTrue(result)
-        self.mock_memory_manager.load_history.assert_called_with("TestProfile", limit=15)
-        output = strip_ansi(mock_stdout.getvalue())
-        self.assertIn("User: Hello there!", output)
 
     def test_regen_commands_propagate_in_tui_mode(self):
         for cmd in ("//regen", "//regenerate"):

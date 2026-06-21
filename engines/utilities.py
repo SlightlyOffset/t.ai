@@ -51,6 +51,20 @@ def sanitize_profile_name(profile_name: str) -> str:
     safe_name = (profile_name or "").replace(" ", "_")
     return "".join(char for char in safe_name if char.isalnum() or char in ("_", "-", "(", ")")).rstrip()
 
+def get_character_name_from_path(char_path: str | None) -> str:
+    """
+    Extracts the unique character name from the profile filepath.
+    Supports both legacy flat profiles (profiles/aiko.json -> aiko)
+    and unified character directories (profiles/aiko/profile.json -> aiko).
+    """
+    if not char_path:
+        return ""
+    base = os.path.basename(char_path)
+    if base.lower() == "profile.json" or base.lower() == "profile":
+        # It's the unified subdirectory format, use parent folder name
+        return os.path.basename(os.path.dirname(char_path))
+    return os.path.splitext(base)[0]
+
 def hide_file(file_path):
     """Hides a file on Windows by setting its file attributes."""
     import os
@@ -204,39 +218,7 @@ def pick_user_profile() -> str:
         except KeyboardInterrupt:
             return None
 
-def pick_history() -> str:
-    """
-    Displays a terminal-based menu for picking a conversation history file.
 
-    Returns:
-        str: The path to the selected history .json file, or None.
-    """
-    history_dir = "history"
-    if not os.path.exists(history_dir):
-        return None
-
-    history_files = [f for f in os.listdir(history_dir) if f.endswith(".json")]
-    if not history_files:
-        return None
-
-    print(Fore.YELLOW + Style.BRIGHT + "\n--- Select Conversation History ---")
-    for i, h in enumerate(history_files, 1):
-        display_name = h.replace(".json", "").replace("_", " ").title()
-        print(Fore.CYAN + f"  [{i}] {display_name}")
-
-    while True:
-        try:
-            choice = input(Fore.YELLOW + "\nEnter history number: " + Style.RESET_ALL).strip()
-            if not choice: continue
-            idx = int(choice) - 1
-            if 0 <= idx < len(history_files):
-                return os.path.join(history_dir, history_files[idx])
-            else:
-                print(Fore.RED + "Invalid selection.")
-        except ValueError:
-            print(Fore.RED + "Please enter a valid number.")
-        except KeyboardInterrupt:
-            return None
 
 def render_historical_message(role: str, content: str, user_name: str = "User", char_name: str = "Assistant", char_color=None):
     """

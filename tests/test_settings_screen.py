@@ -36,8 +36,10 @@ class TestSettingsScreen(unittest.TestCase):
             "#tts_rate": MagicMock(value="170"),
             "#overhaul_candidate_count": MagicMock(value="2"),
             "#interaction_mode": MagicMock(value="rp"),
-            "#clear_on_start": MagicMock(value=False),
-            "#auto_recap_on_start": MagicMock(value=True),
+            "#auto_recap_on_start": MagicMock(value=False),
+            "#auto_chat_load": MagicMock(value=True),
+            "#auto_chat_load_limit": MagicMock(value="20"),
+            "#scroll_load_limit": MagicMock(value="10"),
             "#smooth_streaming": MagicMock(value=True),
             "#streaming_delay": MagicMock(value="0.055"),
             "#image_protocol": MagicMock(value="auto"),
@@ -122,6 +124,9 @@ class TestSettingsScreen(unittest.TestCase):
         self.assertEqual(dismissed_dict["interaction_mode"], "rp")
         self.assertEqual(dismissed_dict["image_size"], "medium")
         self.assertEqual(dismissed_dict["streaming_delay"], 0.055)
+        self.assertEqual(dismissed_dict["auto_chat_load"], True)
+        self.assertEqual(dismissed_dict["auto_chat_load_limit"], 20)
+        self.assertEqual(dismissed_dict["scroll_load_limit"], 10)
 
     @patch('engines.config.update_settings')
     def test_save_action_insecure_llm_url(self, mock_update):
@@ -236,6 +241,24 @@ class TestSettingsScreen(unittest.TestCase):
         self.widgets["#overhaul_candidate_count"].value = "invalid"
         self.screen.action_save()
         self.screen.show_error.assert_called_with("Overhaul Candidate Count must be a positive integer.")
+        self.screen.dismiss.assert_not_called()
+        mock_update.assert_not_called()
+        self.screen.show_error.reset_mock()
+
+        # Reset overhaul candidate count, test invalid initial chat load limit
+        self.widgets["#overhaul_candidate_count"].value = "2"
+        self.widgets["#auto_chat_load_limit"].value = "not-an-int"
+        self.screen.action_save()
+        self.screen.show_error.assert_called_with("Initial Chat Load Limit must be a positive integer.")
+        self.screen.dismiss.assert_not_called()
+        mock_update.assert_not_called()
+        self.screen.show_error.reset_mock()
+
+        # Reset initial chat load limit, test invalid scroll load limit
+        self.widgets["#auto_chat_load_limit"].value = "20"
+        self.widgets["#scroll_load_limit"].value = "not-an-int"
+        self.screen.action_save()
+        self.screen.show_error.assert_called_with("Scroll Load Limit must be a positive integer.")
         self.screen.dismiss.assert_not_called()
         mock_update.assert_not_called()
 

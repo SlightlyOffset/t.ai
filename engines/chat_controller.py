@@ -1,4 +1,4 @@
-from engines.app_commands import app_commands, RegenerateRequested, RestartRequested, RewindRequested, CompressRequested, SettingsRequested, SessionChangedRequested, SessionNewRequested
+from engines.app_commands import app_commands, RegenerateRequested, RestartRequested, RewindRequested, CompressRequested, SettingsRequested, SessionChangedRequested, SessionNewRequested, LoadHistoryRequested
 from engines.memory_v2 import memory_manager
 
 
@@ -61,6 +61,18 @@ def handle_command_input(message: str, history_profile_name: str) -> dict | None
         return {"type": "compress"}
     except SettingsRequested:
         return {"type": "open_settings"}
+    except LoadHistoryRequested as lhr:
+        total_len = memory_manager.get_history_length(history_profile_name)
+        requested_count = total_len if lhr.count == "full" else int(lhr.count)
+        if min(requested_count, total_len) >= 50 and not lhr.force:
+            return {
+                "type": "command_success",
+                "messages": [
+                    f"[ERROR] Loading {requested_count} messages may cause performance stutter. "
+                    "Use '--force' or '-f' to override (e.g. //load full -f or //load 100 -f)."
+                ]
+            }
+        return {"type": "load_history", "count": lhr.count, "force": lhr.force}
     except RewindRequested as rewind_request:
         original_count, kept_count = memory_manager.rewind_history(
             history_profile_name,

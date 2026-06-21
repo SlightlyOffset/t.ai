@@ -143,14 +143,25 @@ class ProfileSelect(Screen):
 
         profiles = []
         if os.path.exists(self.PROFILES_DIR):
-            profiles = [f for f in os.listdir(self.PROFILES_DIR) if f.endswith(".json")]
-            profiles.sort()
             import re
-            for profile in profiles:
-                base_name = profile.replace(".json", "")
-                base_name = re.sub(r'_[a-f0-9]{8}$', '', base_name, flags=re.IGNORECASE)
-                display_name = base_name.replace("_", " ").title()
-                option_list.add_option(Option(display_name, id=profile))
+            for entry in os.scandir(self.PROFILES_DIR):
+                if entry.is_file() and entry.name.endswith(".json") and entry.name != "settings.json":
+                    base_name = entry.name.replace(".json", "")
+                    base_name = re.sub(r'_[a-f0-9]{8}$', '', base_name, flags=re.IGNORECASE)
+                    display_name = base_name.replace("_", " ").title()
+                    profiles.append((display_name, entry.name))
+                elif entry.is_dir():
+                    profile_json = os.path.join(entry.path, "profile.json")
+                    if os.path.exists(profile_json):
+                        folder_name = entry.name
+                        base_name = re.sub(r'_[a-f0-9]{8}$', '', folder_name, flags=re.IGNORECASE)
+                        display_name = base_name.replace("_", " ").title()
+                        option_id = f"{folder_name}/profile.json"
+                        profiles.append((display_name, option_id))
+            
+            profiles.sort(key=lambda x: x[0].lower())
+            for display_name, option_id in profiles:
+                option_list.add_option(Option(display_name, id=option_id))
         
         # Check option count safely to avoid TypeError with MagicMocks in unit tests
         count = option_list.option_count
@@ -235,6 +246,9 @@ class ProfileSelect(Screen):
         try:
             with open(full_path, "r", encoding="utf-8") as f:
                 profile_data = json.load(f)
+            if self.choosing_character:
+                from engines.profile_state import resolve_profile_assets
+                resolve_profile_assets(profile_data, full_path)
         except Exception:
             self.clear_preview()
             return

@@ -31,6 +31,13 @@ class HistoryManager:
         if not os.path.exists(self.history_dir):
             os.makedirs(self.history_dir)
 
+    def _get_char_dir(self, safe_char: str) -> str:
+        """Resolves the session directory path. Supports unified profile subdirectories."""
+        char_profile_dir = os.path.join("profiles", safe_char)
+        if os.path.isdir(char_profile_dir):
+            return os.path.join(char_profile_dir, "sessions")
+        return os.path.join(self.history_dir, safe_char)
+
     def _get_filename(self, profile_name: str, session_name: str = None) -> str:
         """Generates a safe filename for the history JSON file in the character's subfolder."""
         if session_name is None:
@@ -41,7 +48,7 @@ class HistoryManager:
             # Fall back to default session if target session does not exist
             safe_char = sanitize_profile_name(profile_name) or "session"
             safe_session = sanitize_profile_name(session_name) or "default"
-            char_dir = os.path.join(self.history_dir, safe_char)
+            char_dir = self._get_char_dir(safe_char)
             temp_path = os.path.join(char_dir, f"{safe_session}_history.json")
             if safe_session != "default" and not os.path.exists(temp_path):
                 session_name = "default"
@@ -52,7 +59,7 @@ class HistoryManager:
         safe_char = sanitize_profile_name(profile_name) or "session"
         safe_session = sanitize_profile_name(session_name) or "default"
 
-        char_dir = os.path.join(self.history_dir, safe_char)
+        char_dir = self._get_char_dir(safe_char)
         new_path = os.path.join(char_dir, f"{safe_session}_history.json")
 
         # Ensure directory exists
@@ -196,6 +203,11 @@ class HistoryManager:
 
             user_profile = get_setting("current_user_profile")
 
+            # Ensure each message in history has an incremental id
+            for idx, msg in enumerate(history, 1):
+                if isinstance(msg, dict):
+                    msg["id"] = idx
+
             data_to_save = {
                 "metadata": {
                     "last_interaction": current_time,
@@ -294,8 +306,16 @@ class HistoryManager:
                     if key not in data["metadata"]:
                         data["metadata"][key] = val
 
-            # Heal primary if loaded successfully from backup
-            if healed:
+            # Ensure backward compatibility by assigning incremental IDs if missing
+            history = data.get("history", [])
+            needs_save = False
+            for idx, msg in enumerate(history, 1):
+                if isinstance(msg, dict) and msg.get("id") != idx:
+                    msg["id"] = idx
+                    needs_save = True
+
+            # Heal primary if loaded successfully from backup or if migrated
+            if healed or needs_save:
                 save_json_atomic(filename, data)
 
             return data
@@ -321,6 +341,31 @@ class HistoryManager:
 
         if limit and len(history) > limit:
             # Truncate to the last 'limit' messages
+            return history[-limit:]
+        return history
+
+    def load_history_slice(
+        self, profile_name: str, limit: int = None, before_id: int = None, session_name: str = None
+    ) -> list:
+        """
+        Loads a slice of history before a specific message ID.
+
+        Args:
+            profile_name (str): The name of the character.
+            limit (int, optional): The maximum number of messages to return.
+            before_id (int, optional): Only load messages with id < before_id.
+            session_name (str, optional): The session name.
+
+        Returns:
+            list: List of loaded messages.
+        """
+        data = self.get_full_data(profile_name, session_name)
+        history = data.get("history", [])
+
+        if before_id is not None:
+            history = [m for m in history if isinstance(m, dict) and m.get("id", 0) < before_id]
+
+        if limit and len(history) > limit:
             return history[-limit:]
         return history
 

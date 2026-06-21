@@ -29,7 +29,7 @@ from engines.narrative_pipeline import (
 )
 from engines.prompts import build_system_prompt
 from engines.lorebook import load_lorebook, scan_for_lore
-from engines.utilities import redact_pii, log_debug
+from engines.utilities import redact_pii, log_debug, get_character_name_from_path
 from engines.hooks import execute_pipeline
 
 MAX_CANDIDATE_WORKERS = 4
@@ -831,6 +831,8 @@ def _perform_post_processing(
             "is_regeneration": is_regeneration,
         })
         reply = full_reply.strip()
+        if not reply:
+            reply = "..."
 
         # BLOCKER: Do not save error messages to history
         error_markers = [
@@ -994,7 +996,7 @@ def get_respond_stream(user_input: str, profile: dict, profile_path: str = None,
 
     if not history_profile_name:
         if profile_path:
-            history_profile_name = os.path.splitext(os.path.basename(profile_path))[0]
+            history_profile_name = get_character_name_from_path(profile_path)
         else:
             history_profile_name = char_name # Fallback to display name
 
@@ -1092,20 +1094,22 @@ def get_respond_stream(user_input: str, profile: dict, profile_path: str = None,
     else:
         system_extra_info = scene_instruction
 
+    llm_user_input = user_input if user_input.strip() else "[Continue]"
+
     if pipeline_flags["enabled"]:
         metadata = full_data.get("metadata", {})
-        canonical_state = build_canonical_state(profile, metadata, user_input) if pipeline_flags["state"] else None
+        canonical_state = build_canonical_state(profile, metadata, llm_user_input) if pipeline_flags["state"] else None
 
         if pipeline_flags["memory"]:
             full_history_for_memory = memory_manager.load_history(history_profile_name)
             memory_stack = retrieve_memory_stack(
                 full_history_for_memory,
-                user_input,
+                llm_user_input,
                 short_limit=max(6, min(20, limit)),
             )
 
         if pipeline_flags["planner"] and canonical_state is not None:
-            narrative_plan = build_narrative_plan(canonical_state, user_input, interaction_mode)
+            narrative_plan = build_narrative_plan(canonical_state, llm_user_input, interaction_mode)
 
         if canonical_state is not None:
             pipeline_context = render_pipeline_context(canonical_state, memory_stack, narrative_plan)
@@ -1148,7 +1152,7 @@ def get_respond_stream(user_input: str, profile: dict, profile_path: str = None,
         return len(t) // 4
 
     sys_tokens = est_tokens(system_content)
-    input_tokens = est_tokens(user_input)
+    input_tokens = est_tokens(llm_user_input)
     max_input_tokens = get_setting("max_input_tokens", 6200)
     try:
         max_input_tokens = int(max_input_tokens)
@@ -1206,9 +1210,9 @@ def get_respond_stream(user_input: str, profile: dict, profile_path: str = None,
             if (
                 not prompt_history
                 or prompt_history[-1].get("role") != "user"
-                or prompt_history[-1].get("content") != user_input
+                or prompt_history[-1].get("content") != llm_user_input
             ):
-                messages.append({'role': 'user', 'content': user_input})
+                messages.append({'role': 'user', 'content': llm_user_input})
 
             if regeneration_previous_replies:
                 replay_block = "\n".join(f"- {reply[:220]}" for reply in regeneration_previous_replies[-3:])
@@ -1227,7 +1231,7 @@ def get_respond_stream(user_input: str, profile: dict, profile_path: str = None,
                 messages[0]["content"] = f"{messages[0]['content']}\n\n{instruction}"
     else:
         messages.extend(prompt_history)
-        messages.append({'role': 'user', 'content': user_input})
+        messages.append({'role': 'user', 'content': llm_user_input})
 
     # Sanitize: strip non-essential keys (e.g. alternatives, selected_index) from
     # history messages so they don't bloat the remote payload or local context.

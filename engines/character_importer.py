@@ -558,21 +558,20 @@ class CharacterImporter:
 
         # Ensure we only have the basename of the filename
         filename = os.path.basename(filename)
-
-        if not filename.endswith(".json"):
-            filename += ".json"
+        folder_name = os.path.splitext(filename)[0]
 
         # Construct target path relative to profiles directory
         profiles_dir = os.path.abspath("profiles")
-        target_path = os.path.abspath(os.path.join(profiles_dir, filename))
+        char_dir = os.path.abspath(os.path.join(profiles_dir, folder_name))
+        target_path = os.path.abspath(os.path.join(char_dir, "profile.json"))
 
         # Security check: Ensure the target path is still within the profiles directory
         if not os.path.normcase(target_path).startswith(os.path.normcase(profiles_dir)):
             print(f"{Fore.RED}[ERROR] Path traversal attempt detected.")
             return False
 
-        # Ensure profiles directory exists
-        os.makedirs(profiles_dir, exist_ok=True)
+        # Ensure character directory exists
+        os.makedirs(char_dir, exist_ok=True)
 
         try:
             with open(target_path, "w", encoding="utf-8") as f:
@@ -602,12 +601,20 @@ class CharacterImporter:
 
         char_name = profile.get("name", "Unknown")
         safe_name = lorebook_name or sanitize_profile_name(char_name)
-        lorebook_dir = os.path.abspath("lorebooks")
-        os.makedirs(lorebook_dir, exist_ok=True)
-        lorebook_path = os.path.join(lorebook_dir, f"{safe_name}.json")
+
+        # Check if character folder exists under profiles/
+        char_profile_dir = os.path.abspath(os.path.join("profiles", safe_name))
+        if os.path.isdir(char_profile_dir):
+            lorebook_path = os.path.abspath(os.path.join(char_profile_dir, "lorebook.json"))
+            allowed_dir = os.path.abspath("profiles")
+        else:
+            lorebook_dir = os.path.abspath("lorebooks")
+            os.makedirs(lorebook_dir, exist_ok=True)
+            lorebook_path = os.path.abspath(os.path.join(lorebook_dir, f"{safe_name}.json"))
+            allowed_dir = lorebook_dir
 
         # Security check
-        if not os.path.normcase(lorebook_path).startswith(os.path.normcase(lorebook_dir)):
+        if not os.path.normcase(lorebook_path).startswith(os.path.normcase(allowed_dir)):
             print(f"{Fore.RED}[ERROR] Path traversal attempt detected.")
             return None
 
@@ -833,15 +840,18 @@ def import_character(source_path, refine=False, lore=False, model=None):
         data = CharacterImporter.extract_from_png(source_path)
         if data and "name" in data:
             char_name = data["name"]
-            # Create a safe filename for the image
+            # Create a safe name for folder and avatar
             safe_name = re.sub(r'[^\w\s-]', '', char_name).strip().replace(' ', '_')
+            folder_name = f"{safe_name}_{card_hash}"
+            char_dir = os.path.join("profiles", folder_name)
+            os.makedirs(char_dir, exist_ok=True)
+            
             ext = os.path.splitext(source_path)[1]
-            dest_image = os.path.join("img", f"{safe_name}_{card_hash}{ext}")
+            dest_image = os.path.join(char_dir, f"avatar{ext}")
 
-            os.makedirs("img", exist_ok=True)
             try:
                 shutil.copy2(source_path, dest_image)
-                avatar_path = dest_image.replace("\\", "/") # Use forward slashes for consistency
+                avatar_path = f"avatar{ext}" # Store as relative path inside the profile!
             except Exception as e:
                 print(f"{Fore.RED}[ERROR] Failed to copy avatar image: {e}")
 
@@ -885,7 +895,8 @@ def import_character(source_path, refine=False, lore=False, model=None):
                 refined_profile = CharacterImporter.refine_character_profile(saved_profile, raw_st_data=data, model=refine_model)
                 
                 # Overwrite the saved profile with refined contents
-                CharacterImporter.save_profile(refined_profile, filename=os.path.basename(save_path))
+                folder_name = os.path.basename(os.path.dirname(save_path))
+                CharacterImporter.save_profile(refined_profile, filename=folder_name)
                 print(f"{Fore.GREEN}[SUCCESS] AI refinement complete. Refined fields merged successfully.")
             except Exception as e:
                 print(f"{Fore.YELLOW}[WARNING] AI refinement failed: {e}. Keeping the baseline rule-based profile.")
@@ -899,8 +910,8 @@ def import_character(source_path, refine=False, lore=False, model=None):
         except Exception:
             current_profile = new_profile
 
-        # Get profile basename (without .json extension)
-        profile_basename = os.path.splitext(os.path.basename(save_path))[0]
+        # Get profile basename (character folder name)
+        profile_basename = os.path.basename(os.path.dirname(save_path))
 
         lorebook_model = model or CharacterImporter.get_default_refine_model() if lore else None
         print(Fore.CYAN + "[SYSTEM] Generating lorebook...")
@@ -913,8 +924,16 @@ def import_character(source_path, refine=False, lore=False, model=None):
             try:
                 with open(save_path, "r", encoding="utf-8") as f:
                     final_profile = json.load(f)
-                final_profile["lorebook_path"] = lorebook_path.replace("\\", "/")
-                CharacterImporter.save_profile(final_profile, filename=os.path.basename(save_path))
+                
+                # Check if it was saved inside the character's directory, and make it relative
+                profile_dir = os.path.dirname(save_path)
+                if lorebook_path.startswith(profile_dir):
+                    final_profile["lorebook_path"] = "lorebook.json"
+                else:
+                    final_profile["lorebook_path"] = lorebook_path.replace("\\", "/")
+
+                folder_name = os.path.basename(os.path.dirname(save_path))
+                CharacterImporter.save_profile(final_profile, filename=folder_name)
                 print(f"{Fore.GREEN}[SUCCESS] Lorebook generated and linked to profile.")
             except Exception as e:
                 print(f"{Fore.YELLOW}[WARNING] Lorebook generated but failed to link to profile: {e}")

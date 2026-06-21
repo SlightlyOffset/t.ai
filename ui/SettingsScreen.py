@@ -108,8 +108,10 @@ class SettingsScreen(ModalScreen):
 
         # Extract values or defaults
         interaction_mode = settings.get("interaction_mode", "rp")
-        clear_on_start = settings.get("clear_on_start", False)
-        auto_recap_on_start = settings.get("auto_recap_on_start", True)
+        auto_recap_on_start = settings.get("auto_recap_on_start", False)
+        auto_chat_load = settings.get("auto_chat_load", True)
+        auto_chat_load_limit = str(settings.get("auto_chat_load_limit", 20))
+        scroll_load_limit = str(settings.get("scroll_load_limit", 10))
         smooth_streaming = settings.get("smooth_streaming", True)
         streaming_delay = str(settings.get("streaming_delay", 0.055))
         image_protocol = settings.get("image_protocol", "auto")
@@ -172,11 +174,17 @@ class SettingsScreen(ModalScreen):
                                 classes="settings_widget"
                             )
                         with Horizontal(classes="settings_row"):
-                            yield Label("Clear Terminal on Start:", classes="settings_label")
-                            yield Switch(value=clear_on_start, id="clear_on_start", classes="settings_widget")
-                        with Horizontal(classes="settings_row"):
                             yield Label("Auto Recap on Start:", classes="settings_label")
                             yield Switch(value=auto_recap_on_start, id="auto_recap_on_start", classes="settings_widget")
+                        with Horizontal(classes="settings_row"):
+                            yield Label("Auto Chat Load on Start:", classes="settings_label")
+                            yield Switch(value=auto_chat_load, id="auto_chat_load", classes="settings_widget")
+                        with Horizontal(classes="settings_row"):
+                            yield Label("Initial Chat Load Limit:", classes="settings_label")
+                            yield Input(value=auto_chat_load_limit, id="auto_chat_load_limit", classes="settings_widget")
+                        with Horizontal(classes="settings_row"):
+                            yield Label("Scroll Load Limit (Step):", classes="settings_label")
+                            yield Input(value=scroll_load_limit, id="scroll_load_limit", classes="settings_widget")
                         with Horizontal(classes="settings_row"):
                             yield Label("Smooth Streaming:", classes="settings_label")
                             yield Switch(value=smooth_streaming, id="smooth_streaming", classes="settings_widget")
@@ -408,6 +416,22 @@ class SettingsScreen(ModalScreen):
 
         # Parse and validate integers/floats
         try:
+            auto_chat_load_limit = int(self.query_one("#auto_chat_load_limit", Input).value.strip())
+            if auto_chat_load_limit <= 0:
+                raise ValueError()
+        except ValueError:
+            self.show_error("Initial Chat Load Limit must be a positive integer.")
+            return
+
+        try:
+            scroll_load_limit = int(self.query_one("#scroll_load_limit", Input).value.strip())
+            if scroll_load_limit <= 0:
+                raise ValueError()
+        except ValueError:
+            self.show_error("Scroll Load Limit must be a positive integer.")
+            return
+
+        try:
             streaming_delay = float(self.query_one("#streaming_delay", Input).value.strip())
             if streaming_delay < 0:
                 raise ValueError()
@@ -468,8 +492,10 @@ class SettingsScreen(ModalScreen):
         # 2. Build updated settings dict
         updated_settings = {
             "interaction_mode": self.query_one("#interaction_mode", Select).value,
-            "clear_on_start": self.query_one("#clear_on_start", Switch).value,
             "auto_recap_on_start": self.query_one("#auto_recap_on_start", Switch).value,
+            "auto_chat_load": self.query_one("#auto_chat_load", Switch).value,
+            "auto_chat_load_limit": auto_chat_load_limit,
+            "scroll_load_limit": scroll_load_limit,
             "smooth_streaming": self.query_one("#smooth_streaming", Switch).value,
             "streaming_delay": streaming_delay,
             "image_protocol": self.query_one("#image_protocol", Select).value,

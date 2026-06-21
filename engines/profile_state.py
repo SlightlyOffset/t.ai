@@ -4,6 +4,7 @@ from pathlib import Path
 
 from engines.config import get_setting
 from engines.prompts import get_relationship_rule
+from engines.utilities import get_character_name_from_path
 
 
 DEFAULT_AVATAR_PATH = "img/No_Image_Error.png"
@@ -41,9 +42,52 @@ def _load_json_file(path: str | None) -> dict | None:
         return None
 
 
+def resolve_profile_assets(profile: dict, char_path: str) -> None:
+    """Resolves character relative assets and paths to absolute or correct relative paths."""
+    if not profile or not char_path:
+        return
+    profile_dir = os.path.dirname(char_path)
+
+    # 1. Resolve avatar_path
+    avatar = profile.get("avatar_path")
+    if avatar:
+        if not os.path.isabs(avatar):
+            if not os.path.exists(avatar):
+                rel_path = os.path.join(profile_dir, avatar)
+                if os.path.exists(rel_path):
+                    profile["avatar_path"] = rel_path.replace("\\", "/")
+    else:
+        # Default fallback if avatar.png exists in character directory
+        for ext in (".png", ".jpg", ".jpeg", ".webp"):
+            fallback = os.path.join(profile_dir, f"avatar{ext}")
+            if os.path.exists(fallback):
+                profile["avatar_path"] = fallback.replace("\\", "/")
+                break
+
+    # 2. Resolve lorebook_path
+    lorebook = profile.get("lorebook_path")
+    if lorebook:
+        if not os.path.isabs(lorebook):
+            if not os.path.exists(lorebook):
+                rel_path = os.path.join(profile_dir, lorebook)
+                if os.path.exists(rel_path):
+                    profile["lorebook_path"] = rel_path.replace("\\", "/")
+    else:
+        # Default fallback if lorebook.json exists in character directory
+        fallback = os.path.join(profile_dir, "lorebook.json")
+        if os.path.exists(fallback):
+            profile["lorebook_path"] = fallback.replace("\\", "/")
+
+    # 3. Resolve custom_rules_path
+    custom_rules = os.path.join(profile_dir, "custom_rules.md")
+    if os.path.exists(custom_rules):
+        profile["custom_rules_path"] = custom_rules.replace("\\", "/")
+
+
 def load_profile_session(char_path: str, user_path: str | None) -> dict:
     """Load character and optional user profile data for a UI session."""
     character_profile = _load_json_file(char_path) or {}
+    resolve_profile_assets(character_profile, char_path)
     user_profile = _load_json_file(user_path) if user_path else None
 
     colors = character_profile.get("colors", {})
@@ -56,7 +100,7 @@ def load_profile_session(char_path: str, user_path: str | None) -> dict:
         "user_name": (user_profile or {}).get("name", "User"),
         "char_name_lbl_color": colors.get("name_lbl", "magenta"),
         "user_name_lbl_color": user_colors.get("name_lbl", "cyan"),
-        "history_profile_name": os.path.basename(char_path).replace(".json", ""),
+        "history_profile_name": get_character_name_from_path(char_path),
     }
 
 
