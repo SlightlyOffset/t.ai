@@ -49,8 +49,7 @@ class DashboardScreen(Screen):
 
     .dashboard_btn,
     .dashboard_btn:hover,
-    .dashboard_btn:focus,
-    .dashboard_btn:active {
+    .dashboard_btn:focus {
         background: transparent;
         border: none;
         width: 40;
