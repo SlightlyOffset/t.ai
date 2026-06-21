@@ -47,9 +47,9 @@ class DashboardScreen(Screen):
         height: auto;
     }
 
-    .dashboard_btn,
-    .dashboard_btn:hover,
-    .dashboard_btn:focus {
+    Button.dashboard_btn,
+    Button.dashboard_btn:hover,
+    Button.dashboard_btn:focus {
         background: transparent;
         border: none;
         width: 40;
@@ -57,12 +57,12 @@ class DashboardScreen(Screen):
         margin: 0;
     }
 
-    .dashboard_btn {
+    Button.dashboard_btn {
         color: $text;
     }
 
-    .dashboard_btn:hover,
-    .dashboard_btn:focus {
+    Button.dashboard_btn:hover,
+    Button.dashboard_btn:focus {
         color: $accent;
         text-style: bold;
     }
