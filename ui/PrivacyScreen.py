@@ -24,7 +24,6 @@ class PrivacyScreen(Screen):
     
     #privacy_lock_icon {
         color: $accent;
-        font-size: 2;
         margin-bottom: 1;
         text-align: center;
         width: 100%;
@@ -33,7 +32,6 @@ class PrivacyScreen(Screen):
     #privacy_title {
         color: $accent;
         text-style: bold;
-        font-size: 1.5;
         margin-bottom: 1;
         text-align: center;
         width: 100%;
