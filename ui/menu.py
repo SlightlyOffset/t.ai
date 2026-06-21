@@ -1478,6 +1478,7 @@ class TaiMenu(App):
 
     def on_mount(self) -> None:
         """Initializes the app and load character profiles."""
+        self._last_user_activity = time.time()
         self.start_tts_worker()
         self.load_initial_state()
 
@@ -1518,9 +1519,7 @@ class TaiMenu(App):
         self.populate_interaction_modes()
 
         # Start usage metrics update loop
-        if not getattr(self, "_metrics_loop_started", False):
-            self.set_interval(2.0, self.update_usage_metrics)
-            self._metrics_loop_started = True
+        self.start_loops()
         
         # Trigger UI Ready hook
         from engines.hooks import execute_hooks
@@ -1549,9 +1548,7 @@ class TaiMenu(App):
                     self.add_message(f"Switched to session: [bold]{session_name}[/bold]", role="system")
 
             # Start usage metrics update loop and run ready hooks
-            if not getattr(self, "_metrics_loop_started", False):
-                self.set_interval(2.0, self.update_usage_metrics)
-                self._metrics_loop_started = True
+            self.start_loops()
             
             from engines.hooks import execute_hooks
             execute_hooks("on_ui_ready", {"app": self})
@@ -1563,13 +1560,49 @@ class TaiMenu(App):
                 self.populate_tts_engines()
                 self.populate_image_protocols()
                 self.populate_interaction_modes()
-                if not getattr(self, "_metrics_loop_started", False):
-                    self.set_interval(2.0, self.update_usage_metrics)
-                    self._metrics_loop_started = True
+                self.start_loops()
                 from engines.hooks import execute_hooks
                 execute_hooks("on_ui_ready", {"app": self})
             else:
                 self.exit()
+
+    def start_loops(self) -> None:
+        """Centralized helper to start background metrics and inactivity check loops."""
+        if not getattr(self, "_metrics_loop_started", False):
+            self.set_interval(2.0, self.update_usage_metrics)
+            self._metrics_loop_started = True
+
+        if not getattr(self, "_inactivity_loop_started", False):
+            self.set_interval(5.0, self.check_inactivity_lock)
+            self._inactivity_loop_started = True
+
+    async def on_event(self, event: events.Event) -> None:
+        """Handle user input events to reset inactivity timer."""
+        if isinstance(event, (events.Key, events.MouseEvent)):
+            self._last_user_activity = time.time()
+        await super().on_event(event)
+
+    def check_inactivity_lock(self) -> None:
+        """Periodically checks if the user has been inactive for longer than the privacy timeout, locking the session."""
+        timeout_minutes = get_setting("privacy_screen_timeout", 3)
+        if timeout_minutes <= 0:
+            return
+
+        from ui.DashboardScreen import DashboardScreen
+        from ui.PrivacyScreen import PrivacyScreen
+        try:
+            if isinstance(self.screen, (DashboardScreen, PrivacyScreen)):
+                return
+        except Exception:
+            return
+
+        idle_time = time.time() - getattr(self, "_last_user_activity", time.time())
+        if idle_time > (timeout_minutes * 60):
+            self.push_screen(PrivacyScreen(), callback=self.on_privacy_screen_dismissed)
+
+    def on_privacy_screen_dismissed(self, result: bool | None) -> None:
+        """Callback when the privacy screen is unlocked."""
+        self._last_user_activity = time.time()
 
     def on_unmount(self) -> None:
         """Wait for any active background post-processing threads to finish saving history before exiting."""

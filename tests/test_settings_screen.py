@@ -46,6 +46,7 @@ class TestSettingsScreen(unittest.TestCase):
             "#image_size": MagicMock(value="medium"),
             "#suppress_errors": MagicMock(value=True),
             "#inactivity_dashboard_timeout": MagicMock(value="12"),
+            "#privacy_screen_timeout": MagicMock(value="3"),
             "#default_llm_model": MagicMock(value="fluffy/l3-8b-stheno-v3.2"),
             "#summarizer_model": MagicMock(value="gemma2"),
             "#local_utility_model": MagicMock(value="phi3"),
@@ -129,6 +130,7 @@ class TestSettingsScreen(unittest.TestCase):
         self.assertEqual(dismissed_dict["auto_chat_load_limit"], 20)
         self.assertEqual(dismissed_dict["scroll_load_limit"], 10)
         self.assertEqual(dismissed_dict["inactivity_dashboard_timeout"], 12)
+        self.assertEqual(dismissed_dict["privacy_screen_timeout"], 3)
 
     @patch('engines.config.update_settings')
     def test_save_action_insecure_llm_url(self, mock_update):
