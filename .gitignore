@@ -110,5 +110,4 @@ notes/
 # Response rules
 response_rule/
 
-# MCP Importer Plugin config
-plugins/mcp_st_importer/plugin.json
+
