@@ -1,4 +1,4 @@
 {
-    "refine_model": "",
+    "refine_model": "dolphin3-lowctx:latest",
     "num_ctx": 8192
 }
