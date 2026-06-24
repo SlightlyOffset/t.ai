@@ -750,6 +750,7 @@ class TaiMenu(App):
         ("ctrl+s", "open_settings", "Settings"),
         ("ctrl+q", "quit", "Quit"),
         ("ctrl+r", "toggle_resource_monitor", "Toggle Metrics"),
+        ("ctrl+g", "open_dashboard", "Dashboard"),
         ("alt+left", "previous_response", "Prev Resp"),
         ("alt+right", "next_or_regenerate_response", "Next/Regen"),
     ]
@@ -807,6 +808,7 @@ class TaiMenu(App):
         self._current_user_avatar_path = None
         self._visible_message_count = 0
         self.show_resource_monitor = get_setting("show_resource_monitor", True)
+        self._metrics_loop_started = False
 
     def _resolve_image_widget_type(self) -> type[Image] | None:
         protocol = get_setting("image_protocol", "auto")
@@ -851,6 +853,11 @@ class TaiMenu(App):
         optimized_path = get_or_create_optimized_image(image_path, max_dim=500)
         
         def update_ui():
+            # Check if this update is still relevant (the active avatar path has not changed)
+            current_path = self._current_char_avatar_path if widget_id == "avatar_portrait_character" else self._current_user_avatar_path
+            if not current_path or not image_path or os.path.normpath(current_path) != os.path.normpath(image_path):
+                return  # Stale avatar optimization thread, ignore it
+
             path_to_use = optimized_path if optimized_path and os.path.exists(optimized_path) else None
             try:
                 avatar_widget = self.query_one(f"#{widget_id}")
@@ -1167,6 +1174,17 @@ class TaiMenu(App):
         from ui.ProfileSelectScreen import ProfileSelect
         self.push_screen(ProfileSelect(), callback=self.on_profile_selected)
 
+    def action_open_dashboard(self) -> None:
+        """Open the startup/navigation dashboard screen."""
+        from ui.DashboardScreen import DashboardScreen
+        from ui.PrivacyScreen import PrivacyScreen
+        try:
+            if isinstance(self.screen, (DashboardScreen, PrivacyScreen)):
+                return
+        except Exception:
+            pass
+        self.push_screen(DashboardScreen(), callback=self.on_dashboard_finished)
+
     def action_open_session_select(self) -> None:
         """Open the session selection modal screen."""
         if not self.history_profile_name:
@@ -1461,6 +1479,7 @@ class TaiMenu(App):
 
     def on_mount(self) -> None:
         """Initializes the app and load character profiles."""
+        self._last_user_activity = time.time()
         self.start_tts_worker()
         self.load_initial_state()
 
@@ -1476,9 +1495,22 @@ class TaiMenu(App):
             self.title = "t.ai"
             self.sub_title = ""
 
+        show_dashboard = False
         if not self.char_path:
-            from ui.ProfileSelectScreen import ProfileSelect
-            self.push_screen(ProfileSelect(), callback=self.on_profile_selected)
+            show_dashboard = True
+        else:
+            timeout_hours = get_setting("inactivity_dashboard_timeout", 12)
+            if timeout_hours > 0 and self.history_profile_name:
+                last_time = memory_manager.get_last_timestamp(self.history_profile_name)
+                if last_time:
+                    from datetime import datetime
+                    diff = datetime.now() - last_time
+                    if (diff.total_seconds() / 3600) > timeout_hours:
+                        show_dashboard = True
+
+        if show_dashboard:
+            from ui.DashboardScreen import DashboardScreen
+            self.push_screen(DashboardScreen(), callback=self.on_dashboard_finished)
             return
 
         self.populate_models()
@@ -1488,11 +1520,96 @@ class TaiMenu(App):
         self.populate_interaction_modes()
 
         # Start usage metrics update loop
-        self.set_interval(2.0, self.update_usage_metrics)
+        self.start_loops()
         
         # Trigger UI Ready hook
         from engines.hooks import execute_hooks
         execute_hooks("on_ui_ready", {"app": self})
+
+    def on_dashboard_finished(self, result: dict | None) -> None:
+        """Callback when the startup dashboard is finished/dismissed."""
+        if result:
+            char_name = result.get("character")
+            user_name = result.get("user")
+            session_name = result.get("session_name")
+
+            char_path = os.path.join("profiles", char_name) if char_name else None
+            user_path = os.path.join("user_profiles", user_name) if user_name else None
+
+            # Reset the app state and load selected profile
+            self.switch_profile(char_path, user_path)
+
+            if session_name:
+                from engines.config import set_active_session
+                set_active_session(self.history_profile_name, session_name)
+                if self.check_and_switch_session_user(session_name):
+                    pass
+                else:
+                    self.reload_chat_list_for_session(session_name)
+                    self.add_message(f"Switched to session: [bold]{session_name}[/bold]", role="system")
+
+            # Start usage metrics update loop and run ready hooks
+            self.start_loops()
+            
+            from engines.hooks import execute_hooks
+            execute_hooks("on_ui_ready", {"app": self})
+        else:
+            # Fallback if dashboard dismissed/cancelled with valid char_path
+            if self.char_path:
+                self.populate_models()
+                self.populate_voices()
+                self.populate_tts_engines()
+                self.populate_image_protocols()
+                self.populate_interaction_modes()
+                self.start_loops()
+                from engines.hooks import execute_hooks
+                execute_hooks("on_ui_ready", {"app": self})
+            else:
+                self.exit()
+
+    def start_loops(self) -> None:
+        """Centralized helper to start background metrics and inactivity check loops."""
+        if not getattr(self, "_metrics_loop_started", False):
+            self.set_interval(2.0, self.update_usage_metrics)
+            self._metrics_loop_started = True
+
+        if not getattr(self, "_inactivity_loop_started", False):
+            self.set_interval(5.0, self.check_inactivity_lock)
+            self._inactivity_loop_started = True
+
+    async def on_event(self, event: events.Event) -> None:
+        """Handle user input events to reset inactivity timer."""
+        if isinstance(event, (events.Key, events.MouseEvent)):
+            self._last_user_activity = time.time()
+        await super().on_event(event)
+
+    def check_inactivity_lock(self) -> None:
+        """Periodically checks if the user has been inactive for longer than the privacy timeout, locking the session."""
+        timeout_minutes = get_setting("privacy_screen_timeout", 3)
+        if timeout_minutes <= 0:
+            return
+
+        # Guard: do not push a second privacy screen if one is already being shown
+        if getattr(self, "_privacy_screen_active", False):
+            return
+
+        from ui.DashboardScreen import DashboardScreen
+        from ui.PrivacyScreen import PrivacyScreen
+        try:
+            if isinstance(self.screen, (DashboardScreen, PrivacyScreen)):
+                return
+        except Exception:
+            return
+
+        idle_time = time.time() - getattr(self, "_last_user_activity", time.time())
+        if idle_time > (timeout_minutes * 60):
+            self._privacy_screen_active = True
+            self.push_screen(PrivacyScreen(), callback=self.on_privacy_screen_dismissed)
+
+    def on_privacy_screen_dismissed(self, result: bool | None) -> None:
+        """Callback when the privacy screen is unlocked."""
+        self._privacy_screen_active = False
+        self._last_user_activity = time.time()
 
     def on_unmount(self) -> None:
         """Wait for any active background post-processing threads to finish saving history before exiting."""
@@ -2970,22 +3087,35 @@ class TaiMenu(App):
 
     def _get_local_gpu_metrics(self) -> str:
         """Fetch local NVIDIA GPU memory and utilization using nvidia-smi if available."""
-        import shutil
-        import subprocess
-        
-        if not shutil.which("nvidia-smi"):
+        if not getattr(self, "_gpu_checker_initialized", False):
+            import shutil
+            self._has_nvidia_smi = shutil.which("nvidia-smi") is not None
+            self._has_torch_cuda = False
+            if not self._has_nvidia_smi:
+                try:
+                    import torch
+                    self._has_torch_cuda = torch.cuda.is_available()
+                except Exception:
+                    pass
+            self._gpu_checker_initialized = True
+            
+        if not self._has_nvidia_smi:
             # Check PyTorch fallback if loaded
-            try:
-                import torch
-                if torch.cuda.is_available():
-                    allocated = torch.cuda.memory_allocated() / (1024 ** 3)
-                    total = torch.cuda.get_device_properties(0).total_memory / (1024 ** 3)
-                    return f" | GPU VRAM: {allocated:.1f}/{total:.1f} GB"
-            except Exception:
-                pass
+            if self._has_torch_cuda:
+                try:
+                    import torch
+                    try:
+                        allocated = torch.cuda.memory_allocated() / (1024 ** 3)
+                        total = torch.cuda.get_device_properties(0).total_memory / (1024 ** 3)
+                        return f" | GPU VRAM: {allocated:4.1f}/{total:4.1f} GB"
+                    except Exception:
+                        return " | GPU VRAM:  --.-/ --.- GB"
+                except Exception:
+                    pass
             return ""
             
         try:
+            import subprocess
             result = subprocess.run(
                 ["nvidia-smi", "--query-gpu=utilization.gpu,memory.used,memory.total", "--format=csv,noheader,nounits"],
                 stdout=subprocess.PIPE,
@@ -3005,10 +3135,10 @@ class TaiMenu(App):
                     used_gb = used_mib / 1024.0
                     total_gb = total_mib / 1024.0
                     
-                    return f" | GPU: {gpu_util:.0f}% (VRAM: {used_gb:.1f}/{total_gb:.1f} GB)"
+                    return f" | GPU: {gpu_util:3.0f}% (VRAM: {used_gb:4.1f}/{total_gb:4.1f} GB)"
         except Exception:
             pass
-        return ""
+        return " | GPU:  --% (VRAM:  --.-/ --.- GB)"
 
     @work(exclusive=True, thread=True)
     def update_usage_metrics(self) -> None:
@@ -3019,31 +3149,38 @@ class TaiMenu(App):
         cpu, ram = self._get_local_metrics()
         gpu_info = self._get_local_gpu_metrics()
 
-        # Check remote bridge status
+        # Check remote bridge status (throttled to 10s intervals)
         remote_url = get_setting("remote_llm_url")
         vram_info = ""
         if remote_url:
-            import requests
-            try:
-                resp = requests.get(f"{remote_url.rstrip('/')}/health", timeout=1.5)
-                if resp.status_code == 200:
-                    data = resp.json()
-                    gpus = data.get("gpus", [])
-                    if gpus:
-                        if len(gpus) > 1:
-                            vram_strings = [f"GPU{g['id']}: {g['allocated_gib']:.1f}/{g['total_gib']:.1f} GB" for g in gpus]
-                            vram_info = " | Bridge VRAM: " + " | ".join(vram_strings)
+            import time
+            now = time.time()
+            if (now - getattr(self, "_last_bridge_check_time", 0.0)) >= 10.0:
+                import requests
+                try:
+                    resp = requests.get(f"{remote_url.rstrip('/')}/health", timeout=1.5)
+                    if resp.status_code == 200:
+                        data = resp.json()
+                        gpus = data.get("gpus", [])
+                        if gpus:
+                            if len(gpus) > 1:
+                                vram_strings = [f"GPU{g['id']}: {g['allocated_gib']:4.1f}/{g['total_gib']:4.1f} GB" for g in gpus]
+                                vram_info = " | Bridge VRAM: " + " | ".join(vram_strings)
+                            else:
+                                g = gpus[0]
+                                vram_info = f" | Bridge VRAM: {g['allocated_gib']:4.1f}/{g['total_gib']:4.1f} GB"
                         else:
-                            g = gpus[0]
-                            vram_info = f" | Bridge VRAM: {g['allocated_gib']:.1f}/{g['total_gib']:.1f} GB"
+                            vram_info = " | Bridge: Online"
                     else:
-                        vram_info = " | Bridge: Online"
-                else:
-                    vram_info = " | Bridge: Error"
-            except Exception:
-                vram_info = " | Bridge: Offline"
+                        vram_info = " | Bridge: Error"
+                except Exception:
+                    vram_info = " | Bridge: Offline"
+                self._last_bridge_vram_info = vram_info
+                self._last_bridge_check_time = now
+            else:
+                vram_info = getattr(self, "_last_bridge_vram_info", " | Bridge: Offline")
 
-        metric_str = f"CPU: {cpu:.0f}% | RAM: {ram:.0f}%{gpu_info}{vram_info}"
+        metric_str = f"CPU: {cpu:3.0f}% | RAM: {ram:3.0f}%{gpu_info}{vram_info}"
 
         def apply_update():
             # Update the title bar of the terminal dynamically

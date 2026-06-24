@@ -1,7 +1,7 @@
 from textual.app import ComposeResult
 from textual.containers import Container, Horizontal, VerticalScroll
 from textual.screen import ModalScreen
-from textual.widgets import Header, Label, Footer, TabbedContent, TabPane, Switch, Input, Select, Button
+from textual.widgets import Label, TabbedContent, TabPane, Switch, Input, Select, Button
 
 class SettingsScreen(ModalScreen):
     """Dedicated settings screen with categorized tabs for configuration."""
@@ -13,12 +13,12 @@ class SettingsScreen(ModalScreen):
     DEFAULT_CSS = """
     SettingsScreen {
         align: center middle;
-        background: rgba(0, 0, 0, 0.65);
+        background: rgba(0, 0, 0, 0.7);
     }
 
     #settings_container {
         width: 80;
-        height: 38;
+        height: 32;
         border: thick $primary;
         background: $panel;
         padding: 1;
@@ -118,6 +118,9 @@ class SettingsScreen(ModalScreen):
         image_size = settings.get("image_size", "medium")
         suppress_errors = settings.get("suppress_errors", True)
 
+        inactivity_dashboard_timeout = str(settings.get("inactivity_dashboard_timeout", 12))
+        privacy_screen_timeout = str(settings.get("privacy_screen_timeout", 3))
+
         default_llm_model = settings.get("default_llm_model", "fluffy/l3-8b-stheno-v3.2")
         summarizer_model = settings.get("summarizer_model", "gemma2:2b")
         local_utility_model = settings.get("local_utility_model", "phi3")
@@ -157,7 +160,6 @@ class SettingsScreen(ModalScreen):
         
         disabled_plugins = settings.get("disabled_plugins", [])
 
-        yield Header(show_clock=False)
         with Container(id="settings_container"):
             yield Label("t.ai Global Settings Configuration", id="settings_title")
             yield Label("", id="settings_error")
@@ -210,6 +212,12 @@ class SettingsScreen(ModalScreen):
                         with Horizontal(classes="settings_row"):
                             yield Label("Suppress Errors:", classes="settings_label")
                             yield Switch(value=suppress_errors, id="suppress_errors", classes="settings_widget")
+                        with Horizontal(classes="settings_row"):
+                            yield Label("Inactivity Dashboard Timeout (h):", classes="settings_label")
+                            yield Input(value=inactivity_dashboard_timeout, id="inactivity_dashboard_timeout", classes="settings_widget")
+                        with Horizontal(classes="settings_row"):
+                            yield Label("Inactivity Privacy Timeout (m):", classes="settings_label")
+                            yield Input(value=privacy_screen_timeout, id="privacy_screen_timeout", classes="settings_widget")
 
                 with TabPane("AI Engine", id="tab_ai"):
                     with VerticalScroll(classes="settings_pane"):
@@ -380,8 +388,6 @@ class SettingsScreen(ModalScreen):
                 yield Button("Cancel", id="btn_cancel", variant="error")
                 yield Button("Save Settings", id="btn_save", variant="primary")
 
-        yield Footer()
-
     def action_cancel(self) -> None:
         """Dismiss settings screen without saving."""
         self.dismiss(None)
@@ -480,6 +486,22 @@ class SettingsScreen(ModalScreen):
             return
 
         try:
+            inactivity_dashboard_timeout = int(self.query_one("#inactivity_dashboard_timeout", Input).value.strip())
+            if inactivity_dashboard_timeout < 0:
+                raise ValueError()
+        except ValueError:
+            self.show_error("Inactivity Dashboard Timeout must be a non-negative integer.")
+            return
+
+        try:
+            privacy_screen_timeout = int(self.query_one("#privacy_screen_timeout", Input).value.strip())
+            if privacy_screen_timeout < 0:
+                raise ValueError()
+        except ValueError:
+            self.show_error("Inactivity Privacy Timeout must be a non-negative integer.")
+            return
+
+        try:
             max_input_tokens = int(self.query_one("#max_input_tokens", Input).value.strip())
             if max_input_tokens <= 0:
                 raise ValueError()
@@ -501,6 +523,8 @@ class SettingsScreen(ModalScreen):
             "image_protocol": self.query_one("#image_protocol", Select).value,
             "image_size": self.query_one("#image_size", Select).value,
             "suppress_errors": self.query_one("#suppress_errors", Switch).value,
+            "inactivity_dashboard_timeout": inactivity_dashboard_timeout,
+            "privacy_screen_timeout": privacy_screen_timeout,
 
             "default_llm_model": self.query_one("#default_llm_model", Input).value.strip(),
             "summarizer_model": self.query_one("#summarizer_model", Input).value.strip(),

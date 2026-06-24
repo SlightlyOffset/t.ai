@@ -87,9 +87,9 @@ class TestTUIStartup(unittest.TestCase):
     @patch('ui.menu.TaiMenu.query_one')
     @patch('ui.menu.TaiMenu.add_message')
     @patch('ui.menu.TaiMenu.push_screen')
-    def test_push_profile_select_if_loading_fails(self, mock_push, mock_msg, mock_query, mock_sidebar, mock_tts, mock_get_setting_menu, mock_get_setting_profile):
+    def test_push_dashboard_if_loading_fails(self, mock_push, mock_msg, mock_query, mock_sidebar, mock_tts, mock_get_setting_menu, mock_get_setting_profile):
         """
-        Test that push_screen(ProfileSelect()) is called if load_initial_state fails to find paths.
+        Test that push_screen(DashboardScreen()) is called if load_initial_state fails to find paths.
         """
         from ui.menu import TaiMenu
         
@@ -103,6 +103,9 @@ class TestTUIStartup(unittest.TestCase):
         
         # We expect push_screen to be called once
         self.assertTrue(mock_push.called)
+        from ui.DashboardScreen import DashboardScreen
+        called_screen = mock_push.call_args[0][0]
+        self.assertIsInstance(called_screen, DashboardScreen)
 
     @patch('ui.menu.TaiMenu.load_initial_state')
     @patch('ui.menu.TaiMenu.populate_models')
@@ -419,6 +422,213 @@ class TestTUIStartup(unittest.TestCase):
             mock_set_active_session.assert_not_called()
             mock_save_history.assert_not_called()
             mock_add_message.assert_not_called()
+
+    @patch('engines.profile_state.get_setting')
+    @patch('ui.menu.get_setting')
+    @patch('ui.menu.memory_manager.get_last_timestamp')
+    @patch('ui.menu.TaiMenu.start_tts_worker')
+    @patch('ui.menu.TaiMenu.update_sidebar')
+    @patch('ui.menu.TaiMenu.query_one')
+    @patch('ui.menu.TaiMenu.add_message')
+    @patch('ui.menu.TaiMenu.push_screen')
+    def test_push_dashboard_on_inactivity_timeout(self, mock_push, mock_msg, mock_query, mock_sidebar, mock_tts, mock_get_last_timestamp, mock_get_setting_menu, mock_get_setting_profile):
+        """Test that DashboardScreen is pushed when inactivity timeout has been exceeded."""
+        from ui.menu import TaiMenu
+        from datetime import datetime, timedelta
+        
+        # Configure settings: inactivity timeout is 12 hours
+        mock_get_setting_menu.side_effect = lambda key, default=None: {
+            "inactivity_dashboard_timeout": 12,
+            "current_character_profile": "Astgenne.json"
+        }.get(key, default)
+        mock_get_setting_profile.side_effect = lambda key, default=None: {
+            "inactivity_dashboard_timeout": 12,
+            "current_character_profile": "Astgenne.json"
+        }.get(key, default)
+        
+        # Set last interaction to 15 hours ago (exceeding 12 hours)
+        mock_get_last_timestamp.return_value = datetime.now() - timedelta(hours=15)
+        
+        with patch('os.path.exists', return_value=True):
+            with patch('builtins.open', unittest.mock.mock_open(read_data='{"name": "Astgenne"}')):
+                app = TaiMenu(char_path="profiles/Astgenne.json", user_path="user_profiles/Zenith.json")
+                app.history_profile_name = "Astgenne"
+                
+                # Mock methods that on_mount runs
+                app.watch = lambda *args, **kwargs: None
+                app.on_mount()
+                
+        self.assertTrue(mock_push.called)
+        from ui.DashboardScreen import DashboardScreen
+        called_screen = mock_push.call_args[0][0]
+        self.assertIsInstance(called_screen, DashboardScreen)
+
+    @patch('engines.profile_state.get_setting')
+    @patch('ui.menu.get_setting')
+    @patch('ui.menu.memory_manager.get_last_timestamp')
+    @patch('ui.menu.TaiMenu.start_tts_worker')
+    @patch('ui.menu.TaiMenu.update_sidebar')
+    @patch('ui.menu.TaiMenu.query_one')
+    @patch('ui.menu.TaiMenu.add_message')
+    @patch('ui.menu.TaiMenu.push_screen')
+    @patch('ui.menu.TaiMenu.populate_models')
+    @patch('ui.menu.TaiMenu.populate_voices')
+    @patch('ui.menu.TaiMenu.populate_tts_engines')
+    @patch('ui.menu.TaiMenu.populate_image_protocols')
+    @patch('ui.menu.TaiMenu.populate_interaction_modes')
+    @patch('ui.menu.TaiMenu.load_initial_history')
+    def test_no_dashboard_if_recent_interaction(self, mock_load_hist, mock_im, mock_ip, mock_tts_eng, mock_vc, mock_md, mock_push, mock_msg, mock_query, mock_sidebar, mock_tts, mock_get_last_timestamp, mock_get_setting_menu, mock_get_setting_profile):
+        """Test that DashboardScreen is not pushed when last interaction is recent."""
+        from ui.menu import TaiMenu
+        from datetime import datetime, timedelta
+        
+        # Configure settings: inactivity timeout is 12 hours
+        mock_get_setting_menu.side_effect = lambda key, default=None: {
+            "inactivity_dashboard_timeout": 12,
+            "current_character_profile": "Astgenne.json"
+        }.get(key, default)
+        mock_get_setting_profile.side_effect = lambda key, default=None: {
+            "inactivity_dashboard_timeout": 12,
+            "current_character_profile": "Astgenne.json"
+        }.get(key, default)
+        
+        # Set last interaction to 5 hours ago (within 12 hours)
+        mock_get_last_timestamp.return_value = datetime.now() - timedelta(hours=5)
+        
+        with patch('os.path.exists', return_value=True):
+            with patch('builtins.open', unittest.mock.mock_open(read_data='{"name": "Astgenne"}')):
+                app = TaiMenu(char_path="profiles/Astgenne.json", user_path="user_profiles/Zenith.json")
+                app.history_profile_name = "Astgenne"
+                
+                # Mock methods
+                app.watch = lambda *args, **kwargs: None
+                app.set_interval = lambda *args, **kwargs: None
+                app.on_mount()
+                
+        self.assertFalse(mock_push.called)
+
+    @patch('ui.menu.TaiMenu.start_tts_worker')
+    @patch('ui.menu.TaiMenu.push_screen')
+    def test_action_open_dashboard_calls_push_screen(self, mock_push, mock_tts):
+        """Test that action_open_dashboard pushes DashboardScreen."""
+        from ui.menu import TaiMenu
+        app = TaiMenu(char_path="profiles/Astgenne.json", user_path="user_profiles/Zenith.json")
+        app.action_open_dashboard()
+        self.assertTrue(mock_push.called)
+        from ui.DashboardScreen import DashboardScreen
+        called_screen = mock_push.call_args[0][0]
+        self.assertIsInstance(called_screen, DashboardScreen)
+
+    @patch('ui.menu.TaiMenu.start_tts_worker')
+    @patch('ui.menu.TaiMenu.push_screen')
+    def test_action_open_dashboard_does_not_push_if_already_active(self, mock_push, mock_tts):
+        """Test that action_open_dashboard does not push DashboardScreen if it is already active."""
+        from ui.menu import TaiMenu
+        from ui.DashboardScreen import DashboardScreen
+        from unittest.mock import PropertyMock
+        app = TaiMenu(char_path="profiles/Astgenne.json", user_path="user_profiles/Zenith.json")
+        with patch('ui.menu.TaiMenu.screen', new_callable=PropertyMock) as mock_screen:
+            mock_screen.return_value = DashboardScreen()
+            app.action_open_dashboard()
+            self.assertFalse(mock_push.called)
+
+    @patch('os.path.isdir')
+    @patch('os.path.exists')
+    @patch('os.scandir')
+    @patch('builtins.open', new_callable=unittest.mock.mock_open)
+    @patch('os.path.getmtime')
+    def test_get_all_recent_sessions_detects_unified_and_legacy_profiles(self, mock_getmtime, mock_open, mock_scandir, mock_exists, mock_isdir):
+        """Test that get_all_recent_sessions detects both legacy flat JSON and unified character directories."""
+        from ui.RecentSessionsScreen import get_all_recent_sessions
+        from collections import namedtuple
+        
+        DirEntry = namedtuple('DirEntry', ['name', 'is_file', 'is_dir', 'path'])
+        
+        def norm(p):
+            return os.path.normpath(p).replace('\\', '/')
+        
+        # Configure profiles_dir contents
+        mock_scandir.side_effect = lambda path: {
+            "profiles": [
+                DirEntry("settings.json", lambda: True, lambda: False, "profiles/settings.json"),
+                DirEntry("legacy_profile.json", lambda: True, lambda: False, "profiles/legacy_profile.json"),
+                DirEntry("aiko_unified", lambda: False, lambda: True, "profiles/aiko_unified"),
+                DirEntry("non_profile_dir", lambda: False, lambda: True, "profiles/non_profile_dir")
+            ],
+            "history/legacy_profile": [
+                DirEntry("session1_history.json", lambda: True, lambda: False, "history/legacy_profile/session1_history.json")
+            ],
+            "profiles/aiko_unified/sessions": [
+                DirEntry("session2_history.json", lambda: True, lambda: False, "profiles/aiko_unified/sessions/session2_history.json")
+            ]
+        }.get(norm(path), [])
+        
+        # Configure mock_exists
+        mock_exists.side_effect = lambda path: norm(path) in [
+            "profiles",
+            "profiles/aiko_unified/profile.json",
+            "history/legacy_profile",
+            "profiles/aiko_unified/sessions",
+            "history/legacy_profile/session1_history.json",
+            "profiles/aiko_unified/sessions/session2_history.json"
+        ]
+        
+        # Configure mock_isdir
+        mock_isdir.side_effect = lambda path: norm(path) in [
+            "profiles",
+            "history/legacy_profile",
+            "profiles/aiko_unified/sessions"
+        ]
+        
+        # Mock file content reads for history files (metadata last_interaction and user_profile)
+        mock_open.return_value.read.side_effect = [
+            '{"metadata": {"last_interaction": "2026-06-21 | 12:00:00", "user_profile": "Manganese.json"}}',
+            '{"metadata": {"last_interaction": "2026-06-21 | 14:00:00", "user_profile": "Zenith.json"}}'
+        ]
+        
+        sessions = get_all_recent_sessions()
+        
+        self.assertEqual(len(sessions), 2)
+        self.assertEqual(sessions[0]["profile_name"], "Aiko Unified")
+        self.assertEqual(sessions[0]["session_name"], "session2")
+        self.assertEqual(sessions[0]["profile_file"], "aiko_unified/profile.json")
+        self.assertEqual(sessions[0]["user_profile"], "Zenith.json")
+        
+        self.assertEqual(sessions[1]["profile_name"], "Legacy Profile")
+        self.assertEqual(sessions[1]["session_name"], "session1")
+        self.assertEqual(sessions[1]["profile_file"], "legacy_profile.json")
+        self.assertEqual(sessions[1]["user_profile"], "Manganese.json")
+
+    @patch('ui.DashboardScreen.get_all_recent_sessions')
+    def test_dashboard_load_recent_sessions(self, mock_get_sessions):
+        """Test that action_load_recent_1, 2, 3 dismisses the screen with the correct session config."""
+        from ui.DashboardScreen import DashboardScreen
+        from datetime import datetime
+        
+        mock_get_sessions.return_value = [
+            {"profile_name": "Aiko", "session_name": "default", "last_interaction": datetime.now(), "profile_file": "Aiko.json", "user_profile": "Zenith.json"},
+            {"profile_name": "Akari", "session_name": "session_1", "last_interaction": datetime.now(), "profile_file": "Akari.json", "user_profile": "Manganese.json"},
+            {"profile_name": "Ako", "session_name": "default", "last_interaction": datetime.now(), "profile_file": "Ako.json", "user_profile": "Zenith.json"}
+        ]
+        
+        screen = DashboardScreen()
+        dismissed_result = None
+        def mock_dismiss(result):
+            nonlocal dismissed_result
+            dismissed_result = result
+        screen.dismiss = mock_dismiss
+        
+        # Test loading recent session 1
+        screen.action_load_recent_1()
+        self.assertEqual(dismissed_result, {"character": "Aiko.json", "session_name": "default", "user": "Zenith.json"})
+        
+        # Test loading recent session 2
+        screen.action_load_recent_2()
+        self.assertEqual(dismissed_result, {"character": "Akari.json", "session_name": "session_1", "user": "Manganese.json"})
+        
+        # Test loading recent session 3
+        screen.action_load_recent_3()
+        self.assertEqual(dismissed_result, {"character": "Ako.json", "session_name": "default", "user": "Zenith.json"})
 
 if __name__ == '__main__':
     unittest.main()

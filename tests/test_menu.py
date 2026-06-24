@@ -598,7 +598,7 @@ class TestMenu(unittest.TestCase):
         mock_sub_run.return_value = mock_res
         
         gpu_str = TaiMenu._get_local_gpu_metrics(app)
-        self.assertEqual(gpu_str, " | GPU: 15% (VRAM: 2.0/8.0 GB)")
+        self.assertEqual(gpu_str, " | GPU:  15% (VRAM:  2.0/ 8.0 GB)")
         mock_sub_run.assert_called_with(
             ["nvidia-smi", "--query-gpu=utilization.gpu,memory.used,memory.total", "--format=csv,noheader,nounits"],
             stdout=subprocess.PIPE,
@@ -617,6 +617,32 @@ class TestMenu(unittest.TestCase):
         with patch.dict('sys.modules', {'torch': None}):
             gpu_str = TaiMenu._get_local_gpu_metrics(app)
             self.assertEqual(gpu_str, "")
+
+    @patch('shutil.which')
+    @patch('subprocess.run')
+    def test_get_local_gpu_metrics_nvidia_smi_failure(self, mock_sub_run, mock_which):
+        app = MagicMock(spec=TaiMenu)
+        mock_which.return_value = "/usr/bin/nvidia-smi"
+        
+        # Mock subprocess query failure/exception
+        mock_sub_run.side_effect = Exception("subprocess error")
+        
+        gpu_str = TaiMenu._get_local_gpu_metrics(app)
+        self.assertEqual(gpu_str, " | GPU:  --% (VRAM:  --.-/ --.- GB)")
+
+    @patch('shutil.which')
+    def test_get_local_gpu_metrics_pytorch_failure(self, mock_which):
+        app = MagicMock(spec=TaiMenu)
+        mock_which.return_value = None
+        
+        # Mock PyTorch available, but cuda.memory_allocated raises an exception
+        mock_torch = MagicMock()
+        mock_torch.cuda.is_available.return_value = True
+        mock_torch.cuda.memory_allocated.side_effect = Exception("PyTorch error")
+        
+        with patch.dict('sys.modules', {'torch': mock_torch}):
+            gpu_str = TaiMenu._get_local_gpu_metrics(app)
+            self.assertEqual(gpu_str, " | GPU VRAM:  --.-/ --.- GB")
 
     @patch('ui.menu.threading.Thread')
     @patch('ui.menu.memory_manager')
